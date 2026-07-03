@@ -1,15 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Eye, EyeOff } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Eye, EyeOff, AlertCircle } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    // Surface errors forwarded from the auth callback (e.g. expired link)
+    searchParams.get("error") === "auth_callback_failed"
+      ? "The confirmation link was invalid or has expired. Please sign in again."
+      : null
+  );
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -17,17 +24,22 @@ export function LoginForm() {
     setError(null);
     setLoading(true);
 
-    try {
-      // Supabase auth will be wired here when credentials are provided
-      // const supabase = createClient();
-      // const { error } = await supabase.auth.signInWithPassword({ email, password });
-      // if (error) throw error;
-      router.push("/dashboard");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign in failed.");
-    } finally {
+    const supabase = createClient();
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (authError) {
+      setError(authError.message);
       setLoading(false);
+      return;
     }
+
+    // Redirect to the originally requested page, or dashboard
+    const next = searchParams.get("next") ?? "/dashboard";
+    router.push(next);
+    router.refresh(); // Force middleware to re-evaluate session
   }
 
   return (
@@ -75,7 +87,10 @@ export function LoginForm() {
       </div>
 
       {error && (
-        <p className="text-sm text-red-500 bg-red-500/10 px-3 py-2 rounded-lg">{error}</p>
+        <div className="flex items-start gap-2 text-sm text-red-500 bg-red-500/10 px-3 py-2.5 rounded-lg">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>{error}</span>
+        </div>
       )}
 
       <button

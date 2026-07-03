@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, AlertCircle, MailCheck } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 export function SignupForm() {
   const router = useRouter();
@@ -12,6 +13,7 @@ export function SignupForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [confirmationSent, setConfirmationSent] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -21,24 +23,58 @@ export function SignupForm() {
       setError("Passwords do not match.");
       return;
     }
-
     if (password.length < 8) {
       setError("Password must be at least 8 characters.");
       return;
     }
 
     setLoading(true);
-    try {
-      // Supabase sign-up will be wired here when credentials are provided
-      // const supabase = createClient();
-      // const { error } = await supabase.auth.signUp({ email, password });
-      // if (error) throw error;
-      router.push("/dashboard");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign up failed.");
-    } finally {
+
+    const supabase = createClient();
+    const { data, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        // Supabase redirects the email confirmation link here
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+
+    if (authError) {
+      setError(authError.message);
       setLoading(false);
+      return;
     }
+
+    // If the user was immediately signed in (email confirmation disabled in
+    // Supabase project settings), redirect straight to the dashboard.
+    if (data.session) {
+      router.push("/dashboard");
+      router.refresh();
+      return;
+    }
+
+    // Otherwise Supabase requires email confirmation — show a success prompt.
+    setConfirmationSent(true);
+    setLoading(false);
+  }
+
+  if (confirmationSent) {
+    return (
+      <div className="flex flex-col items-center gap-4 text-center py-4">
+        <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-green-500/15">
+          <MailCheck className="w-7 h-7 text-green-500" />
+        </div>
+        <div>
+          <h2 className="font-semibold text-base">Check your email</h2>
+          <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1.5 max-w-xs">
+            We sent a confirmation link to{" "}
+            <span className="font-medium text-[hsl(var(--foreground))]">{email}</span>.
+            Click it to activate your account and sign in.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -102,7 +138,10 @@ export function SignupForm() {
       </div>
 
       {error && (
-        <p className="text-sm text-red-500 bg-red-500/10 px-3 py-2 rounded-lg">{error}</p>
+        <div className="flex items-start gap-2 text-sm text-red-500 bg-red-500/10 px-3 py-2.5 rounded-lg">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>{error}</span>
+        </div>
       )}
 
       <button
