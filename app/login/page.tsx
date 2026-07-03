@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Globe } from "lucide-react";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { LoginForm } from "./LoginForm";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -20,7 +21,10 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <LoginForm />
+        {/* Suspense required because LoginForm uses useSearchParams */}
+        <Suspense fallback={<div className="h-48" />}>
+          <LoginForm />
+        </Suspense>
 
         <p className="mt-6 text-center text-sm text-[hsl(var(--muted-foreground))]">
           Don&apos;t have an account?{" "}

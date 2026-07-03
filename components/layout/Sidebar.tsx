@@ -12,6 +12,7 @@ import {
   Globe,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
+import { SignOutButton } from "@/components/ui/SignOutButton";
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -55,14 +56,9 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Footer */}
+      {/* Footer — sign out */}
       <div className="px-3 pb-4 border-t border-[hsl(var(--sidebar-border))] pt-4">
-        <Link
-          href="/login"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors"
-        >
-          Sign out
-        </Link>
+        <SignOutButton />
       </div>
     </aside>
   );
