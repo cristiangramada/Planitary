@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Pencil,
   Trash2,
@@ -32,6 +32,27 @@ export function TaskCard({
   onToggleSubtask,
 }: TaskCardProps) {
   const [subtasksExpanded, setSubtasksExpanded] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const confirmRef = useRef<HTMLDivElement>(null);
+
+  // Close confirmation on outside click or Escape
+  useEffect(() => {
+    if (!confirmingDelete) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setConfirmingDelete(false);
+    }
+    function onOutside(e: MouseEvent) {
+      if (confirmRef.current && !confirmRef.current.contains(e.target as Node)) {
+        setConfirmingDelete(false);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onOutside);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onOutside);
+    };
+  }, [confirmingDelete]);
 
   const isCompleted = task.status === "completed";
   const completedSubtasks = task.subtasks.filter((s) => s.is_completed).length;
@@ -58,7 +79,7 @@ export function TaskCard({
         <button
           onClick={() => onToggleComplete(task.id, !isCompleted)}
           aria-label={isCompleted ? "Reopen task" : "Complete task"}
-          className="mt-0.5 shrink-0"
+          className="mt-0.5 shrink-0 cursor-pointer"
         >
           <span
             className={cn(
@@ -140,7 +161,7 @@ export function TaskCard({
             {hasSubtasks && (
               <button
                 onClick={() => setSubtasksExpanded((v) => !v)}
-                className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors"
+                className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
               >
                 {subtasksExpanded ? (
                   <ChevronDown className="w-3 h-3" />
@@ -163,12 +184,18 @@ export function TaskCard({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div
+          ref={confirmRef}
+          className={cn(
+            "relative flex items-center gap-1 shrink-0 transition-opacity",
+            confirmingDelete ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          )}
+        >
           {isCompleted ? (
             <button
               onClick={() => onToggleComplete(task.id, false)}
               title="Reopen task"
-              className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors"
+              className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               Reopen
@@ -177,18 +204,51 @@ export function TaskCard({
             <button
               onClick={() => onEdit(task)}
               title="Edit task"
-              className="p-1.5 rounded-md text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors"
+              className="p-1.5 rounded-md text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
             >
               <Pencil className="w-3.5 h-3.5" />
             </button>
           )}
           <button
-            onClick={() => onDelete(task.id)}
+            onClick={() => setConfirmingDelete(true)}
             title="Delete task"
-            className="p-1.5 rounded-md text-[hsl(var(--muted-foreground))] hover:bg-red-500/10 hover:text-red-500 transition-colors"
+            className={cn(
+              "p-1.5 rounded-md transition-colors cursor-pointer",
+              confirmingDelete
+                ? "bg-red-500/10 text-red-500"
+                : "text-[hsl(var(--muted-foreground))] hover:bg-red-500/10 hover:text-red-500"
+            )}
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
+
+          {/* Delete confirmation popover */}
+          {confirmingDelete && (
+            <div className="absolute right-0 top-full mt-2 z-20 w-56 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-xl p-3">
+              <p className="text-sm font-medium mb-3">
+                Delete this task?
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmingDelete(false)}
+                  className="flex-1 py-1.5 text-xs font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmingDelete(false);
+                    onDelete(task.id);
+                  }}
+                  className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors cursor-pointer"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -201,7 +261,7 @@ export function TaskCard({
               onClick={() =>
                 onToggleSubtask(task.id, subtask.id, !subtask.is_completed)
               }
-              className="flex items-center gap-2.5 w-full text-left py-1.5 group/sub"
+              className="flex items-center gap-2.5 w-full text-left py-1.5 group/sub cursor-pointer"
             >
               <span
                 className={cn(

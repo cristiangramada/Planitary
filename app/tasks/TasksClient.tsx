@@ -142,7 +142,6 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
   );
 
   const handleDelete = useCallback(async (taskId: string) => {
-    if (!confirm("Delete this task? This cannot be undone.")) return;
     try {
       const supabase = createClient();
       await deleteTask(supabase, taskId);
@@ -273,7 +272,7 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
             <div className="relative">
               <button
                 onClick={() => setShowSortMenu((v) => !v)}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
               >
                 <SortAsc className="w-3.5 h-3.5" />
                 {SORT_LABELS[sortBy]}
@@ -296,8 +295,8 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
                           className={cn(
                             "w-full px-3 py-1.5 text-xs text-left hover:bg-[hsl(var(--muted))] transition-colors",
                             sortBy === key
-                              ? "text-[hsl(var(--primary))] font-medium"
-                              : "text-[hsl(var(--foreground))]"
+                              ? "text-[hsl(var(--primary))] font-medium cursor-default"
+                              : "text-[hsl(var(--foreground))] cursor-pointer"
                           )}
                         >
                           {label}
@@ -312,7 +311,7 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
             {/* New task */}
             <button
               onClick={openCreate}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 transition-opacity"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 transition-opacity cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               New task
@@ -326,7 +325,7 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
             {error}
             <button
               onClick={() => setError(null)}
-              className="ml-2 underline text-xs"
+              className="ml-2 underline text-xs cursor-pointer"
             >
               Dismiss
             </button>
@@ -342,8 +341,8 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
               className={cn(
                 "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
                 filterBy === key
-                  ? "bg-[hsl(var(--background))] text-[hsl(var(--foreground))] shadow-sm"
-                  : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                  ? "bg-[hsl(var(--background))] text-[hsl(var(--foreground))] shadow-sm cursor-default"
+                  : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] cursor-pointer"
               )}
             >
               {label}
@@ -375,7 +374,7 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
                   action={
                     <button
                       onClick={openCreate}
-                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 transition-opacity"
+                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 transition-opacity cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
                       New task
@@ -395,7 +394,7 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
                   action={
                     <button
                       onClick={openCreate}
-                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 transition-opacity"
+                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 transition-opacity cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
                       Add a task
@@ -423,7 +422,7 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
           <div>
             <button
               onClick={() => setCompletedExpanded((v) => !v)}
-              className="flex items-center gap-2 text-sm font-medium text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors mb-3"
+              className="flex items-center gap-2 text-sm font-medium text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors mb-3 cursor-pointer"
             >
               {completedExpanded ? (
                 <ChevronDown className="w-4 h-4" />

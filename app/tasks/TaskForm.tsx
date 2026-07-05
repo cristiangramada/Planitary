@@ -1,11 +1,17 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, Plus, Trash2, Tag as TagIcon, AlertCircle } from "lucide-react";
+import { X, Plus, Trash2, Tag as TagIcon, AlertCircle, CalendarDays } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { TagBadge } from "@/components/ui/TagBadge";
 import type { TaskWithDetails, Tag, Priority } from "@/types";
 import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
+import {
+  TaskDatePicker,
+  type DatePickerValue,
+  type ReminderOption,
+  type RepeatOption,
+} from "./TaskDatePicker";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -28,6 +34,30 @@ const PRIORITIES: { value: Priority; label: string; color: string }[] = [
   { value: "medium", label: "Medium", color: "text-amber-500 border-amber-400 bg-amber-500/10" },
   { value: "low",    label: "Low",    color: "text-sky-500 border-sky-400 bg-sky-500/10" },
 ];
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const SHORT_MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+] as const;
+
+/** Format a YYYY-MM-DD + optional HH:MM into a human-readable schedule label. */
+function formatScheduleLabel(date: string | null, time: string | null): string {
+  if (!date) return "Schedule";
+  const [y, m, d] = date.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  const dayName = WEEKDAYS[dt.getDay()];
+  const monthName = SHORT_MONTHS[dt.getMonth()];
+  const base = `${dayName}, ${monthName} ${d}`;
+
+  if (!time) return base;
+  const [hStr, mStr] = time.split(":");
+  const h = parseInt(hStr, 10);
+  const min = parseInt(mStr, 10);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return `${base} at ${h12}:${String(min).padStart(2, "0")} ${ampm}`;
+}
 
 // ---------------------------------------------------------------------------
 // Tag picker sub-component
@@ -137,7 +167,7 @@ function TagPicker({ allTags, selected, onChange }: TagPickerProps) {
                   e.preventDefault();
                   addTag({ id: tag.id, name: tag.name, color: tag.color });
                 }}
-                className="flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:bg-[hsl(var(--muted))] transition-colors text-left"
+                className="flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:bg-[hsl(var(--muted))] transition-colors text-left cursor-pointer"
               >
                 <span
                   className="w-2 h-2 rounded-full shrink-0"
@@ -156,7 +186,7 @@ function TagPicker({ allTags, selected, onChange }: TagPickerProps) {
                     e.preventDefault();
                     addTag({ name: input.trim(), color: null });
                   }}
-                  className="flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:bg-[hsl(var(--muted))] text-[hsl(var(--primary))] transition-colors text-left"
+                  className="flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:bg-[hsl(var(--muted))] text-[hsl(var(--primary))] transition-colors text-left cursor-pointer"
                 >
                   <Plus className="w-3 h-3" />
                   Create &ldquo;{input.trim()}&rdquo;
@@ -214,7 +244,7 @@ function SubtaskList({ items, onChange }: SubtaskListProps) {
           <button
             type="button"
             onClick={() => remove(i)}
-            className="p-1 rounded text-[hsl(var(--muted-foreground))] hover:text-red-500 hover:bg-red-500/10 transition-colors"
+            className="p-1 rounded text-[hsl(var(--muted-foreground))] hover:text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -258,10 +288,15 @@ function TaskFormBody({ onClose, onSave, editTask, allTags, isEdit }: TaskFormBo
   const [title, setTitle] = useState(editTask?.title ?? "");
   const [notes, setNotes] = useState(editTask?.notes ?? "");
   const [priority, setPriority] = useState<Priority>(editTask?.priority ?? "medium");
-  const [dueDate, setDueDate] = useState(editTask?.due_date ?? "");
-  const [dueTime, setDueTime] = useState(
-    editTask?.due_time ? editTask.due_time.slice(0, 5) : ""
-  );
+  const [dueDate, setDueDate] = useState<string | null>(editTask?.due_date ?? null);
+  const [dueTime, setDueTime] = useState<string | null>(() => {
+    if (!editTask?.due_time) return null;
+    return editTask.due_time.slice(0, 5);
+  });
+  // Reminder and repeat are UI-only for now (not yet persisted to DB)
+  const [reminder, setReminder] = useState<ReminderOption>("none");
+  const [repeat, setRepeat] = useState<RepeatOption>("never");
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [subtasks, setSubtasks] = useState<SubtaskFormItem[]>(
     editTask?.subtasks.map((s) => ({ id: s.id, title: s.title, is_completed: s.is_completed })) ?? []
   );
@@ -270,6 +305,14 @@ function TaskFormBody({ onClose, onSave, editTask, allTags, isEdit }: TaskFormBo
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function handlePickerConfirm(value: DatePickerValue) {
+    setDueDate(value.date);
+    setDueTime(value.time);
+    setReminder(value.reminder);
+    setRepeat(value.repeat);
+    setPickerOpen(false);
+  }
 
   // Close on Escape
   useEffect(() => {
@@ -291,7 +334,7 @@ function TaskFormBody({ onClose, onSave, editTask, allTags, isEdit }: TaskFormBo
           title: title.trim(),
           notes: notes.trim() || null,
           priority,
-          due_date: dueDate || null,
+          due_date: dueDate,
           due_time: dueDate && dueTime ? dueTime + ":00" : null,
         },
         subtasks.filter((s) => s.title.trim()),
@@ -314,8 +357,8 @@ function TaskFormBody({ onClose, onSave, editTask, allTags, isEdit }: TaskFormBo
         onClick={onClose}
       />
 
-      {/* Drawer */}
-      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md flex flex-col bg-[hsl(var(--background))] border-l border-[hsl(var(--border))] shadow-xl">
+      {/* Modal */}
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg flex flex-col bg-[hsl(var(--background))] border border-[hsl(var(--border))] rounded-2xl shadow-2xl max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))] shrink-0">
           <h2 className="text-base font-semibold">
@@ -324,7 +367,7 @@ function TaskFormBody({ onClose, onSave, editTask, allTags, isEdit }: TaskFormBo
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-md text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors"
+            className="p-1.5 rounded-md text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -379,8 +422,8 @@ function TaskFormBody({ onClose, onSave, editTask, allTags, isEdit }: TaskFormBo
                   className={cn(
                     "flex-1 py-2 text-xs font-semibold rounded-lg border transition-all",
                     priority === p.value
-                      ? p.color
-                      : "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]"
+                      ? cn(p.color, "cursor-default")
+                      : "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] cursor-pointer"
                   )}
                 >
                   {p.label}
@@ -389,35 +432,61 @@ function TaskFormBody({ onClose, onSave, editTask, allTags, isEdit }: TaskFormBo
             </div>
           </div>
 
-          {/* Due date + time */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[hsl(var(--muted-foreground))] uppercase tracking-wide">
-                Due date
-              </label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => {
-                  setDueDate(e.target.value);
-                  if (!e.target.value) setDueTime("");
-                }}
-                className="w-full px-3 py-2.5 text-sm rounded-lg border border-[hsl(var(--input))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))] transition"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1.5 text-[hsl(var(--muted-foreground))] uppercase tracking-wide">
-                Time
-              </label>
-              <input
-                type="time"
-                value={dueTime}
-                onChange={(e) => setDueTime(e.target.value)}
-                disabled={!dueDate}
-                className="w-full px-3 py-2.5 text-sm rounded-lg border border-[hsl(var(--input))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))] disabled:opacity-40 transition"
-              />
+          {/* Schedule (date + time picker trigger) */}
+          <div>
+            <label className="block text-xs font-medium mb-1.5 text-[hsl(var(--muted-foreground))] uppercase tracking-wide">
+              Schedule
+            </label>
+            <div
+              className={cn(
+                "w-full flex items-center gap-1 px-3 py-2.5 text-sm rounded-lg border transition-all",
+                dueDate
+                  ? "border-[hsl(var(--primary)/0.5)] bg-[hsl(var(--primary)/0.06)] text-[hsl(var(--primary))]"
+                  : "border-[hsl(var(--input))] text-[hsl(var(--muted-foreground))]"
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                className={cn(
+                  "flex flex-1 items-center gap-2.5 min-w-0 text-left cursor-pointer",
+                  dueDate
+                    ? "hover:opacity-80"
+                    : "hover:text-[hsl(var(--foreground))]"
+                )}
+              >
+                <CalendarDays className="w-4 h-4 shrink-0" />
+                <span className="flex-1 truncate">{formatScheduleLabel(dueDate, dueTime)}</span>
+              </button>
+              {dueDate && (
+                <button
+                  type="button"
+                  aria-label="Clear schedule"
+                  onClick={() => {
+                    setDueDate(null);
+                    setDueTime(null);
+                    setReminder("none");
+                    setRepeat("never");
+                  }}
+                  className="p-0.5 rounded-full shrink-0 hover:bg-[hsl(var(--primary)/0.2)] transition-colors cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
+
+          {/* TaskDatePicker modal */}
+          {pickerOpen && (
+            <TaskDatePicker
+              initialDate={dueDate}
+              initialTime={dueTime}
+              initialReminder={reminder}
+              initialRepeat={repeat}
+              onConfirm={handlePickerConfirm}
+              onClose={() => setPickerOpen(false)}
+            />
+          )}
 
           {/* Tags */}
           <div>
@@ -452,7 +521,7 @@ function TaskFormBody({ onClose, onSave, editTask, allTags, isEdit }: TaskFormBo
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 py-2.5 text-sm font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition-colors"
+            className="flex-1 py-2.5 text-sm font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
           >
             Cancel
           </button>
@@ -460,7 +529,7 @@ function TaskFormBody({ onClose, onSave, editTask, allTags, isEdit }: TaskFormBo
             type="submit"
             form="task-form"
             disabled={saving || !title.trim()}
-            className="flex-1 py-2.5 text-sm font-semibold rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 disabled:opacity-60 transition-opacity"
+            className="flex-1 py-2.5 text-sm font-semibold rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed transition-opacity cursor-pointer"
           >
             {saving ? "Saving…" : isEdit ? "Save changes" : "Create task"}
           </button>

@@ -33,7 +33,7 @@ export function TagBadge({ tag, onRemove, className }: TagBadgeProps) {
         <button
           type="button"
           onClick={onRemove}
-          className="ml-0.5 opacity-60 hover:opacity-100 transition-opacity"
+          className="ml-0.5 opacity-60 hover:opacity-100 transition-opacity cursor-pointer"
           aria-label={`Remove tag ${tag.name}`}
         >
           ×
