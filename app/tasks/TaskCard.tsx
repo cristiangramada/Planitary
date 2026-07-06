@@ -13,7 +13,7 @@ import {
 import { cn } from "@/utils/cn";
 import { PriorityBadge } from "@/components/ui/PriorityBadge";
 import { TagBadge } from "@/components/ui/TagBadge";
-import { relativeDate, formatDate } from "@/utils/date";
+import { relativeDate, formatDate, parseDateOnly } from "@/utils/date";
 import type { TaskWithDetails } from "@/types";
 
 interface TaskCardProps {
@@ -62,7 +62,7 @@ export function TaskCard({
   const isOverdue =
     !isCompleted &&
     hasDue &&
-    new Date(task.due_date!) < new Date(new Date().toDateString());
+    parseDateOnly(task.due_date!) < new Date(new Date().toDateString());
 
   return (
     <div
@@ -106,7 +106,7 @@ export function TaskCard({
         </button>
 
         {/* Content */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 select-none cursor-default">
           {/* Title row */}
           <div className="flex items-center gap-2 flex-wrap">
             {!isCompleted && <PriorityBadge priority={task.priority} />}
@@ -261,7 +261,7 @@ export function TaskCard({
               onClick={() =>
                 onToggleSubtask(task.id, subtask.id, !subtask.is_completed)
               }
-              className="flex items-center gap-2.5 w-full text-left py-1.5 group/sub cursor-pointer"
+              className="flex items-center gap-2.5 w-full text-left py-1.5 group/sub cursor-pointer select-none"
             >
               <span
                 className={cn(

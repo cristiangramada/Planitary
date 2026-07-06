@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { createPortal } from "react-dom";
-import { ChevronLeft, ChevronRight, ChevronDown, Clock, Bell, Repeat, X } from "lucide-react";
+import { useState } from "react";
+import { ChevronLeft, ChevronRight, Clock, Bell, Repeat, X } from "lucide-react";
 import { cn } from "@/utils/cn";
+import { PickerSelect } from "@/components/ui/PickerSelect";
+import { TIME_SLOTS, snapToSlot } from "@/components/ui/TimeDropdown";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public types (exported so TaskForm can use them)
@@ -294,149 +295,6 @@ function QuickDateButtons({ selectedDate, onSelect }: QuickDateButtonsProps) {
 // TimeSelector — 30-minute-increment dropdown (12:00 AM → 11:30 PM)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Generate the 48 half-hour slots as { value: "HH:MM", label: "h:MM AM/PM" }. */
-function buildTimeSlots(): { value: string; label: string }[] {
-  const slots: { value: string; label: string }[] = [];
-  for (let h = 0; h < 24; h++) {
-    for (const m of [0, 30]) {
-      const value = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-      const ampm = h < 12 ? "AM" : "PM";
-      const h12 = h % 12 === 0 ? 12 : h % 12;
-      const label = `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
-      slots.push({ value, label });
-    }
-  }
-  return slots;
-}
-
-const TIME_SLOTS = buildTimeSlots();
-
-/** Snap an arbitrary HH:MM string to the nearest 30-minute slot value. */
-function snapToSlot(t: string): string {
-  const [hStr, mStr] = t.split(":");
-  const h = parseInt(hStr, 10);
-  const m = parseInt(mStr, 10);
-  const snappedM = m < 15 ? 0 : m < 45 ? 30 : 0;
-  const snappedH = m >= 45 ? (h + 1) % 24 : h;
-  return `${String(snappedH).padStart(2, "0")}:${String(snappedM).padStart(2, "0")}`;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PickerSelect — themed dropdown that always opens downward via a portal.
-// This avoids the picker's overflow-hidden clipping native <select> dropdowns.
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface PickerSelectOption<T extends string> {
-  value: T;
-  label: string;
-}
-
-interface PickerSelectProps<T extends string> {
-  value: T;
-  options: PickerSelectOption<T>[];
-  onChange: (v: T) => void;
-  minWidth?: number;
-}
-
-function PickerSelect<T extends string>({
-  value,
-  options,
-  onChange,
-  minWidth = 140,
-}: PickerSelectProps<T>) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-
-  // Fix 1: toggle — if already open, close instead of reopening
-  function toggleDropdown() {
-    if (open) { setOpen(false); return; }
-    if (!triggerRef.current) return;
-    const r = triggerRef.current.getBoundingClientRect();
-    setPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, minWidth) });
-    setOpen(true);
-  }
-
-  useEffect(() => {
-    if (!open) return;
-    function handleOutside(e: MouseEvent) {
-      if (listRef.current?.contains(e.target as Node)) return;
-      if (triggerRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
-    }
-    // Fix 2: only close on scroll events that originate outside the list itself
-    function handleScroll(e: Event) {
-      if (listRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
-    }
-    document.addEventListener("mousedown", handleOutside);
-    window.addEventListener("scroll", handleScroll, { capture: true });
-    return () => {
-      document.removeEventListener("mousedown", handleOutside);
-      window.removeEventListener("scroll", handleScroll, { capture: true });
-    };
-  }, [open]);
-
-  const selected = options.find((o) => o.value === value);
-
-  return (
-    <>
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={toggleDropdown}
-        className="flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors"
-      >
-        <span className="whitespace-nowrap">{selected?.label ?? "—"}</span>
-        <ChevronDown
-          className={cn(
-            "w-3.5 h-3.5 text-[hsl(var(--muted-foreground))] transition-transform shrink-0",
-            open && "rotate-180"
-          )}
-        />
-      </button>
-
-      {open && pos && typeof document !== "undefined" &&
-        createPortal(
-          <div
-            ref={listRef}
-            style={{
-              position: "fixed",
-              top: pos.top,
-              left: pos.left,
-              // Fix 3: exact width (not minWidth) so content can't push the box wider
-              width: pos.width,
-              zIndex: 9999,
-            }}
-            className="max-h-56 overflow-y-auto rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-2xl py-1"
-          >
-            {options.map((o) => (
-              <button
-                key={o.value}
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  onChange(o.value);
-                  setOpen(false);
-                }}
-                className={cn(
-                  // No whitespace-nowrap — text wraps inside the fixed-width box
-                  "w-full text-left px-3 py-1.5 text-sm transition-colors",
-                  o.value === value
-                    ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] font-medium"
-                    : "hover:bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]"
-                )}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>,
-          document.body
-        )}
-    </>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TimeSelector

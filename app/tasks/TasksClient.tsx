@@ -27,6 +27,19 @@ type FilterKey = "all" | "active" | "completed";
 
 const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
+function compareDueDateTime(a: TaskWithDetails, b: TaskWithDetails): number {
+  if (a.due_date && b.due_date) {
+    const d = a.due_date.localeCompare(b.due_date);
+    if (d !== 0) return d;
+    const t = (a.due_time ?? "").localeCompare(b.due_time ?? "");
+    if (t !== 0) return t;
+    return 0;
+  }
+  if (a.due_date && !b.due_date) return -1;
+  if (!a.due_date && b.due_date) return 1;
+  return 0;
+}
+
 function sortTasks(tasks: TaskWithDetails[], sortBy: SortKey): TaskWithDetails[] {
   return [...tasks].sort((a, b) => {
     if (sortBy === "priority") {
@@ -34,14 +47,11 @@ function sortTasks(tasks: TaskWithDetails[], sortBy: SortKey): TaskWithDetails[]
       if (diff !== 0) return diff;
     }
     if (sortBy === "due_date" || sortBy === "priority") {
-      // Due date ascending, nulls last
-      if (a.due_date && b.due_date) {
-        const d = a.due_date.localeCompare(b.due_date);
-        if (d !== 0) return d;
-      } else if (a.due_date && !b.due_date) {
-        return -1;
-      } else if (!a.due_date && b.due_date) {
-        return 1;
+      const dueDiff = compareDueDateTime(a, b);
+      if (dueDiff !== 0) return dueDiff;
+      if (sortBy === "due_date") {
+        const p = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
+        if (p !== 0) return p;
       }
     }
     // Newest first by default
