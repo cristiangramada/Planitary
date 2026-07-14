@@ -15,7 +15,7 @@ export function TopNav({ title, onMenuClick }: TopNavProps) {
         {/* Mobile menu button — visible below lg */}
         <button
           onClick={onMenuClick}
-          className="lg:hidden p-1.5 rounded-md text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition-colors"
+          className="lg:hidden p-1.5 rounded-md text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
           aria-label="Open menu"
         >
           <Menu className="w-5 h-5" />

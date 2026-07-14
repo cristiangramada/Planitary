@@ -1,8 +1,20 @@
 /**
+ * Parse a date string safely in local time.
+ * YYYY-MM-DD values are treated as calendar dates (not UTC midnight).
+ */
+export function parseDateOnly(dateString: string): Date {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    const [y, m, d] = dateString.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+  return new Date(dateString);
+}
+
+/**
  * Returns a human-readable relative date label (e.g. "Today", "Yesterday", or a formatted date).
  */
 export function relativeDate(dateString: string): string {
-  const date = new Date(dateString);
+  const date = parseDateOnly(dateString);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
@@ -22,7 +34,7 @@ export function relativeDate(dateString: string): string {
  * Formats a date string into a readable display format.
  */
 export function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString("en-US", {
+  return parseDateOnly(dateString).toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",

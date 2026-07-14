@@ -10,15 +10,11 @@ interface AppShellProps {
   title: string;
 }
 
-/**
- * Wraps authenticated pages with the sidebar + top nav layout.
- * Handles the mobile sidebar drawer state.
- */
 export function AppShell({ children, title }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -27,7 +23,7 @@ export function AppShell({ children, title }: AppShellProps) {
         />
       )}
 
-      {/* Sidebar — always visible on lg+, drawer on mobile */}
+      {/* Sidebar */}
       <div
         className={cn(
           "fixed inset-y-0 left-0 z-30 transition-transform duration-200 lg:relative lg:translate-x-0",
@@ -38,9 +34,9 @@ export function AppShell({ children, title }: AppShellProps) {
       </div>
 
       {/* Main content */}
-      <div className="flex flex-col flex-1 min-w-0">
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <TopNav title={title} onMenuClick={() => setSidebarOpen(true)} />
-        <main className="flex-1 overflow-auto p-6">{children}</main>
+        <main className="flex-1 overflow-hidden p-6">{children}</main>
       </div>
     </div>
   );

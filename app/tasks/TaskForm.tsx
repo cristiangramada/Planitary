@@ -26,13 +26,15 @@ interface TaskFormProps {
     tags: TagFormItem[]
   ) => Promise<void>;
   editTask?: TaskWithDetails | null;
+  /** Pre-fill due date when creating from calendar agenda. */
+  defaultDueDate?: string | null;
   allTags: Tag[];
 }
 
 const PRIORITIES: { value: Priority; label: string; color: string }[] = [
   { value: "high",   label: "High",   color: "text-red-500 border-red-400 bg-red-500/10" },
   { value: "medium", label: "Medium", color: "text-amber-500 border-amber-400 bg-amber-500/10" },
-  { value: "low",    label: "Low",    color: "text-sky-500 border-sky-400 bg-sky-500/10" },
+  { value: "low",    label: "Low",    color: "text-green-600 dark:text-green-500 border-green-400 bg-green-500/10" },
 ];
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
@@ -281,14 +283,16 @@ interface TaskFormBodyProps extends TaskFormProps {
   isEdit: boolean;
 }
 
-function TaskFormBody({ onClose, onSave, editTask, allTags, isEdit }: TaskFormBodyProps) {
+function TaskFormBody({ onClose, onSave, editTask, allTags, isEdit, defaultDueDate }: TaskFormBodyProps) {
   // State initializers derive from editTask at mount time.
   // No useEffect needed — the `key` prop on the outer wrapper resets this
   // component whenever the editing task changes.
   const [title, setTitle] = useState(editTask?.title ?? "");
   const [notes, setNotes] = useState(editTask?.notes ?? "");
   const [priority, setPriority] = useState<Priority>(editTask?.priority ?? "medium");
-  const [dueDate, setDueDate] = useState<string | null>(editTask?.due_date ?? null);
+  const [dueDate, setDueDate] = useState<string | null>(
+    editTask?.due_date ?? defaultDueDate ?? null
+  );
   const [dueTime, setDueTime] = useState<string | null>(() => {
     if (!editTask?.due_time) return null;
     return editTask.due_time.slice(0, 5);
@@ -420,7 +424,7 @@ function TaskFormBody({ onClose, onSave, editTask, allTags, isEdit }: TaskFormBo
                   type="button"
                   onClick={() => setPriority(p.value)}
                   className={cn(
-                    "flex-1 py-2 text-xs font-semibold rounded-lg border transition-all",
+                    "flex flex-1 h-9 items-center justify-center text-xs font-semibold leading-none rounded-lg border transition-all",
                     priority === p.value
                       ? cn(p.color, "cursor-default")
                       : "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] cursor-pointer"
@@ -553,7 +557,7 @@ export function TaskForm(props: TaskFormProps) {
     // whenever the editing task changes, resetting all form state cleanly
     // without calling setState inside a useEffect.
     <TaskFormBody
-      key={props.editTask?.id ?? "new"}
+      key={props.editTask?.id ?? `new-${props.defaultDueDate ?? "none"}`}
       {...props}
       isEdit={isEdit}
     />
