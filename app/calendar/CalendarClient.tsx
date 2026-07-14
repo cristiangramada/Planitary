@@ -295,75 +295,84 @@ export function CalendarClient({
 
   return (
     <AppShell title="Calendar">
-      <div className="max-w-5xl mx-auto flex flex-col min-h-0 pb-6">
+      <div className="h-full flex flex-col">
         {/* ── Error banner ── */}
         {error && (
-          <div className="mb-4 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-500">
+          <div className="mb-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-500 shrink-0">
             {error}
           </div>
         )}
 
         {/* ── Header ── */}
-        <CalendarHeader
-          label={headerLabel}
-          view={view}
-          onPrev={handlePrev}
-          onNext={handleNext}
-          onToday={handleToday}
-          onViewChange={handleViewChange}
-        />
-
-        {/* ── Main view ── */}
-        <div className="mt-4">
-          {view === "month" && (
-            <MonthView
-              year={calYear}
-              month={calMonth}
-              events={events}
-              tasks={tasks}
-              selectedDay={selectedDay}
-              onSelectDay={handleSelectDay}
-              onDayContextMenu={handleDayContextMenu}
-            />
-          )}
-
-          {view === "week" && (
-            <WeekView
-              weekStart={weekStart}
-              events={events}
-              tasks={tasks}
-              selectedDay={selectedDay}
-              onSelectDay={handleSelectDay}
-              onEditEvent={handleEditEvent}
-              onEditTask={handleEditTask}
-              onDayContextMenu={handleDayContextMenu}
-            />
-          )}
-
-          {view === "day" && (
-            <DayView
-              date={parseDate(selectedDay)}
-              events={events}
-              tasks={tasks}
-              onEditEvent={handleEditEvent}
-              onEditTask={handleEditTask}
-              onDayContextMenu={handleDayViewContextMenu}
-            />
-          )}
+        <div className="shrink-0">
+          <CalendarHeader
+            label={headerLabel}
+            view={view}
+            onPrev={handlePrev}
+            onNext={handleNext}
+            onToday={handleToday}
+            onViewChange={handleViewChange}
+          />
         </div>
 
-        {/* ── Agenda panel (all views) ── */}
-        <AgendaPanel
-          selectedDay={selectedDay}
-          events={events}
-          tasks={tasks}
-          onEditEvent={handleEditEvent}
-          onEditTask={handleEditTask}
-          onDeleteEvent={handleDeleteEvent}
-          onDeleteTask={handleDeleteTask}
-          onNewEvent={openNewEventForm}
-          onNewTask={openNewTaskForm}
-        />
+        {/* ── Two-column body ── */}
+        <div className="flex-1 flex gap-4 mt-4 min-h-0">
+
+          {/* Left: calendar view (fills remaining height) */}
+          <div className="flex-1 min-w-0 overflow-hidden flex flex-col">
+            {view === "month" && (
+              <MonthView
+                year={calYear}
+                month={calMonth}
+                events={events}
+                tasks={tasks}
+                selectedDay={selectedDay}
+                onSelectDay={handleSelectDay}
+                onDayContextMenu={handleDayContextMenu}
+              />
+            )}
+
+            {view === "week" && (
+              <WeekView
+                weekStart={weekStart}
+                events={events}
+                tasks={tasks}
+                selectedDay={selectedDay}
+                onSelectDay={handleSelectDay}
+                onEditEvent={handleEditEvent}
+                onEditTask={handleEditTask}
+                onDayContextMenu={handleDayContextMenu}
+              />
+            )}
+
+            {view === "day" && (
+              <DayView
+                date={parseDate(selectedDay)}
+                events={events}
+                tasks={tasks}
+                onEditEvent={handleEditEvent}
+                onEditTask={handleEditTask}
+                onDayContextMenu={handleDayViewContextMenu}
+              />
+            )}
+          </div>
+
+          {/* Right: agenda panel */}
+          <div className="w-72 shrink-0 flex flex-col min-h-0 border-l border-[hsl(var(--border))] pl-4">
+            <AgendaPanel
+              selectedDay={selectedDay}
+              events={events}
+              tasks={tasks}
+              onEditEvent={handleEditEvent}
+              onEditTask={handleEditTask}
+              onDeleteEvent={handleDeleteEvent}
+              onDeleteTask={handleDeleteTask}
+              onNewEvent={openNewEventForm}
+              onNewTask={openNewTaskForm}
+            />
+          </div>
+
+        </div>
       </div>
 
       {dayContextMenu && (

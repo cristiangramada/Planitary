@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
-import { Calendar, CheckSquare, Clock, Plus, Pencil, Trash2 } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Calendar, CheckSquare, Plus, type LucideIcon } from "lucide-react";
 import { cn } from "@/utils/cn";
-import { fmt12, fmtDayShort, parseDate, toLocalDate, localTodayStr } from "./calendarUtils";
+import { fmt12, parseDate, toLocalDate } from "./calendarUtils";
+import { AgendaItemContextMenu } from "./AgendaItemContextMenu";
 import type { CalendarEvent, TaskWithDetails } from "@/types";
 
 // ─── Priority styles ──────────────────────────────────────────────────────────
@@ -19,9 +20,6 @@ const PRIORITY_DOT: Record<string, string> = {
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type AgendaItem =
-  | { kind: "event"; event: CalendarEvent; sortKey: string }
-  | { kind: "task"; task: TaskWithDetails; sortKey: string };
 
 interface AgendaPanelProps {
   selectedDay: string;
@@ -35,6 +33,14 @@ interface AgendaPanelProps {
   onNewTask: (date: string) => void;
 }
 
+type ItemMenuState = {
+  kind: "task" | "event";
+  x: number;
+  y: number;
+  onEdit: () => void;
+  onDelete: () => void;
+};
+
 export function AgendaPanel({
   selectedDay,
   events,
@@ -46,132 +52,171 @@ export function AgendaPanel({
   onNewEvent,
   onNewTask,
 }: AgendaPanelProps) {
-  const todayStr = localTodayStr();
+  const [itemMenu, setItemMenu] = useState<ItemMenuState | null>(null);
 
   const heading = useMemo(() => {
-    if (selectedDay === todayStr) return "Today";
     const d = parseDate(selectedDay);
-    return fmtDayShort(d);
-  }, [selectedDay, todayStr]);
+    const weekday = `${d.toLocaleDateString("en-US", { weekday: "long" })},`;
+    const month = d.toLocaleDateString("en-US", { month: "long" });
+    const day = d.getDate();
+    const monthDay = `${month}\u00A0${day}`;
+    return { weekday, monthDay };
+  }, [selectedDay]);
 
-  const items = useMemo((): AgendaItem[] => {
-    const dayEvents: AgendaItem[] = events
-      .filter((e) => toLocalDate(e.start_time) === selectedDay)
-      .map((e) => ({ kind: "event", event: e, sortKey: e.start_time }));
-
-    const dayTasks: AgendaItem[] = tasks
+  const dayTasks = useMemo(() => {
+    return tasks
       .filter((t) => t.due_date === selectedDay)
-      .map((t) => ({
-        kind: "task",
-        task: t,
-        sortKey: t.due_time
-          ? `${selectedDay}T${t.due_time}`
-          : `${selectedDay}T23:59:59`,
-      }));
+      .sort((a, b) => {
+        const aKey = a.due_time ?? "23:59:59";
+        const bKey = b.due_time ?? "23:59:59";
+        return aKey.localeCompare(bKey);
+      });
+  }, [tasks, selectedDay]);
 
-    return [...dayEvents, ...dayTasks].sort((a, b) =>
-      a.sortKey.localeCompare(b.sortKey)
-    );
-  }, [events, tasks, selectedDay]);
+  const dayEvents = useMemo(() => {
+    return events
+      .filter((e) => toLocalDate(e.start_time) === selectedDay)
+      .sort((a, b) => a.start_time.localeCompare(b.start_time));
+  }, [events, selectedDay]);
+
+  function openItemMenu(
+    e: React.MouseEvent,
+    kind: "task" | "event",
+    onEdit: () => void,
+    onDelete: () => void
+  ) {
+    e.preventDefault();
+    e.stopPropagation();
+    setItemMenu({ kind, x: e.clientX, y: e.clientY, onEdit, onDelete });
+  }
 
   return (
-    <section className="mt-5">
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">
-          {heading}
+    <section className="h-full flex flex-col min-h-0">
+      <div className="shrink-0 mb-3">
+        <h3 className="flex flex-col gap-1.5 min-w-0 text-lg font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wide leading-none">
+          <span>{heading.weekday}</span>
+          <span className="whitespace-nowrap">{heading.monthDay}</span>
         </h3>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => onNewEvent(selectedDay)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add event
-          </button>
-          <button
-            type="button"
-            onClick={() => onNewTask(selectedDay)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add task
-          </button>
+      </div>
+
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 min-h-0 flex flex-col border-b border-[hsl(var(--border))] pb-3 mb-3">
+          <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+              Events
+            </h4>
+            <button
+              type="button"
+              onClick={() => onNewEvent(selectedDay)}
+              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer whitespace-nowrap"
+            >
+              <Plus className="w-3 h-3" />
+              Add event
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {dayEvents.length === 0 ? (
+              <EmptySection icon={Calendar} label="No events" />
+            ) : (
+              dayEvents.map((event) => (
+                <EventAgendaItem
+                  key={event.id}
+                  event={event}
+                  onContextMenu={(e) =>
+                    openItemMenu(
+                      e,
+                      "event",
+                      () => onEditEvent(event),
+                      () => onDeleteEvent(event.id)
+                    )
+                  }
+                />
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="flex items-center justify-between gap-2 mb-2 shrink-0">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
+              Tasks
+            </h4>
+            <button
+              type="button"
+              onClick={() => onNewTask(selectedDay)}
+              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer whitespace-nowrap"
+            >
+              <Plus className="w-3 h-3" />
+              Add task
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {dayTasks.length === 0 ? (
+              <EmptySection icon={CheckSquare} label="No tasks" />
+            ) : (
+              dayTasks.map((task) => (
+                <TaskAgendaItem
+                  key={task.id}
+                  task={task}
+                  onContextMenu={(e) =>
+                    openItemMenu(
+                      e,
+                      "task",
+                      () => onEditTask(task),
+                      () => onDeleteTask(task.id)
+                    )
+                  }
+                />
+              ))
+            )}
+          </div>
         </div>
       </div>
 
-      {/* ── List ── */}
-      {items.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 py-8 rounded-xl border border-dashed border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]">
-          <Clock className="w-8 h-8 opacity-40" />
-          <p className="text-sm">Nothing scheduled for this day.</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {items.map((item) =>
-            item.kind === "event" ? (
-              <EventAgendaItem
-                key={item.event.id}
-                event={item.event}
-                onEdit={() => onEditEvent(item.event)}
-                onDelete={() => onDeleteEvent(item.event.id)}
-              />
-            ) : (
-              <TaskAgendaItem
-                key={item.task.id}
-                task={item.task}
-                onEdit={() => onEditTask(item.task)}
-                onDelete={() => onDeleteTask(item.task.id)}
-              />
-            )
-          )}
-        </div>
+      {itemMenu && (
+        <AgendaItemContextMenu
+          x={itemMenu.x}
+          y={itemMenu.y}
+          kind={itemMenu.kind}
+          onEdit={itemMenu.onEdit}
+          onDelete={itemMenu.onDelete}
+          onClose={() => setItemMenu(null)}
+        />
       )}
     </section>
   );
 }
 
-// ─── Event row ────────────────────────────────────────────────────────────────
+function EmptySection({
+  icon: Icon,
+  label,
+}: {
+  icon: LucideIcon;
+  label: string;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-1.5 py-6 rounded-xl border border-dashed border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] h-full min-h-[4.5rem]">
+      <Icon className="w-5 h-5 opacity-40" />
+      <p className="text-xs">{label}</p>
+    </div>
+  );
+}
 
 function EventAgendaItem({
   event,
-  onEdit,
-  onDelete,
+  onContextMenu,
 }: {
   event: CalendarEvent;
-  onEdit: () => void;
-  onDelete: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
 }) {
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const confirmRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!confirmingDelete) return;
-    function handleOutside(e: MouseEvent) {
-      if (confirmRef.current && !confirmRef.current.contains(e.target as Node)) {
-        setConfirmingDelete(false);
-      }
-    }
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setConfirmingDelete(false);
-    }
-    document.addEventListener("mousedown", handleOutside);
-    window.addEventListener("keydown", handleKey);
-    return () => {
-      document.removeEventListener("mousedown", handleOutside);
-      window.removeEventListener("keydown", handleKey);
-    };
-  }, [confirmingDelete]);
-
   return (
-    <div className="flex items-start gap-3 p-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] hover:bg-[hsl(var(--muted)/0.4)] transition-colors group">
-      {/* Icon */}
+    <div
+      onContextMenu={onContextMenu}
+      className="flex items-start gap-3 p-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] hover:bg-[hsl(var(--muted)/0.4)] transition-colors"
+    >
       <span className="w-8 h-8 rounded-full bg-[hsl(var(--primary)/0.12)] flex items-center justify-center shrink-0 mt-0.5">
         <Calendar className="w-4 h-4 text-[hsl(var(--primary))]" />
       </span>
-
-      {/* Content */}
       <div className="flex-1 min-w-0 select-none cursor-default">
         <p className="text-sm font-medium leading-snug truncate">{event.title}</p>
         <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
@@ -184,110 +229,27 @@ function EventAgendaItem({
           </p>
         )}
       </div>
-
-      {/* Action buttons — revealed on hover */}
-      <div
-        className={cn(
-          "relative flex items-center gap-1 shrink-0 transition-opacity",
-          confirmingDelete ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-        )}
-      >
-        {/* Edit */}
-        <button
-          type="button"
-          onClick={onEdit}
-          title="Edit event"
-          className="p-1.5 rounded-md text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
-        >
-          <Pencil className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Delete */}
-        <button
-          type="button"
-          onClick={() => setConfirmingDelete(true)}
-          title="Delete event"
-          className={cn(
-            "p-1.5 rounded-md transition-colors cursor-pointer",
-            confirmingDelete
-              ? "bg-red-500/10 text-red-500"
-              : "text-[hsl(var(--muted-foreground))] hover:bg-red-500/10 hover:text-red-500"
-          )}
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Delete confirmation popover */}
-        {confirmingDelete && (
-          <div
-            ref={confirmRef}
-            className="absolute right-0 top-full mt-2 z-20 w-48 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-xl p-3"
-          >
-            <p className="text-sm font-medium mb-3">Delete this event?</p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmingDelete(false)}
-                className="flex-1 py-1.5 text-xs font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => { setConfirmingDelete(false); onDelete(); }}
-                className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors cursor-pointer"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
 
-// ─── Task row ─────────────────────────────────────────────────────────────────
-
 function TaskAgendaItem({
   task,
-  onEdit,
-  onDelete,
+  onContextMenu,
 }: {
   task: TaskWithDetails;
-  onEdit: () => void;
-  onDelete: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
 }) {
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const confirmRef = useRef<HTMLDivElement>(null);
   const isDone = task.status === "completed";
-
-  useEffect(() => {
-    if (!confirmingDelete) return;
-    function handleOutside(e: MouseEvent) {
-      if (confirmRef.current && !confirmRef.current.contains(e.target as Node)) {
-        setConfirmingDelete(false);
-      }
-    }
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setConfirmingDelete(false);
-    }
-    document.addEventListener("mousedown", handleOutside);
-    window.addEventListener("keydown", handleKey);
-    return () => {
-      document.removeEventListener("mousedown", handleOutside);
-      window.removeEventListener("keydown", handleKey);
-    };
-  }, [confirmingDelete]);
 
   return (
     <div
+      onContextMenu={onContextMenu}
       className={cn(
-        "flex items-start gap-3 p-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] hover:bg-[hsl(var(--muted)/0.4)] transition-colors group",
+        "flex items-start gap-3 p-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] hover:bg-[hsl(var(--muted)/0.4)] transition-colors",
         isDone && "opacity-60"
       )}
     >
-      {/* Icon */}
       <span className="w-8 h-8 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center shrink-0 mt-0.5">
         <CheckSquare
           className={cn(
@@ -296,8 +258,6 @@ function TaskAgendaItem({
           )}
         />
       </span>
-
-      {/* Content */}
       <div className="flex-1 min-w-0 select-none cursor-default">
         <p
           className={cn(
@@ -331,62 +291,6 @@ function TaskAgendaItem({
             </span>
           ))}
         </div>
-      </div>
-
-      {/* Action buttons — revealed on hover */}
-      <div
-        ref={confirmRef}
-        className={cn(
-          "relative flex items-center gap-1 shrink-0 transition-opacity",
-          confirmingDelete ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-        )}
-      >
-        <button
-          type="button"
-          onClick={onEdit}
-          title="Edit task"
-          className="p-1.5 rounded-md text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
-        >
-          <Pencil className="w-3.5 h-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => setConfirmingDelete(true)}
-          title="Delete task"
-          className={cn(
-            "p-1.5 rounded-md transition-colors cursor-pointer",
-            confirmingDelete
-              ? "bg-red-500/10 text-red-500"
-              : "text-[hsl(var(--muted-foreground))] hover:bg-red-500/10 hover:text-red-500"
-          )}
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-
-        {confirmingDelete && (
-          <div className="absolute right-0 top-full mt-2 z-20 w-48 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-xl p-3">
-            <p className="text-sm font-medium mb-3">Delete this task?</p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmingDelete(false)}
-                className="flex-1 py-1.5 text-xs font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setConfirmingDelete(false);
-                  onDelete();
-                }}
-                className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors cursor-pointer"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

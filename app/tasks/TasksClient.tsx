@@ -267,9 +267,9 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
 
   return (
     <AppShell title="Tasks">
-      <div className="max-w-3xl mx-auto">
+      <div className="h-full flex flex-col max-w-3xl mx-auto">
         {/* Page header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-5 shrink-0">
           <div>
             <h2 className="text-xl font-bold">My Tasks</h2>
             <p className="text-sm text-[hsl(var(--muted-foreground))] mt-0.5">
@@ -331,7 +331,7 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
 
         {/* Global error */}
         {error && (
-          <div className="mb-4 px-4 py-3 rounded-xl border border-red-500/20 bg-red-500/10 text-sm text-red-500">
+          <div className="mb-4 shrink-0 px-4 py-3 rounded-xl border border-red-500/20 bg-red-500/10 text-sm text-red-500">
             {error}
             <button
               onClick={() => setError(null)}
@@ -343,7 +343,7 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
         )}
 
         {/* Filter tabs */}
-        <div className="flex gap-1 p-1 rounded-lg bg-[hsl(var(--muted))] mb-6 w-fit">
+        <div className="flex gap-1 p-1 rounded-lg bg-[hsl(var(--muted))] mb-5 w-fit shrink-0">
           {FILTER_TABS.map(({ key, label, count }) => (
             <button
               key={key}
@@ -372,9 +372,12 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
           ))}
         </div>
 
+        {/* Scrollable task list */}
+        <div className="flex-1 overflow-y-auto min-h-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+
         {/* Active tasks */}
         {filterBy !== "completed" && (
-          <div className="space-y-2 mb-6">
+          <div className="space-y-2 mb-4">
             {visibleActive.length === 0 && filterBy !== "all" && (
               <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
                 <EmptyState
@@ -458,6 +461,8 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
             )}
           </div>
         )}
+
+        </div>{/* end scrollable list */}
       </div>
 
       {/* Task form drawer */}

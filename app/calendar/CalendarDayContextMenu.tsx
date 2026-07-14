@@ -44,7 +44,7 @@ export function CalendarDayContextMenu({
   return (
     <div
       ref={ref}
-      className="fixed z-50 min-w-[168px] rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-xl py-1"
+      className="fixed z-50 min-w-[168px] rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-xl overflow-hidden"
       style={{ left, top }}
       role="menu"
     >
@@ -55,7 +55,7 @@ export function CalendarDayContextMenu({
           onAddEvent();
           onClose();
         }}
-        className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
+        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
       >
         <CalendarDays className="w-4 h-4 text-[hsl(var(--primary))] shrink-0" />
         Add event
@@ -67,7 +67,7 @@ export function CalendarDayContextMenu({
           onAddTask();
           onClose();
         }}
-        className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
+        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
       >
         <CheckSquare className="w-4 h-4 text-emerald-500 shrink-0" />
         Add task

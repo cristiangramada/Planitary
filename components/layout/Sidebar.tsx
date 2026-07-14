@@ -27,7 +27,7 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="flex flex-col w-64 min-h-screen border-r border-[hsl(var(--sidebar-border))] bg-[hsl(var(--sidebar-bg))] shrink-0">
+    <aside className="flex flex-col w-64 h-full border-r border-[hsl(var(--sidebar-border))] bg-[hsl(var(--sidebar-bg))] shrink-0">
       {/* Logo */}
       <div className="flex items-center gap-2 px-6 py-5 border-b border-[hsl(var(--sidebar-border))]">
         <Globe className="w-6 h-6 text-[hsl(var(--primary))]" />
@@ -43,7 +43,7 @@ export function Sidebar() {
               key={href}
               href={href}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer",
                 active
                   ? "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]"
                   : "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))]"

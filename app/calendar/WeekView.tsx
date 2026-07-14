@@ -15,6 +15,10 @@ import {
   eventBlockGeometry,
   isoToMinutes,
   minutesToPx,
+  eventToInterval,
+  taskToInterval,
+  layoutOverlappingItems,
+  overlapColumnStyle,
 } from "./calendarUtils";
 import type { CalendarEvent, TaskWithDetails } from "@/types";
 
@@ -83,7 +87,7 @@ export function WeekView({
   const todayInWeek = weekDays.some((d) => dateToISO(d) === todayStr);
 
   return (
-    <div className="rounded-xl border border-[hsl(var(--border))] overflow-hidden flex flex-col">
+    <div className="rounded-xl border border-[hsl(var(--border))] overflow-hidden flex flex-col h-full">
       {/* ── Day column headers ── */}
       <div className="grid grid-cols-[56px_repeat(7,1fr)] border-b border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.4)] shrink-0">
         <div /> {/* spacer for hour labels */}
@@ -160,7 +164,7 @@ export function WeekView({
       {/* ── Scrollable timeline ── */}
       <div
         ref={scrollRef}
-        className="overflow-y-auto h-[560px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="overflow-y-auto flex-1 min-h-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         <div
           className="grid grid-cols-[56px_repeat(7,1fr)] relative select-none"
@@ -224,53 +228,78 @@ export function WeekView({
                   </div>
                 )}
 
-                {/* Calendar events */}
-                {colEvents.map((ev) => {
-                  const { top, height } = eventBlockGeometry(ev.start_time, ev.end_time);
-                  return (
-                    <button
-                      key={ev.id}
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); onEditEvent(ev); }}
-                      onContextMenu={(e) => e.stopPropagation()}
-                      className="absolute left-0.5 right-0.5 rounded-md px-1.5 py-0.5 text-left overflow-hidden bg-[hsl(var(--primary)/0.2)] border-l-2 border-[hsl(var(--primary))] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.3)] transition-colors z-[5] cursor-pointer select-none"
-                      style={{ top, height: Math.max(24, height) }}
-                    >
-                      <span className="text-[11px] font-semibold leading-tight block truncate">
-                        {ev.title}
-                      </span>
-                      {height >= 40 && (
-                        <span className="text-[10px] opacity-80 leading-tight block">
-                          {fmt12(ev.start_time)}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+                {/* Calendar events + timed tasks (side-by-side when overlapping) */}
+                {(() => {
+                  const intervals = [
+                    ...colEvents.map(eventToInterval),
+                    ...timedTasks.map((t) => taskToInterval(t, iso)),
+                  ];
+                  const layout = layoutOverlappingItems(intervals);
 
-                {/* Timed tasks */}
-                {timedTasks.map((t) => {
-                  const fakeIso = `${iso}T${t.due_time}`;
-                  const topPx = minutesToPx(isoToMinutes(new Date(fakeIso).toISOString()));
                   return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); onEditTask(t); }}
-                      onContextMenu={(e) => e.stopPropagation()}
-                      className={cn(
-                        "absolute left-0.5 right-0.5 rounded-md px-1.5 py-0.5 text-left overflow-hidden z-[5] hover:brightness-95 transition-all cursor-pointer select-none",
-                        PRIORITY_COLOR[t.priority],
-                        t.status === "completed" && "opacity-40"
-                      )}
-                      style={{ top: topPx, height: 28 }}
-                    >
-                      <span className="text-[11px] font-semibold leading-tight block truncate">
-                        {t.title}
-                      </span>
-                    </button>
+                    <>
+                      {colEvents.map((ev) => {
+                        const { top, height } = eventBlockGeometry(ev.start_time, ev.end_time);
+                        const place = layout.get(ev.id) ?? { column: 0, columnCount: 1 };
+                        const col = overlapColumnStyle(place.column, place.columnCount, 2);
+                        return (
+                          <button
+                            key={ev.id}
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); onEditEvent(ev); }}
+                            onContextMenu={(e) => e.stopPropagation()}
+                            className="absolute rounded-md px-1.5 py-0.5 text-left overflow-hidden bg-[hsl(var(--primary)/0.2)] border-l-2 border-[hsl(var(--primary))] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.3)] transition-colors z-[5] cursor-pointer select-none"
+                            style={{
+                              top,
+                              height: Math.max(24, height),
+                              left: `calc(2px + ${col.left})`,
+                              width: `calc(${col.width} - 2px)`,
+                            }}
+                          >
+                            <span className="text-[11px] font-semibold leading-tight block truncate">
+                              {ev.title}
+                            </span>
+                            {height >= 40 && (
+                              <span className="text-[10px] opacity-80 leading-tight block">
+                                {fmt12(ev.start_time)}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+
+                      {timedTasks.map((t) => {
+                        const fakeIso = `${iso}T${t.due_time}`;
+                        const topPx = minutesToPx(isoToMinutes(new Date(fakeIso).toISOString()));
+                        const place = layout.get(t.id) ?? { column: 0, columnCount: 1 };
+                        const col = overlapColumnStyle(place.column, place.columnCount, 2);
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); onEditTask(t); }}
+                            onContextMenu={(e) => e.stopPropagation()}
+                            className={cn(
+                              "absolute rounded-md px-1.5 py-0.5 text-left overflow-hidden z-[5] hover:brightness-95 transition-all cursor-pointer select-none",
+                              PRIORITY_COLOR[t.priority],
+                              t.status === "completed" && "opacity-40"
+                            )}
+                            style={{
+                              top: topPx,
+                              height: 28,
+                              left: `calc(2px + ${col.left})`,
+                              width: `calc(${col.width} - 2px)`,
+                            }}
+                          >
+                            <span className="text-[11px] font-semibold leading-tight block truncate">
+                              {t.title}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </>
                   );
-                })}
+                })()}
               </div>
             );
           })}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useMemo } from "react";
 import { cn } from "@/utils/cn";
 import {
   HOUR_HEIGHT,
@@ -9,11 +9,14 @@ import {
   localTodayStr,
   dateToISO,
   fmt12,
-  fmtDayShort,
   fmtHourLabel,
   eventBlockGeometry,
   isoToMinutes,
   minutesToPx,
+  eventToInterval,
+  taskToInterval,
+  layoutOverlappingItems,
+  overlapColumnStyle,
 } from "./calendarUtils";
 import type { CalendarEvent, TaskWithDetails } from "@/types";
 
@@ -72,8 +75,16 @@ export function DayView({ date, events, tasks, onEditEvent, onEditTask, onDayCon
   const allDayTasks = tasks.filter((t) => t.due_date === iso && !t.due_time);
   const timedTasks = tasks.filter((t) => t.due_date === iso && !!t.due_time);
 
+  const overlapLayout = useMemo(() => {
+    const intervals = [
+      ...dayEvents.map(eventToInterval),
+      ...timedTasks.map((t) => taskToInterval(t, iso)),
+    ];
+    return layoutOverlappingItems(intervals);
+  }, [dayEvents, timedTasks, iso]);
+
   return (
-    <div className="rounded-xl border border-[hsl(var(--border))] overflow-hidden flex flex-col">
+    <div className="rounded-xl border border-[hsl(var(--border))] overflow-hidden flex flex-col h-full">
       {/* ── Day header ── */}
       <div
         className={cn(
@@ -126,7 +137,7 @@ export function DayView({ date, events, tasks, onEditEvent, onEditTask, onDayCon
       {/* ── Scrollable timeline ── */}
       <div
         ref={scrollRef}
-        className="overflow-y-auto h-[560px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="overflow-y-auto flex-1 min-h-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         <div
           className="relative select-none"
@@ -162,54 +173,69 @@ export function DayView({ date, events, tasks, onEditEvent, onEditTask, onDayCon
             </div>
           )}
 
-          {/* Events */}
-          {dayEvents.map((ev) => {
-            const { top, height } = eventBlockGeometry(ev.start_time, ev.end_time);
-            return (
-              <button
-                key={ev.id}
-                type="button"
-                onClick={() => onEditEvent(ev)}
-                onContextMenu={(e) => e.stopPropagation()}
-                className="absolute rounded-lg px-2.5 py-1 text-left overflow-hidden bg-[hsl(var(--primary)/0.18)] border-l-[3px] border-[hsl(var(--primary))] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.28)] transition-colors z-[5] cursor-pointer select-none"
-                style={{ top, height: Math.max(28, height), left: 58, right: 4 }}
-              >
-                <span className="text-sm font-semibold leading-tight block truncate">
-                  {ev.title}
-                </span>
-                {height >= 44 && (
-                  <span className="text-xs opacity-80 leading-tight block mt-0.5">
-                    {fmt12(ev.start_time)}
-                    {ev.end_time && ` – ${fmt12(ev.end_time)}`}
+          {/* Timed blocks — inset past hour labels so overlap % is relative to content */}
+          <div className="absolute top-0 bottom-0 left-[58px] right-1">
+            {dayEvents.map((ev) => {
+              const { top, height } = eventBlockGeometry(ev.start_time, ev.end_time);
+              const place = overlapLayout.get(ev.id) ?? { column: 0, columnCount: 1 };
+              const col = overlapColumnStyle(place.column, place.columnCount, 1.5);
+              return (
+                <button
+                  key={ev.id}
+                  type="button"
+                  onClick={() => onEditEvent(ev)}
+                  onContextMenu={(e) => e.stopPropagation()}
+                  className="absolute rounded-lg px-2.5 py-1 text-left overflow-hidden bg-[hsl(var(--primary)/0.18)] border-l-[3px] border-[hsl(var(--primary))] text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.28)] transition-colors z-[5] cursor-pointer select-none"
+                  style={{
+                    top,
+                    height: Math.max(28, height),
+                    left: col.left,
+                    width: col.width,
+                  }}
+                >
+                  <span className="text-sm font-semibold leading-tight block truncate">
+                    {ev.title}
                   </span>
-                )}
-              </button>
-            );
-          })}
+                  {height >= 44 && (
+                    <span className="text-xs opacity-80 leading-tight block mt-0.5">
+                      {fmt12(ev.start_time)}
+                      {ev.end_time && ` – ${fmt12(ev.end_time)}`}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
 
-          {/* Timed tasks */}
-          {timedTasks.map((t) => {
-            const fakeIso = `${iso}T${t.due_time}`;
-            const topPx = minutesToPx(isoToMinutes(new Date(fakeIso).toISOString()));
-            return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => onEditTask(t)}
-                onContextMenu={(e) => e.stopPropagation()}
-                className={cn(
-                  "absolute rounded-lg px-2.5 py-1 text-left overflow-hidden z-[5] hover:brightness-95 transition-all cursor-pointer select-none",
-                  PRIORITY_COLOR[t.priority],
-                  t.status === "completed" && "opacity-40"
-                )}
-                style={{ top: topPx, height: 32, left: 58, right: 4 }}
-              >
-                <span className="text-xs font-semibold leading-tight block truncate">
-                  {t.title}
-                </span>
-              </button>
-            );
-          })}
+            {timedTasks.map((t) => {
+              const fakeIso = `${iso}T${t.due_time}`;
+              const topPx = minutesToPx(isoToMinutes(new Date(fakeIso).toISOString()));
+              const place = overlapLayout.get(t.id) ?? { column: 0, columnCount: 1 };
+              const col = overlapColumnStyle(place.column, place.columnCount, 1.5);
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => onEditTask(t)}
+                  onContextMenu={(e) => e.stopPropagation()}
+                  className={cn(
+                    "absolute rounded-lg px-2.5 py-1 text-left overflow-hidden z-[5] hover:brightness-95 transition-all cursor-pointer select-none",
+                    PRIORITY_COLOR[t.priority],
+                    t.status === "completed" && "opacity-40"
+                  )}
+                  style={{
+                    top: topPx,
+                    height: 32,
+                    left: col.left,
+                    width: col.width,
+                  }}
+                >
+                  <span className="text-xs font-semibold leading-tight block truncate">
+                    {t.title}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

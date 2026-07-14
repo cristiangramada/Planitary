@@ -112,6 +112,116 @@ export function eventBlockGeometry(
   };
 }
 
+/** Interval used by the overlap layout algorithm (minutes from midnight). */
+export interface TimedInterval {
+  id: string;
+  startMin: number;
+  endMin: number;
+}
+
+export interface OverlapLayout {
+  /** 0-based column index within the overlapping cluster */
+  column: number;
+  /** Total columns in this overlapping cluster */
+  columnCount: number;
+}
+
+/**
+ * Pack overlapping timed items into side-by-side columns so they don't stack.
+ * Classic greedy calendar layout: sort by start, assign lowest free column.
+ */
+export function layoutOverlappingItems(
+  items: TimedInterval[]
+): Map<string, OverlapLayout> {
+  const layout = new Map<string, OverlapLayout>();
+  if (items.length === 0) return layout;
+
+  const sorted = [...items].sort(
+    (a, b) => a.startMin - b.startMin || a.endMin - b.endMin
+  );
+
+  // Clusters of mutually overlapping items
+  const clusters: TimedInterval[][] = [];
+  let current: TimedInterval[] = [];
+  let clusterEnd = -1;
+
+  for (const item of sorted) {
+    if (current.length === 0 || item.startMin < clusterEnd) {
+      current.push(item);
+      clusterEnd = Math.max(clusterEnd, item.endMin);
+    } else {
+      clusters.push(current);
+      current = [item];
+      clusterEnd = item.endMin;
+    }
+  }
+  if (current.length > 0) clusters.push(current);
+
+  for (const cluster of clusters) {
+    // columnEndMins[i] = end minute of last item placed in column i
+    const columnEndMins: number[] = [];
+    const assigned = new Map<string, number>();
+
+    for (const item of cluster) {
+      let col = columnEndMins.findIndex((end) => end <= item.startMin);
+      if (col === -1) {
+        col = columnEndMins.length;
+        columnEndMins.push(item.endMin);
+      } else {
+        columnEndMins[col] = item.endMin;
+      }
+      assigned.set(item.id, col);
+    }
+
+    const columnCount = columnEndMins.length;
+    for (const item of cluster) {
+      layout.set(item.id, {
+        column: assigned.get(item.id)!,
+        columnCount,
+      });
+    }
+  }
+
+  return layout;
+}
+
+/** Build a timed interval for a calendar event. */
+export function eventToInterval(event: {
+  id: string;
+  start_time: string;
+  end_time: string | null;
+}): TimedInterval {
+  const startMin = isoToMinutes(event.start_time);
+  let endMin = event.end_time ? isoToMinutes(event.end_time) : startMin + 60;
+  if (endMin <= startMin) endMin = Math.min(startMin + 60, 24 * 60);
+  return { id: event.id, startMin, endMin: Math.max(endMin, startMin + 30) };
+}
+
+/** Build a timed interval for a task due_time on a YYYY-MM-DD day. */
+export function taskToInterval(
+  task: { id: string; due_time: string | null },
+  dayIso: string
+): TimedInterval {
+  const time = (task.due_time ?? "00:00").slice(0, 5);
+  const startMin = isoToMinutes(`${dayIso}T${time}:00`);
+  return { id: task.id, startMin, endMin: startMin + 30 };
+}
+
+/** CSS left/width % for a column within an overlap cluster. */
+export function overlapColumnStyle(
+  column: number,
+  columnCount: number,
+  gapPercent = 1
+): { left: string; width: string } {
+  const usable = 100 - gapPercent * (columnCount - 1);
+  const width = usable / columnCount;
+  const left = column * (width + gapPercent);
+  return {
+    left: `${left}%`,
+    width: `${width}%`,
+  };
+}
+
 // ─── Label formatters ─────────────────────────────────────────────────────────
 
 export function fmtMonthYear(year: number, month: number): string {
@@ -130,18 +240,17 @@ export function fmtWeekRange(weekStart: Date): string {
 }
 
 export function fmtDayFull(date: Date): string {
-  return date.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
+  const weekday = date.toLocaleDateString("en-US", { weekday: "long" });
+  const month = date.toLocaleDateString("en-US", { month: "long" });
+  const day = date.getDate();
+  const year = date.getFullYear();
+  // Non-breaking spaces keep "July 17" and ", 2026" from wrapping apart
+  return `${weekday}, ${month}\u00A0${day},\u00A0${year}`;
 }
 
 export function fmtDayShort(date: Date): string {
-  return date.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
+  const weekday = date.toLocaleDateString("en-US", { weekday: "long" });
+  const month = date.toLocaleDateString("en-US", { month: "long" });
+  const day = date.getDate();
+  return `${weekday}, ${month}\u00A0${day}`;
 }
