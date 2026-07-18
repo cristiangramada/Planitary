@@ -1,67 +1,100 @@
 "use client";
 
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { BookOpen, CheckSquare2, Save, Trash2, Plus } from "lucide-react";
+import {
+  useState,
+  useMemo,
+  useCallback,
+  useRef,
+  useEffect,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
+import { CheckSquare2, ChevronLeft, ChevronRight, Plus, SortAsc } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { PriorityBadge } from "@/components/ui/PriorityBadge";
 import { MiniCalendarPicker } from "@/components/ui/MiniCalendarPicker";
+import { JournalEntryContextMenu } from "./JournalEntryContextMenu";
 import { createClient } from "@/lib/supabase/client";
-import { saveJournalEntry, deleteJournalEntry } from "@/lib/journal";
+import {
+  fetchJournalEntriesByDate,
+  createJournalEntry,
+  updateJournalEntry,
+  deleteJournalEntry,
+} from "@/lib/journal";
 import { cn } from "@/utils/cn";
-import { formatDate, localTodayStr, toLocalDateStr } from "@/utils/date";
+import { localTodayStr, toLocalDateStr, shiftDateStr } from "@/utils/date";
 import type { JournalEntry, Task } from "@/types";
 
 type CompletedTaskLite = Pick<Task, "id" | "title" | "priority" | "status" | "completed_at">;
 
+type SortKey = "newest" | "oldest";
+
+const SORT_LABELS: Record<SortKey, string> = {
+  newest: "Newest first",
+  oldest: "Oldest first",
+};
+
 interface JournalClientProps {
+  initialDate: string;
   initialEntries: JournalEntry[];
   completedTasks: CompletedTaskLite[];
 }
 
-export function JournalClient({ initialEntries, completedTasks }: JournalClientProps) {
+interface ContextMenuState {
+  entryId: string;
+  x: number;
+  y: number;
+}
+
+export function JournalClient({
+  initialDate,
+  initialEntries,
+  completedTasks,
+}: JournalClientProps) {
+  const [selectedDate, setSelectedDate] = useState(initialDate);
   const [entries, setEntries] = useState<JournalEntry[]>(initialEntries);
-  const [selectedDate, setSelectedDate] = useState<string>(localTodayStr());
-  const [draft, setDraft] = useState<string>("");
-  const [saving, setSaving] = useState(false);
+  const [quickAddValue, setQuickAddValue] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const confirmRef = useRef<HTMLDivElement>(null);
+  const [sortBy, setSortBy] = useState<SortKey>("newest");
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
-  // The entry (if any) that already exists for the selected date.
-  const activeEntry = useMemo(
-    () => entries.find((e) => e.entry_date === selectedDate) ?? null,
-    [entries, selectedDate]
-  );
+  const isFirstRun = useRef(true);
 
-  // Keep the editor in sync with whichever date is selected.
-  useEffect(() => {
-    setDraft(activeEntry?.content ?? "");
-    setConfirmingDelete(false);
-  }, [activeEntry]);
+  // ---------------------------------------------------------------------------
+  // Date-scoped entry loading
+  // ---------------------------------------------------------------------------
 
-  // Close the delete confirmation on outside click / Escape.
-  useEffect(() => {
-    if (!confirmingDelete) return;
-    function onOutside(e: MouseEvent) {
-      if (confirmRef.current && !confirmRef.current.contains(e.target as Node)) {
-        setConfirmingDelete(false);
-      }
+  const loadEntriesForDate = useCallback(async (date: string) => {
+    setError(null);
+    try {
+      const supabase = createClient();
+      const data = await fetchJournalEntriesByDate(supabase, date);
+      setEntries(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load entries.");
     }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setConfirmingDelete(false);
+  }, []);
+
+  useEffect(() => {
+    if (isFirstRun.current) {
+      isFirstRun.current = false;
+      // Self-correct for a server/client local-date mismatch near midnight —
+      // the initial entries were fetched using the server's clock.
+      const clientToday = localTodayStr();
+      if (clientToday !== initialDate) setSelectedDate(clientToday);
+      return;
     }
-    document.addEventListener("mousedown", onOutside);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onOutside);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [confirmingDelete]);
+    setContextMenu(null);
+    loadEntriesForDate(selectedDate);
+  }, [selectedDate, loadEntriesForDate, initialDate]);
 
-  const isDirty = draft.trim() !== (activeEntry?.content ?? "").trim();
-  const canSave = draft.trim().length > 0 && isDirty;
+  const sortedEntries = useMemo(() => {
+    const sorted = [...entries].sort((a, b) => a.created_at.localeCompare(b.created_at));
+    return sortBy === "newest" ? sorted.reverse() : sorted;
+  }, [entries, sortBy]);
 
+  const todayStr = localTodayStr();
   const completedThatDay = useMemo(
     () =>
       completedTasks.filter(
@@ -70,66 +103,82 @@ export function JournalClient({ initialEntries, completedTasks }: JournalClientP
     [completedTasks, selectedDate]
   );
 
-  const heading = useMemo(() => {
-    if (selectedDate === localTodayStr()) return "Today";
-    return formatDate(selectedDate);
-  }, [selectedDate]);
+  // ---------------------------------------------------------------------------
+  // Date navigation
+  // ---------------------------------------------------------------------------
+
+  function goToDate(date: string) {
+    setSelectedDate(date);
+  }
+  function handlePrevDay() {
+    goToDate(shiftDateStr(selectedDate, -1));
+  }
+  function handleNextDay() {
+    goToDate(shiftDateStr(selectedDate, 1));
+  }
+  function handleToday() {
+    goToDate(todayStr);
+  }
 
   // ---------------------------------------------------------------------------
   // Mutations
   // ---------------------------------------------------------------------------
 
-  const handleSave = useCallback(async () => {
-    if (!canSave) return;
-    setSaving(true);
-    setError(null);
+  const getUserId = useCallback(async () => {
+    const supabase = createClient();
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) throw new Error("Not signed in");
+    return data.user.id;
+  }, []);
+
+  const handleQuickAddSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (submitting) return; // guard against duplicate Enter presses
+      const trimmed = quickAddValue.trim();
+      if (!trimmed) return;
+
+      setSubmitting(true);
+      setError(null);
+      try {
+        const supabase = createClient();
+        const userId = await getUserId();
+        const created = await createJournalEntry(supabase, userId, selectedDate, trimmed);
+        setEntries((prev) => [created, ...prev]);
+        setQuickAddValue("");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to create entry.");
+        // keep the typed text so the user doesn't lose it
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [submitting, quickAddValue, getUserId, selectedDate]
+  );
+
+  const handleSaveEdit = useCallback(async (id: string, content: string) => {
+    const supabase = createClient();
+    const updated = await updateJournalEntry(supabase, id, content);
+    setEntries((prev) => prev.map((e) => (e.id === id ? updated : e)));
+  }, []);
+
+  const handleDelete = useCallback(async (id: string) => {
     try {
       const supabase = createClient();
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) throw new Error("Not signed in");
-
-      const saved = await saveJournalEntry(supabase, data.user.id, selectedDate, draft.trim());
-      setEntries((prev) => {
-        const withoutThisDate = prev.filter((e) => e.entry_date !== saved.entry_date);
-        return [...withoutThisDate, saved].sort((a, b) =>
-          b.entry_date.localeCompare(a.entry_date)
-        );
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save entry.");
-    } finally {
-      setSaving(false);
-    }
-  }, [canSave, draft, selectedDate]);
-
-  const handleDelete = useCallback(async () => {
-    if (!activeEntry) return;
-    setConfirmingDelete(false);
-    try {
-      const supabase = createClient();
-      await deleteJournalEntry(supabase, activeEntry.id);
-      setEntries((prev) => prev.filter((e) => e.id !== activeEntry.id));
-      setDraft("");
+      await deleteJournalEntry(supabase, id);
+      setEntries((prev) => prev.filter((e) => e.id !== id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete entry.");
     }
-  }, [activeEntry]);
+  }, []);
 
-  // Keyboard shortcut: Cmd/Ctrl+S to save
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-        e.preventDefault();
-        handleSave();
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [handleSave]);
+  const handleOpenContextMenu = useCallback((entryId: string, x: number, y: number) => {
+    setContextMenu({ entryId, x, y });
+  }, []);
 
   return (
     <AppShell title="Journal">
-      <div className="h-full flex flex-col">
+      <div className="h-full flex flex-col max-w-3xl mx-auto w-full">
         {/* ── Error banner ── */}
         {error && (
           <div className="mb-3 px-4 py-3 rounded-xl border border-red-500/20 bg-red-500/10 text-sm text-red-500 shrink-0">
@@ -143,187 +192,376 @@ export function JournalClient({ initialEntries, completedTasks }: JournalClientP
           </div>
         )}
 
-        {/* ── Two-column body ── */}
-        <div className="flex-1 flex gap-4 min-h-0">
-          {/* Left: editor */}
-          <div className="flex-1 min-w-0 flex flex-col">
-            {/* Header row */}
-            <div className="flex items-center justify-between gap-3 mb-4 shrink-0">
-              <div className="flex items-center gap-3 min-w-0">
-                <MiniCalendarPicker
-                  value={selectedDate}
-                  onChange={(v) => setSelectedDate(v ?? localTodayStr())}
-                  className="w-56"
-                />
-                <span className="text-sm font-semibold text-[hsl(var(--muted-foreground))] shrink-0">
-                  {heading}
-                </span>
-              </div>
+        {/* ── Date navigation + sort ── */}
+        <div className="flex items-center justify-between gap-3 mb-4 shrink-0">
+          <div className="flex items-center gap-1 min-w-0">
+            <button
+              type="button"
+              onClick={handlePrevDay}
+              aria-label="Previous day"
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer shrink-0"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleNextDay}
+              aria-label="Next day"
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer shrink-0"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
 
-              <div className="flex items-center gap-2 shrink-0">
-                {activeEntry && (
-                  <div ref={confirmRef} className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setConfirmingDelete(true)}
-                      title="Delete entry"
-                      className={cn(
-                        "p-2 rounded-lg transition-colors cursor-pointer",
-                        confirmingDelete
-                          ? "bg-red-500/10 text-red-500"
-                          : "text-[hsl(var(--muted-foreground))] hover:bg-red-500/10 hover:text-red-500"
-                      )}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-
-                    {confirmingDelete && (
-                      <div className="absolute right-0 top-full mt-2 z-20 w-56 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-xl p-3">
-                        <p className="text-sm font-medium mb-3">Delete this entry?</p>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setConfirmingDelete(false)}
-                            className="flex-1 py-1.5 text-xs font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleDelete}
-                            className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors cursor-pointer"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={!canSave || saving}
-                  className={cn(
-                    "flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-opacity",
-                    canSave && !saving
-                      ? "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 cursor-pointer"
-                      : "bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] cursor-not-allowed"
-                  )}
-                >
-                  <Save className="w-4 h-4" />
-                  {saving ? "Saving…" : "Save"}
-                </button>
-              </div>
+            <div className="ml-1 min-w-0">
+              <MiniCalendarPicker
+                value={selectedDate}
+                onChange={(v) => goToDate(v ?? todayStr)}
+                className="w-48"
+              />
             </div>
 
-            {/* Text editor */}
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder={
-                activeEntry
-                  ? "Edit your entry…"
-                  : `What happened on ${formatDate(selectedDate)}?`
-              }
-              className="flex-1 min-h-0 w-full resize-none rounded-xl border border-[hsl(var(--input))] bg-[hsl(var(--card))] p-4 text-sm leading-relaxed text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))] transition"
-            />
-
-            {/* Completed That Day */}
-            <div className="mt-4 shrink-0">
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-[hsl(var(--muted-foreground))] mb-2">
-                <CheckSquare2 className="w-4 h-4" />
-                Completed That Day
-              </h3>
-              {completedThatDay.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-[hsl(var(--border))] px-4 py-3 text-xs text-[hsl(var(--muted-foreground))]">
-                  No tasks were completed on this day.
-                </div>
-              ) : (
-                <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {completedThatDay.map((t) => (
-                    <div
-                      key={t.id}
-                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))]"
-                    >
-                      <CheckSquare2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                      <span className="text-xs font-medium truncate max-w-[180px]">
-                        {t.title}
-                      </span>
-                      <PriorityBadge priority={t.priority} />
-                    </div>
-                  ))}
-                </div>
+            <button
+              type="button"
+              onClick={handleToday}
+              disabled={selectedDate === todayStr}
+              className={cn(
+                "ml-2 h-7 px-3 rounded-full border text-xs font-semibold transition-colors shrink-0",
+                selectedDate === todayStr
+                  ? "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] opacity-50 cursor-default"
+                  : "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary))] hover:text-[hsl(var(--primary))] cursor-pointer"
               )}
-            </div>
+            >
+              Today
+            </button>
           </div>
 
-          {/* Right: past entries */}
-          <div className="w-72 shrink-0 flex flex-col overflow-hidden border-l border-[hsl(var(--border))] pl-4">
-            <h3 className="text-sm font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-3 shrink-0">
-              Past Entries
-            </h3>
-
-            {entries.length === 0 ? (
-              <div className="flex-1 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
-                <EmptyState
-                  icon={BookOpen}
-                  title="No entries yet"
-                  description="Write your first journal entry to see it here."
+          {/* Sort dropdown — mirrors the Tasks page sort control */}
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowSortMenu((v) => !v)}
+              aria-haspopup="listbox"
+              aria-expanded={showSortMenu}
+              aria-label={`Sort entries: ${SORT_LABELS[sortBy]}`}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
+            >
+              <SortAsc className="w-3.5 h-3.5" />
+              {SORT_LABELS[sortBy]}
+            </button>
+            {showSortMenu && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setShowSortMenu(false)}
                 />
-              </div>
-            ) : (
-              <div className="flex-1 overflow-y-auto space-y-2 min-h-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {entries.map((entry) => {
-                  const isSelected = entry.entry_date === selectedDate;
-                  return (
-                    <button
-                      key={entry.id}
-                      type="button"
-                      onClick={() => setSelectedDate(entry.entry_date)}
-                      className={cn(
-                        "w-full text-left p-3 rounded-xl border transition-colors cursor-pointer",
-                        isSelected
-                          ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.06)]"
-                          : "border-[hsl(var(--border))] bg-[hsl(var(--card))] hover:bg-[hsl(var(--muted)/0.5)]"
-                      )}
-                    >
-                      <p
+                <div
+                  role="listbox"
+                  className="absolute right-0 z-20 mt-1 w-40 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-lg py-1"
+                >
+                  {(Object.entries(SORT_LABELS) as [SortKey, string][]).map(
+                    ([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        role="option"
+                        aria-selected={sortBy === key}
+                        onClick={() => {
+                          setSortBy(key);
+                          setShowSortMenu(false);
+                        }}
                         className={cn(
-                          "text-xs font-semibold mb-1",
-                          isSelected
-                            ? "text-[hsl(var(--primary))]"
-                            : "text-[hsl(var(--foreground))]"
+                          "w-full px-3 py-1.5 text-xs text-left hover:bg-[hsl(var(--muted))] transition-colors",
+                          sortBy === key
+                            ? "text-[hsl(var(--primary))] font-medium cursor-default"
+                            : "text-[hsl(var(--foreground))] cursor-pointer"
                         )}
                       >
-                        {entry.entry_date === localTodayStr()
-                          ? "Today"
-                          : formatDate(entry.entry_date)}
-                      </p>
-                      <p className="text-xs text-[hsl(var(--muted-foreground))] line-clamp-2">
-                        {entry.content}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Quick "new entry" shortcut when today has no entry yet */}
-            {!entries.some((e) => e.entry_date === localTodayStr()) && (
-              <button
-                type="button"
-                onClick={() => setSelectedDate(localTodayStr())}
-                className="mt-3 shrink-0 flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border border-dashed border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Write today&apos;s entry
-              </button>
+                        {label}
+                      </button>
+                    )
+                  )}
+                </div>
+              </>
             )}
           </div>
         </div>
+
+        {/* ── Quick-add input ── */}
+        <form onSubmit={handleQuickAddSubmit} className="mb-2 shrink-0">
+          <label htmlFor="journal-quick-add" className="sr-only">
+            Add a journal entry
+          </label>
+          <div className="relative">
+            <input
+              id="journal-quick-add"
+              type="text"
+              value={quickAddValue}
+              onChange={(e) => setQuickAddValue(e.target.value)}
+              aria-label="Add a journal entry"
+              disabled={submitting}
+              autoComplete="off"
+              className="w-full pl-4 pr-4 py-3 text-sm rounded-xl border border-[hsl(var(--input))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))] transition disabled:opacity-60"
+            />
+            {/* Custom placeholder: larger "+" glyph, hidden once typing starts.
+                pointer-events-none lets clicks pass through to the input beneath. */}
+            {quickAddValue.length === 0 && (
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-0 left-4 flex items-center gap-1.5 text-[hsl(var(--muted-foreground))]"
+              >
+                <Plus className="w-3.5 h-3.5 shrink-0" strokeWidth={2.25} />
+                <span className="text-sm leading-none">Add entry</span>
+              </div>
+            )}
+          </div>
+        </form>
+
+        {/* ── Entry list ── */}
+        <div className="flex-1 overflow-y-auto min-h-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {sortedEntries.length === 0 ? (
+            <p className="py-6 pl-4 text-sm text-[hsl(var(--muted-foreground))]">
+              No entries for this day.
+            </p>
+          ) : (
+            <div className="divide-y divide-[hsl(var(--border))]">
+              {sortedEntries.map((entry) => (
+                <JournalEntryRow
+                  key={entry.id}
+                  entry={entry}
+                  onSave={handleSaveEdit}
+                  onOpenContextMenu={handleOpenContextMenu}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── Completed that day ── */}
+        <div className="mt-4 shrink-0">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-[hsl(var(--muted-foreground))] mb-2">
+            <CheckSquare2 className="w-4 h-4" />
+            {selectedDate === todayStr ? "Completed Today" : "Completed That Day"}
+          </h3>
+          {completedThatDay.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-[hsl(var(--border))] px-4 py-3 text-xs text-[hsl(var(--muted-foreground))]">
+              No tasks were completed on this day.
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {completedThatDay.map((t) => (
+                <div
+                  key={t.id}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))]"
+                >
+                  <CheckSquare2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <span className="text-xs font-medium truncate max-w-[180px]">{t.title}</span>
+                  <PriorityBadge priority={t.priority} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* ── Right-click / long-press context menu ── */}
+      {contextMenu && (
+        <JournalEntryContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onDelete={() => handleDelete(contextMenu.entryId)}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </AppShell>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Journal entry row — divider-separated, click-to-edit, right-click to delete.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface JournalEntryRowProps {
+  entry: JournalEntry;
+  onSave: (id: string, content: string) => Promise<void>;
+  onOpenContextMenu: (entryId: string, x: number, y: number) => void;
+}
+
+function caretIndexFromPoint(x: number, y: number): number | null {
+  const doc = document as Document & {
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+  };
+  if (typeof doc.caretRangeFromPoint === "function") {
+    const range = doc.caretRangeFromPoint(x, y);
+    if (range?.startContainer.nodeType === Node.TEXT_NODE) {
+      return range.startOffset;
+    }
+  }
+  if (typeof doc.caretPositionFromPoint === "function") {
+    const pos = doc.caretPositionFromPoint(x, y);
+    if (pos?.offsetNode.nodeType === Node.TEXT_NODE) {
+      return pos.offset;
+    }
+  }
+  return null;
+}
+
+function JournalEntryRow({ entry, onSave, onOpenContextMenu }: JournalEntryRowProps) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(entry.content);
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const touchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suppressClick = useRef(false);
+  const caretIndexRef = useRef<number | null>(null);
+
+  // Keep the local draft in sync if the entry updates from elsewhere while not editing.
+  useEffect(() => {
+    if (!editing) setValue(entry.content);
+  }, [entry.content, editing]);
+
+  useEffect(() => {
+    if (!editing || !inputRef.current) return;
+    const el = inputRef.current;
+    el.focus();
+    const len = el.value.length;
+    const idx = caretIndexRef.current;
+    caretIndexRef.current = null;
+    if (idx != null && idx >= 0 && idx <= len) {
+      el.setSelectionRange(idx, idx);
+    } else {
+      el.setSelectionRange(len, len);
+    }
+  }, [editing]);
+
+  function startEdit(caretIndex: number | null = null) {
+    if (editing || saving) return;
+    caretIndexRef.current = caretIndex;
+    setValue(entry.content);
+    setEditing(true);
+  }
+
+  async function commitEdit() {
+    if (saving) return;
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      // Do not save an empty value — restore the previous content instead.
+      setValue(entry.content);
+      setEditing(false);
+      return;
+    }
+    if (trimmed === entry.content.trim()) {
+      setEditing(false);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await onSave(entry.id, trimmed);
+      setEditing(false);
+    } catch {
+      // Restore the previous content on failure; the page-level banner shows the error.
+      setValue(entry.content);
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function cancelEdit() {
+    setValue(entry.content);
+    setEditing(false);
+  }
+
+  function handleEditKeyDown(e: ReactKeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commitEdit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancelEdit();
+    }
+  }
+
+  function handleRowClick(e: React.MouseEvent) {
+    if (suppressClick.current) {
+      suppressClick.current = false;
+      return;
+    }
+    startEdit(caretIndexFromPoint(e.clientX, e.clientY));
+  }
+
+  function handleRowKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
+    if (editing) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      startEdit(null);
+    }
+  }
+
+  function handleContextMenu(e: React.MouseEvent) {
+    e.preventDefault();
+    onOpenContextMenu(entry.id, e.clientX, e.clientY);
+  }
+
+  // Mobile fallback: long-press opens the same context menu used on desktop right-click.
+  function handleTouchStart(e: React.TouchEvent) {
+    const touch = e.touches[0];
+    if (!touch) return;
+    touchTimer.current = setTimeout(() => {
+      suppressClick.current = true;
+      onOpenContextMenu(entry.id, touch.clientX, touch.clientY);
+    }, 550);
+  }
+  function clearTouchTimer() {
+    if (touchTimer.current) {
+      clearTimeout(touchTimer.current);
+      touchTimer.current = null;
+    }
+  }
+
+  return (
+    <div
+      role={editing ? undefined : "button"}
+      tabIndex={editing ? -1 : 0}
+      onClick={handleRowClick}
+      onKeyDown={handleRowKeyDown}
+      onContextMenu={handleContextMenu}
+      onTouchStart={handleTouchStart}
+      onTouchMove={clearTouchTimer}
+      onTouchEnd={clearTouchTimer}
+      aria-label={editing ? undefined : `Journal entry: ${entry.content}. Press Enter to edit.`}
+      className={cn(
+        "px-4 py-3 rounded-xl border transition-colors cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))]",
+        editing
+          ? "border-[hsl(var(--input))] bg-[hsl(var(--card))]"
+          : "border-transparent hover:border-[hsl(var(--input))] hover:bg-[hsl(var(--card))]"
+      )}
+    >
+      {editing ? (
+        <>
+          <label htmlFor={`journal-edit-${entry.id}`} className="sr-only">
+            Edit journal entry
+          </label>
+          <input
+            id={`journal-edit-${entry.id}`}
+            ref={inputRef}
+            type="text"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={handleEditKeyDown}
+            onBlur={commitEdit}
+            onClick={(e) => e.stopPropagation()}
+            disabled={saving}
+            className="w-full bg-transparent text-sm leading-relaxed text-[hsl(var(--foreground))] cursor-text focus:outline-none disabled:opacity-60"
+          />
+        </>
+      ) : (
+        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words select-none">
+          <span className="cursor-text">{entry.content}</span>
+        </p>
+      )}
+    </div>
   );
 }

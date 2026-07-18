@@ -5,14 +5,19 @@ import type { JournalEntry } from "@/types";
 // Read
 // ---------------------------------------------------------------------------
 
-/** Fetches all journal entries for the signed-in user, newest date first. */
-export async function fetchJournalEntries(
-  supabase: SupabaseClient
+/**
+ * Fetches all journal entries for the signed-in user on a single calendar date
+ * (YYYY-MM-DD, local), newest created first. RLS scopes this to the caller's own rows.
+ */
+export async function fetchJournalEntriesByDate(
+  supabase: SupabaseClient,
+  entryDate: string
 ): Promise<JournalEntry[]> {
   const { data, error } = await supabase
     .from("journal_entries")
     .select("*")
-    .order("entry_date", { ascending: false });
+    .eq("entry_date", entryDate)
+    .order("created_at", { ascending: false });
 
   if (error) throw error;
   return (data as JournalEntry[]) ?? [];
@@ -23,10 +28,10 @@ export async function fetchJournalEntries(
 // ---------------------------------------------------------------------------
 
 /**
- * Creates or updates the single journal entry for a given date
- * (one primary entry per user per date, enforced by a unique constraint).
+ * Creates a new journal entry. Multiple entries per date are supported —
+ * this always inserts a new row rather than upserting on date.
  */
-export async function saveJournalEntry(
+export async function createJournalEntry(
   supabase: SupabaseClient,
   userId: string,
   entryDate: string,
@@ -34,10 +39,24 @@ export async function saveJournalEntry(
 ): Promise<JournalEntry> {
   const { data, error } = await supabase
     .from("journal_entries")
-    .upsert(
-      { user_id: userId, entry_date: entryDate, content },
-      { onConflict: "user_id,entry_date" }
-    )
+    .insert({ user_id: userId, entry_date: entryDate, content })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as JournalEntry;
+}
+
+/** Updates the content of an existing journal entry. */
+export async function updateJournalEntry(
+  supabase: SupabaseClient,
+  id: string,
+  content: string
+): Promise<JournalEntry> {
+  const { data, error } = await supabase
+    .from("journal_entries")
+    .update({ content })
+    .eq("id", id)
     .select()
     .single();
 

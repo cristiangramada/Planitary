@@ -64,3 +64,10 @@ export function toLocalDateStr(isoTimestamp: string): string {
   const d = new Date(isoTimestamp);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+
+/** Shifts a YYYY-MM-DD date string by a number of days, staying in local time throughout. */
+export function shiftDateStr(dateString: string, deltaDays: number): string {
+  const d = parseDateOnly(dateString);
+  d.setDate(d.getDate() + deltaDays);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
