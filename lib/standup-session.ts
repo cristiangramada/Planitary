@@ -1,6 +1,8 @@
 /**
  * Standup draft persistence. Uses localStorage so the draft survives refresh
  * and tab close; cleared explicitly on Clear / sign-out.
+ * Expanded is persisted too, but must be restored only after mount (not during
+ * SSR) to avoid hydration mismatches.
  */
 
 export const STANDUP_SESSION_KEY = "planitary:standup";
@@ -14,6 +16,7 @@ export interface StandupSessionState {
   status: StandupSessionStatus;
   statusMessage: string | null;
   hasGeneratedOnce: boolean;
+  /** Whether the Standup panel was left open. Restored only after mount. */
   expanded: boolean;
 }
 

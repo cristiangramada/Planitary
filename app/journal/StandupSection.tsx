@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkles, Copy, RotateCw, X, Check, ChevronDown } from "lucide-react";
 import { MiniCalendarPicker } from "@/components/ui/MiniCalendarPicker";
 import { cn } from "@/utils/cn";
 import { localTodayStr } from "@/utils/date";
 import { defaultStandupRange, validateStandupRange } from "@/lib/standup";
 import {
-  STANDUP_SESSION_KEY,
   clearStandupSession,
   readStandupSession,
   writeStandupSession,
@@ -23,34 +22,15 @@ import type {
 // selected date range. All AI calls happen server-side via /api/ai/standup;
 // this component only sends the date range and renders the (editable) result.
 //
-// Generated output is kept in localStorage so it survives refresh and
-// returning to Journal until Clear or sign-out.
+// Draft text + open/closed are kept in localStorage. Expanded is restored
+// only after mount so server/client HTML stay in sync.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type GenerationStatus = "idle" | "loading" | "success" | "empty" | "error";
 
-function subscribeStandupStorage() {
-  return () => {};
-}
-
-function getStandupStorageSnapshot(): string | null {
-  try {
-    return localStorage.getItem(STANDUP_SESSION_KEY);
-  } catch {
-    return null;
-  }
-}
-
 export function StandupSection() {
   const todayStr = localTodayStr();
   const defaults = defaultStandupRange(todayStr);
-
-  // Client snapshot of the persisted draft; null on the server.
-  const storedRaw = useSyncExternalStore(
-    subscribeStandupStorage,
-    getStandupStorageSnapshot,
-    () => null
-  );
 
   const [startDate, setStartDate] = useState<string>(defaults.startDate);
   const [endDate, setEndDate] = useState<string>(defaults.endDate);
@@ -59,17 +39,17 @@ export function StandupSection() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [hasGeneratedOnce, setHasGeneratedOnce] = useState(false);
+  const [ready, setReady] = useState(false);
+  // Always start collapsed on first paint (matches SSR); restore after mount.
   const [expanded, setExpanded] = useState(false);
-  // undefined = not yet reconciled with the external store snapshot
-  const [hydratedKey, setHydratedKey] = useState<string | null | undefined>(undefined);
 
   const activeRequest = useRef<AbortController | null>(null);
   const copyFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userToggledExpand = useRef(false);
 
-  // Reconcile React state with localStorage during render (avoids setState-in-effect).
-  const storeKey = storedRaw ?? "";
-  if (hydratedKey !== storeKey) {
-    setHydratedKey(storeKey);
+  // Restore draft after mount so server/client first paint stay identical.
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- hydrate draft from localStorage after mount */
     const saved = readStandupSession();
     if (saved) {
       setStartDate(saved.startDate);
@@ -78,11 +58,14 @@ export function StandupSection() {
       setStatus(saved.status);
       setStatusMessage(saved.statusMessage);
       setHasGeneratedOnce(saved.hasGeneratedOnce);
-      setExpanded(saved.expanded);
+      // Don't overwrite a click that happened before this effect ran.
+      if (!userToggledExpand.current) {
+        setExpanded(saved.expanded);
+      }
     }
-  }
-
-  const ready = hydratedKey !== undefined;
+    setReady(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -222,7 +205,10 @@ export function StandupSection() {
     >
       <button
         type="button"
-        onClick={() => setExpanded((v) => !v)}
+        onClick={() => {
+          userToggledExpand.current = true;
+          setExpanded((v) => !v);
+        }}
         aria-expanded={expanded}
         aria-controls="standup-panel"
         className="w-full flex items-center gap-2 text-left rounded-lg px-3 py-2 hover:bg-[hsl(var(--muted)/0.5)] transition-colors cursor-pointer shrink-0"
