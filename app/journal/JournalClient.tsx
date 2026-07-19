@@ -6,6 +6,7 @@ import {
   useCallback,
   useRef,
   useEffect,
+  useSyncExternalStore,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { CheckSquare2, ChevronLeft, ChevronRight, Plus, SortAsc } from "lucide-react";
@@ -13,6 +14,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { PriorityBadge } from "@/components/ui/PriorityBadge";
 import { MiniCalendarPicker } from "@/components/ui/MiniCalendarPicker";
 import { JournalEntryContextMenu } from "./JournalEntryContextMenu";
+import { StandupSection } from "./StandupSection";
 import { createClient } from "@/lib/supabase/client";
 import {
   fetchJournalEntriesByDate,
@@ -45,12 +47,35 @@ interface ContextMenuState {
   y: number;
 }
 
+// Keeps "today" correct across a midnight rollover (and after the tab regains
+// focus) without ever calling setState from inside an effect: React re-renders
+// automatically whenever the external snapshot (the client's local date)
+// changes, and the server snapshot keeps first paint hydration-safe.
+function subscribeToLocalDate(callback: () => void) {
+  const interval = setInterval(callback, 60_000);
+  window.addEventListener("focus", callback);
+  document.addEventListener("visibilitychange", callback);
+  return () => {
+    clearInterval(interval);
+    window.removeEventListener("focus", callback);
+    document.removeEventListener("visibilitychange", callback);
+  };
+}
+
+function useClientLocalToday(serverToday: string): string {
+  return useSyncExternalStore(subscribeToLocalDate, localTodayStr, () => serverToday);
+}
+
 export function JournalClient({
   initialDate,
   initialEntries,
   completedTasks,
 }: JournalClientProps) {
-  const [selectedDate, setSelectedDate] = useState(initialDate);
+  const clientToday = useClientLocalToday(initialDate);
+  const [manualDate, setManualDate] = useState<string | null>(null);
+  // Tracks today automatically (via clientToday) until the user manually
+  // navigates, at which point the manually chosen date takes over.
+  const selectedDate = manualDate ?? clientToday;
   const [entries, setEntries] = useState<JournalEntry[]>(initialEntries);
   const [quickAddValue, setQuickAddValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -78,23 +103,20 @@ export function JournalClient({
 
   useEffect(() => {
     if (isFirstRun.current) {
+      // The initial entries prop already matches `selectedDate` for first paint.
       isFirstRun.current = false;
-      // Self-correct for a server/client local-date mismatch near midnight —
-      // the initial entries were fetched using the server's clock.
-      const clientToday = localTodayStr();
-      if (clientToday !== initialDate) setSelectedDate(clientToday);
       return;
     }
     setContextMenu(null);
     loadEntriesForDate(selectedDate);
-  }, [selectedDate, loadEntriesForDate, initialDate]);
+  }, [selectedDate, loadEntriesForDate]);
 
   const sortedEntries = useMemo(() => {
     const sorted = [...entries].sort((a, b) => a.created_at.localeCompare(b.created_at));
     return sortBy === "newest" ? sorted.reverse() : sorted;
   }, [entries, sortBy]);
 
-  const todayStr = localTodayStr();
+  const todayStr = clientToday;
   const completedThatDay = useMemo(
     () =>
       completedTasks.filter(
@@ -108,7 +130,7 @@ export function JournalClient({
   // ---------------------------------------------------------------------------
 
   function goToDate(date: string) {
-    setSelectedDate(date);
+    setManualDate(date);
   }
   function handlePrevDay() {
     goToDate(shiftDateStr(selectedDate, -1));
@@ -117,7 +139,9 @@ export function JournalClient({
     goToDate(shiftDateStr(selectedDate, 1));
   }
   function handleToday() {
-    goToDate(todayStr);
+    // Clearing the manual override re-attaches selectedDate to the live
+    // clientToday snapshot (so it keeps tracking across a midnight rollover).
+    setManualDate(null);
   }
 
   // ---------------------------------------------------------------------------
@@ -300,7 +324,7 @@ export function JournalClient({
               aria-label="Add a journal entry"
               disabled={submitting}
               autoComplete="off"
-              className="w-full pl-4 pr-4 py-3 text-sm rounded-xl border border-[hsl(var(--input))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))] transition disabled:opacity-60"
+              className="w-full pl-4 pr-4 py-3 text-sm rounded-xl border border-[hsl(var(--input))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] focus:outline-none transition disabled:opacity-60"
             />
             {/* Custom placeholder: larger "+" glyph, hidden once typing starts.
                 pointer-events-none lets clicks pass through to the input beneath. */}
@@ -316,14 +340,14 @@ export function JournalClient({
           </div>
         </form>
 
-        {/* ── Entry list ── */}
-        <div className="flex-1 overflow-y-auto min-h-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {/* ── Scrollable region: entries, completed tasks, and Standup ── */}
+        <div className="flex-1 overflow-y-auto min-h-0 flex flex-col [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {sortedEntries.length === 0 ? (
-            <p className="py-6 pl-4 text-sm text-[hsl(var(--muted-foreground))]">
+            <p className="py-6 pl-4 text-sm text-[hsl(var(--muted-foreground))] shrink-0">
               No entries for this day.
             </p>
           ) : (
-            <div className="divide-y divide-[hsl(var(--border))]">
+            <div className="divide-y divide-[hsl(var(--border))] shrink-0">
               {sortedEntries.map((entry) => (
                 <JournalEntryRow
                   key={entry.id}
@@ -334,32 +358,35 @@ export function JournalClient({
               ))}
             </div>
           )}
-        </div>
 
-        {/* ── Completed that day ── */}
-        <div className="mt-4 shrink-0">
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-[hsl(var(--muted-foreground))] mb-2">
-            <CheckSquare2 className="w-4 h-4" />
-            {selectedDate === todayStr ? "Completed Today" : "Completed That Day"}
-          </h3>
-          {completedThatDay.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-[hsl(var(--border))] px-4 py-3 text-xs text-[hsl(var(--muted-foreground))]">
-              No tasks were completed on this day.
-            </div>
-          ) : (
-            <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {completedThatDay.map((t) => (
-                <div
-                  key={t.id}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))]"
-                >
-                  <CheckSquare2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                  <span className="text-xs font-medium truncate max-w-[180px]">{t.title}</span>
-                  <PriorityBadge priority={t.priority} />
-                </div>
-              ))}
-            </div>
-          )}
+          {/* ── Completed that day ── */}
+          <div className="mt-4 shrink-0">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-[hsl(var(--muted-foreground))] mb-2">
+              <CheckSquare2 className="w-4 h-4" />
+              {selectedDate === todayStr ? "Completed Today" : "Completed That Day"}
+            </h3>
+            {completedThatDay.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-[hsl(var(--border))] px-4 py-3 text-xs text-[hsl(var(--muted-foreground))]">
+                No tasks were completed on this day.
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {completedThatDay.map((t) => (
+                  <div
+                    key={t.id}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))]"
+                  >
+                    <CheckSquare2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span className="text-xs font-medium truncate max-w-[180px]">{t.title}</span>
+                    <PriorityBadge priority={t.priority} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Standup ── */}
+          <StandupSection />
         </div>
       </div>
 
@@ -415,10 +442,9 @@ function JournalEntryRow({ entry, onSave, onOpenContextMenu }: JournalEntryRowPr
   const suppressClick = useRef(false);
   const caretIndexRef = useRef<number | null>(null);
 
-  // Keep the local draft in sync if the entry updates from elsewhere while not editing.
-  useEffect(() => {
-    if (!editing) setValue(entry.content);
-  }, [entry.content, editing]);
+  // Note: `value` only backs the input while editing — `startEdit` always
+  // seeds it fresh from `entry.content`, and the read-only view below renders
+  // `entry.content` directly, so no effect is needed to keep them in sync.
 
   useEffect(() => {
     if (!editing || !inputRef.current) return;

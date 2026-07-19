@@ -600,7 +600,7 @@ export function TaskDatePicker({
                   value={endDate ?? ""}
                   min={selectedDate ?? undefined}
                   onChange={(e) => setEndDate(e.target.value || null)}
-                  className="w-full text-sm px-2.5 py-1.5 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))] transition"
+                  className="w-full text-sm px-2.5 py-1.5 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none transition"
                 />
                 {!selectedDate && (
                   <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-1.5">

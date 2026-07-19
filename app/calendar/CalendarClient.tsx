@@ -18,7 +18,6 @@ import type { EventFormData } from "@/lib/calendar";
 import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
 import {
   localTodayStr,
-  toLocalDate,
   dateToISO,
   getWeekStart,
   parseDate,

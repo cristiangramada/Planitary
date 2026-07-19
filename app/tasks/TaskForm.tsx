@@ -240,7 +240,7 @@ function SubtaskList({ items, onChange }: SubtaskListProps) {
           <input
             value={item.title}
             onChange={(e) => updateTitle(i, e.target.value)}
-            className="flex-1 text-sm px-2 py-1.5 rounded-md border border-[hsl(var(--input))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
+            className="flex-1 text-sm px-2 py-1.5 rounded-md border border-[hsl(var(--input))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none"
             placeholder="Subtask title"
           />
           <button
@@ -267,7 +267,7 @@ function SubtaskList({ items, onChange }: SubtaskListProps) {
             }
           }}
           placeholder="Add a subtask… (press Enter)"
-          className="flex-1 text-sm px-2 py-1.5 rounded-md border border-[hsl(var(--input))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
+          className="flex-1 text-sm px-2 py-1.5 rounded-md border border-[hsl(var(--input))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none"
         />
       </div>
     </div>
@@ -394,7 +394,7 @@ function TaskFormBody({ onClose, onSave, editTask, allTags, isEdit, defaultDueDa
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="What needs to be done?"
-              className="w-full px-3 py-2.5 text-sm rounded-lg border border-[hsl(var(--input))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))] transition"
+              className="w-full px-3 py-2.5 text-sm rounded-lg border border-[hsl(var(--input))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none transition"
             />
           </div>
 
@@ -408,7 +408,7 @@ function TaskFormBody({ onClose, onSave, editTask, allTags, isEdit, defaultDueDa
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Add any details or context…"
               rows={3}
-              className="w-full px-3 py-2.5 text-sm rounded-lg border border-[hsl(var(--input))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))] transition resize-none"
+              className="w-full px-3 py-2.5 text-sm rounded-lg border border-[hsl(var(--input))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none transition resize-none"
             />
           </div>
 

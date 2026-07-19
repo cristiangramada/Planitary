@@ -19,10 +19,6 @@ function parseISO(iso: string): Date {
   return new Date(y, m - 1, d);
 }
 
-function toISO(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 function buildGrid(year: number, month: number): (number | null)[] {
   const firstDow = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -191,7 +187,7 @@ export function MiniCalendarPicker({
         disabled={disabled}
         className={cn(
           "flex items-center gap-2 w-full px-3 py-2.5 text-sm rounded-lg border border-[hsl(var(--input))] bg-[hsl(var(--background))] transition-colors text-left",
-          "hover:border-[hsl(var(--primary)/0.5)] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]",
+          "hover:border-[hsl(var(--primary)/0.5)] focus:outline-none",
           disabled && "opacity-40 cursor-not-allowed",
           !disabled && "cursor-pointer",
           className
