@@ -102,14 +102,20 @@ export function JournalClient({
   }, []);
 
   useEffect(() => {
+    // Always load on the client for the date being shown. Skipping the first
+    // run used to trust SSR data, but on Vercel the server clock is UTC (so
+    // "today" can differ from the user's local date) and the first paint after
+    // login can also come back empty before the session cookie is usable.
     if (isFirstRun.current) {
-      // The initial entries prop already matches `selectedDate` for first paint.
       isFirstRun.current = false;
-      return;
+      if (selectedDate === initialDate && initialEntries.length > 0) {
+        // Fast path: SSR already returned rows for this exact local date.
+        return;
+      }
     }
     setContextMenu(null);
     loadEntriesForDate(selectedDate);
-  }, [selectedDate, loadEntriesForDate]);
+  }, [selectedDate, loadEntriesForDate, initialDate, initialEntries.length]);
 
   const sortedEntries = useMemo(() => {
     const sorted = [...entries].sort((a, b) => a.created_at.localeCompare(b.created_at));

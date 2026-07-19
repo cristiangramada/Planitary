@@ -8,10 +8,9 @@ import type { Task } from "@/types";
 export const metadata: Metadata = { title: "Journal" };
 
 /**
- * Server Component — fetches today's journal entries (best-effort guess of
- * "today" using the server's clock; JournalClient self-corrects on mount if
- * the client's local date differs) plus all completed tasks, used to show
- * completed-task context for whichever date is selected.
+ * Server Component — fetches a best-effort "today" using the server clock
+ * (UTC on Vercel). JournalClient uses the client's local date and refetches
+ * when that differs, or when SSR returned no rows.
  */
 export default async function JournalPage() {
   const supabase = await createClient();
