@@ -181,7 +181,7 @@ function EventFormBody({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="What's happening?"
-              className="w-full px-3 py-2.5 text-sm rounded-lg border border-[hsl(var(--input))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))] transition"
+              className="w-full px-3 py-2.5 text-sm rounded-lg border border-[hsl(var(--input))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none transition"
             />
           </div>
 
@@ -193,7 +193,7 @@ function EventFormBody({
               onChange={(e) => setDetails(e.target.value)}
               placeholder="Add any details or notes…"
               rows={3}
-              className="w-full px-3 py-2.5 text-sm rounded-lg border border-[hsl(var(--input))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))] transition resize-none"
+              className="w-full px-3 py-2.5 text-sm rounded-lg border border-[hsl(var(--input))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none transition resize-none"
             />
           </div>
 

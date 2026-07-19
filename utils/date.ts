@@ -52,3 +52,22 @@ export function formatTime(dateString: string): string {
     hour12: true,
   });
 }
+
+/** Today's date as YYYY-MM-DD in local time. */
+export function localTodayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Converts an ISO timestamp (with timezone) to a YYYY-MM-DD local calendar date. */
+export function toLocalDateStr(isoTimestamp: string): string {
+  const d = new Date(isoTimestamp);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Shifts a YYYY-MM-DD date string by a number of days, staying in local time throughout. */
+export function shiftDateStr(dateString: string, deltaDays: number): string {
+  const d = parseDateOnly(dateString);
+  d.setDate(d.getDate() + deltaDays);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}

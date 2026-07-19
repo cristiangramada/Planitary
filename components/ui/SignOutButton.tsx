@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { clearStandupSession } from "@/lib/standup-session";
 
 export function SignOutButton() {
   const router = useRouter();
@@ -11,6 +12,7 @@ export function SignOutButton() {
 
   async function handleSignOut() {
     setLoading(true);
+    clearStandupSession();
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/login");

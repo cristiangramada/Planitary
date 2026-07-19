@@ -55,13 +55,15 @@ export function DayView({ date, events, tasks, onEditEvent, onEditTask, onDayCon
     return d.getHours() * 60 + d.getMinutes();
   });
 
-  // Scroll to current time (or start of day)
+  // Scroll to current time (or start of day) only when the selected day changes —
+  // not when nowMinutes ticks, which would yank the scroll position every minute.
   useEffect(() => {
     if (scrollRef.current) {
       const target = isToday ? minutesToPx(nowMinutes) - 120 : HOUR_HEIGHT * 7;
       scrollRef.current.scrollTop = Math.max(0, target);
     }
-  }, [iso]); // re-scroll when day changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed on `iso` only
+  }, [iso]);
 
   useEffect(() => {
     const id = setInterval(() => {

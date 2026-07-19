@@ -196,7 +196,7 @@ export function MonthView({
           >
             {week.map((day, di) => {
               if (!day) {
-                return <div key={di} className="bg-[hsl(var(--muted)/0.2)]" />;
+                return <div key={di} className="bg-[hsl(var(--muted)/0.55)] dark:bg-black/8" />;
               }
 
               const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -237,4 +237,4 @@ export function MonthView({
     </div>
   );
 }
-
+
