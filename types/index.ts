@@ -74,14 +74,10 @@ export interface TaskWithDetails extends Task {
   tags: Tag[];
 }
 
-export interface SearchResult {
-  type: "task" | "event" | "journal";
-  id: string;
-  title: string;
-  preview: string;
-  date: string;
-  href: string;
-}
+// Search types (SearchEntityType, SearchResult, SearchFilters, etc.) live in
+// types/search.ts — they're substantial enough to warrant their own module,
+// and are kept independent from lib/ai/types.ts so a future AI layer can
+// produce the same structured search input without any coupling.
 
 // ---------------------------------------------------------------------------
 // UI helper types

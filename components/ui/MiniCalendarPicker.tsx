@@ -194,7 +194,7 @@ export function MiniCalendarPicker({
         )}
       >
         <CalendarDays className="w-4 h-4 text-[hsl(var(--muted-foreground))] shrink-0" />
-        <span className={value ? "text-[hsl(var(--foreground))]" : "text-[hsl(var(--muted-foreground))]"}>
+        <span className={cn("whitespace-nowrap", value ? "text-[hsl(var(--foreground))]" : "text-[hsl(var(--muted-foreground))]")}>
           {value ? formatDisplayDate(value) : placeholder}
         </span>
       </button>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 import { CalendarHeader, type CalView } from "./CalendarHeader";
 import { MonthView } from "./MonthView";
@@ -45,6 +46,9 @@ export function CalendarClient({
   initialTasks,
   allTags,
 }: CalendarClientProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   // ── Data state ───────────────────────────────────────────────────────────
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
   const [tasks, setTasks] = useState<TaskWithDetails[]>(initialTasks);
@@ -75,6 +79,33 @@ export function CalendarClient({
     x: number;
     y: number;
   } | null>(null);
+
+  // ── Deep-link support: /calendar?event=<id>&date=<date> (e.g. from a Search
+  // result) navigates to that date and opens the event's editor, then clears
+  // the params so it doesn't reopen. ─────────────────────────────────────────
+  useEffect(() => {
+    const eventId = searchParams.get("event");
+    const dateParam = searchParams.get("date");
+    if (!eventId && !dateParam) return;
+
+    /* eslint-disable react-hooks/set-state-in-effect -- navigate to the deep-linked date/event once, from a URL navigation */
+    if (dateParam) {
+      const d = parseDate(dateParam);
+      setSelectedDay(dateParam);
+      setCalYear(d.getFullYear());
+      setCalMonth(d.getMonth());
+      setWeekStart(getWeekStart(d));
+    }
+    if (eventId) {
+      const event = events.find((e) => e.id === eventId);
+      if (event) {
+        setEditingEvent(event);
+        setEventFormOpen(true);
+      }
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
+    router.replace("/calendar", { scroll: false });
+  }, [searchParams, events, router]);
 
   // ── Derived header label ──────────────────────────────────────────────────
   const headerLabel = useMemo(() => {

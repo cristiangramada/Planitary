@@ -9,6 +9,7 @@ import {
   useSyncExternalStore,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CheckSquare2, ChevronLeft, ChevronRight, Plus, SortAsc } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { PriorityBadge } from "@/components/ui/PriorityBadge";
@@ -71,12 +72,22 @@ export function JournalClient({
   initialEntries,
   completedTasks,
 }: JournalClientProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const clientToday = useClientLocalToday(initialDate);
-  const [manualDate, setManualDate] = useState<string | null>(null);
+
+  // Read deep-link params into initial state so the first load targets the
+  // linked date (not "today"). Applying them only in an effect raced the
+  // date-load effect and could leave the correct date with empty/stale rows.
+  const [manualDate, setManualDate] = useState<string | null>(() => searchParams.get("date"));
+  const [highlightEntryId, setHighlightEntryId] = useState<string | null>(() => searchParams.get("entry"));
   // Tracks today automatically (via clientToday) until the user manually
   // navigates, at which point the manually chosen date takes over.
   const selectedDate = manualDate ?? clientToday;
-  const [entries, setEntries] = useState<JournalEntry[]>(initialEntries);
+  const [entries, setEntries] = useState<JournalEntry[]>(() =>
+    // Only trust SSR rows when we're actually showing that SSR date.
+    (searchParams.get("date") ?? initialDate) === initialDate ? initialEntries : []
+  );
   const [quickAddValue, setQuickAddValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,18 +96,22 @@ export function JournalClient({
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
   const isFirstRun = useRef(true);
+  const loadRequestIdRef = useRef(0);
 
   // ---------------------------------------------------------------------------
   // Date-scoped entry loading
   // ---------------------------------------------------------------------------
 
   const loadEntriesForDate = useCallback(async (date: string) => {
+    const requestId = ++loadRequestIdRef.current;
     setError(null);
     try {
       const supabase = createClient();
       const data = await fetchJournalEntriesByDate(supabase, date);
+      if (requestId !== loadRequestIdRef.current) return; // superseded by a newer date
       setEntries(data);
     } catch (err) {
+      if (requestId !== loadRequestIdRef.current) return;
       setError(err instanceof Error ? err.message : "Failed to load entries.");
     }
   }, []);
@@ -116,6 +131,35 @@ export function JournalClient({
     setContextMenu(null);
     loadEntriesForDate(selectedDate);
   }, [selectedDate, loadEntriesForDate, initialDate, initialEntries.length]);
+
+  // ---------------------------------------------------------------------------
+  // Deep-link support: /journal?date=<date>&entry=<id> (e.g. from a Search
+  // result). State is seeded from the URL above; here we only clear the params
+  // so navigating away and back doesn't reopen the highlight, and handle
+  // soft-nav updates if the params change while already on /journal.
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    const dateParam = searchParams.get("date");
+    const entryParam = searchParams.get("entry");
+    if (!dateParam && !entryParam) return;
+    /* eslint-disable react-hooks/set-state-in-effect -- sync deep-link if params arrive via client navigation */
+    if (dateParam) setManualDate(dateParam);
+    if (entryParam) setHighlightEntryId(entryParam);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    router.replace("/journal", { scroll: false });
+  }, [searchParams, router]);
+
+  useEffect(() => {
+    if (!highlightEntryId) return;
+    if (!entries.some((e) => e.id === highlightEntryId)) return;
+    document
+      .getElementById(`journal-entry-${highlightEntryId}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // The highlight is a temporary visual cue, not a permanent style change.
+    const timer = setTimeout(() => setHighlightEntryId(null), 2000);
+    return () => clearTimeout(timer);
+  }, [highlightEntryId, entries]);
 
   const sortedEntries = useMemo(() => {
     const sorted = [...entries].sort((a, b) => a.created_at.localeCompare(b.created_at));
@@ -360,6 +404,7 @@ export function JournalClient({
                   entry={entry}
                   onSave={handleSaveEdit}
                   onOpenContextMenu={handleOpenContextMenu}
+                  highlighted={entry.id === highlightEntryId}
                 />
               ))}
             </div>
@@ -417,6 +462,7 @@ interface JournalEntryRowProps {
   entry: JournalEntry;
   onSave: (id: string, content: string) => Promise<void>;
   onOpenContextMenu: (entryId: string, x: number, y: number) => void;
+  highlighted?: boolean;
 }
 
 function caretIndexFromPoint(x: number, y: number): number | null {
@@ -439,7 +485,7 @@ function caretIndexFromPoint(x: number, y: number): number | null {
   return null;
 }
 
-function JournalEntryRow({ entry, onSave, onOpenContextMenu }: JournalEntryRowProps) {
+function JournalEntryRow({ entry, onSave, onOpenContextMenu, highlighted }: JournalEntryRowProps) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(entry.content);
   const [saving, setSaving] = useState(false);
@@ -555,6 +601,7 @@ function JournalEntryRow({ entry, onSave, onOpenContextMenu }: JournalEntryRowPr
 
   return (
     <div
+      id={`journal-entry-${entry.id}`}
       role={editing ? undefined : "button"}
       tabIndex={editing ? -1 : 0}
       onClick={handleRowClick}
@@ -566,7 +613,9 @@ function JournalEntryRow({ entry, onSave, onOpenContextMenu }: JournalEntryRowPr
       aria-label={editing ? undefined : `Journal entry: ${entry.content}. Press Enter to edit.`}
       className={cn(
         "px-4 py-3 rounded-xl border transition-colors cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))]",
-        editing
+        highlighted
+          ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.08)]"
+          : editing
           ? "border-[hsl(var(--input))] bg-[hsl(var(--card))]"
           : "border-transparent hover:border-[hsl(var(--input))] hover:bg-[hsl(var(--card))]"
       )}

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, ChevronDown, ChevronRight, SortAsc, CheckSquare } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -69,6 +70,8 @@ interface TasksClientProps {
 }
 
 export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [tasks, setTasks] = useState<TaskWithDetails[]>(initialTasks);
   const [allTags, setAllTags] = useState<Tag[]>(initialTags);
   const [sortBy, setSortBy] = useState<SortKey>("priority");
@@ -78,6 +81,24 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
   const [completedExpanded, setCompletedExpanded] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ---------------------------------------------------------------------------
+  // Deep-link support: /tasks?task=<id> (e.g. from a Search result) opens
+  // that task's editor, then clears the param so it doesn't reopen.
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    const taskId = searchParams.get("task");
+    if (!taskId) return;
+    /* eslint-disable react-hooks/set-state-in-effect -- open the deep-linked task's editor once, from a URL navigation */
+    const task = tasks.find((t) => t.id === taskId);
+    if (task) {
+      setEditingTask(task);
+      setFormOpen(true);
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
+    router.replace("/tasks", { scroll: false });
+  }, [searchParams, tasks, router]);
 
   // ---------------------------------------------------------------------------
   // Derived state
