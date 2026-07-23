@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchJournalEntriesByDate } from "@/lib/journal";
 import { localTodayStr } from "@/utils/date";
@@ -32,10 +33,14 @@ export default async function JournalPage() {
   >[]) ?? [];
 
   return (
-    <JournalClient
-      initialDate={initialDate}
-      initialEntries={entries}
-      completedTasks={completedTasks}
-    />
+    // Suspense required because JournalClient uses useSearchParams (for the
+    // /journal?date=<date>&entry=<id> deep-link opened from Search results).
+    <Suspense fallback={null}>
+      <JournalClient
+        initialDate={initialDate}
+        initialEntries={entries}
+        completedTasks={completedTasks}
+      />
+    </Suspense>
   );
 }

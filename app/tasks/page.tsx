@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchTasksWithDetails, fetchAllTags } from "@/lib/tasks";
 import { TasksClient } from "./TasksClient";
@@ -18,5 +19,11 @@ export default async function TasksPage() {
     fetchAllTags(supabase).catch(() => []),
   ]);
 
-  return <TasksClient initialTasks={tasks} initialTags={tags} />;
+  return (
+    // Suspense required because TasksClient uses useSearchParams (for the
+    // /tasks?task=<id> deep-link opened from Search results).
+    <Suspense fallback={null}>
+      <TasksClient initialTasks={tasks} initialTags={tags} />
+    </Suspense>
+  );
 }

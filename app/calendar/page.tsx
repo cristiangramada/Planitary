@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { CalendarClient } from "./CalendarClient";
 import type { TaskWithDetails, Tag, Task, Subtask } from "@/types";
@@ -58,10 +59,14 @@ export default async function CalendarPage() {
   );
 
   return (
-    <CalendarClient
-      initialEvents={eventRows ?? []}
-      initialTasks={tasks}
-      allTags={(tagRows as Tag[]) ?? []}
-    />
+    // Suspense required because CalendarClient uses useSearchParams (for the
+    // /calendar?event=<id>&date=<date> deep-link opened from Search results).
+    <Suspense fallback={null}>
+      <CalendarClient
+        initialEvents={eventRows ?? []}
+        initialTasks={tasks}
+        allTags={(tagRows as Tag[]) ?? []}
+      />
+    </Suspense>
   );
 }
