@@ -266,6 +266,15 @@ export async function deleteTask(
   if (error) throw error;
 }
 
+/** Deletes a tag (cascades task_tags via DB constraints). */
+export async function deleteTag(
+  supabase: SupabaseClient,
+  tagId: string
+): Promise<void> {
+  const { error } = await supabase.from("tags").delete().eq("id", tagId);
+  if (error) throw error;
+}
+
 // ---------------------------------------------------------------------------
 // Completion toggles
 // ---------------------------------------------------------------------------

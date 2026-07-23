@@ -13,6 +13,7 @@ import {
   createTask,
   updateTask,
   deleteTask,
+  deleteTag,
   setTaskComplete,
   setSubtaskComplete,
 } from "@/lib/tasks";
@@ -180,6 +181,18 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete task.");
     }
+  }, []);
+
+  const handleDeleteTag = useCallback(async (tagId: string) => {
+    const supabase = createClient();
+    await deleteTag(supabase, tagId);
+    setAllTags((prev) => prev.filter((t) => t.id !== tagId));
+    setTasks((prev) =>
+      prev.map((task) => ({
+        ...task,
+        tags: task.tags.filter((t) => t.id !== tagId),
+      }))
+    );
   }, []);
 
   const handleToggleComplete = useCallback(
@@ -494,6 +507,7 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
           setEditingTask(null);
         }}
         onSave={handleSave}
+        onDeleteTag={handleDeleteTag}
         editTask={editingTask}
         allTags={allTags}
       />

@@ -13,7 +13,7 @@ import { EventForm } from "./EventForm";
 import { TaskForm } from "@/app/tasks/TaskForm";
 import { createClient } from "@/lib/supabase/client";
 import { createEvent, updateEvent, deleteEvent } from "@/lib/calendar";
-import { createTask, updateTask, deleteTask } from "@/lib/tasks";
+import { createTask, updateTask, deleteTask, deleteTag } from "@/lib/tasks";
 import type { CalendarEvent, TaskWithDetails, Tag } from "@/types";
 import type { EventFormData } from "@/lib/calendar";
 import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
@@ -44,7 +44,7 @@ interface CalendarClientProps {
 export function CalendarClient({
   initialEvents,
   initialTasks,
-  allTags,
+  allTags: initialTags,
 }: CalendarClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -52,6 +52,7 @@ export function CalendarClient({
   // ── Data state ───────────────────────────────────────────────────────────
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
   const [tasks, setTasks] = useState<TaskWithDetails[]>(initialTasks);
+  const [allTags, setAllTags] = useState<Tag[]>(initialTags);
 
   // ── View + navigation state ───────────────────────────────────────────────
   const now = new Date();
@@ -315,6 +316,18 @@ export function CalendarClient({
     }
   }, []);
 
+  const handleDeleteTag = useCallback(async (tagId: string) => {
+    const supabase = createClient();
+    await deleteTag(supabase, tagId);
+    setAllTags((prev) => prev.filter((t) => t.id !== tagId));
+    setTasks((prev) =>
+      prev.map((task) => ({
+        ...task,
+        tags: task.tags.filter((t) => t.id !== tagId),
+      }))
+    );
+  }, []);
+
   function openNewTaskForm(date?: string) {
     setEditingTask(null);
     setTaskFormDefaultDate(date ?? null);
@@ -447,6 +460,7 @@ export function CalendarClient({
           setTaskFormDefaultDate(null);
         }}
         onSave={handleTaskSave}
+        onDeleteTag={handleDeleteTag}
       />
     </AppShell>
   );
