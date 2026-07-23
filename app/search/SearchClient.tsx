@@ -189,7 +189,7 @@ export function SearchClient() {
           {/* ── Search input ── */}
           <div className="relative">
             <label htmlFor="planitary-search-input" className="sr-only">
-              Search tasks, journal entries, and calendar events
+              Search tasks, calendar events and journal entries
             </label>
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--muted-foreground))] pointer-events-none" aria-hidden="true" />
             <input
@@ -203,7 +203,7 @@ export function SearchClient() {
               onBlur={() => {
                 inputFocusedRef.current = false;
               }}
-              placeholder="Search tasks, journal entries, and calendar events…"
+              placeholder="Search tasks, calendar events, and journal entries…"
               autoFocus
               autoComplete="off"
               className="w-full pl-10 pr-10 py-3 text-sm rounded-xl border border-[hsl(var(--input))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none transition [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden"
@@ -272,7 +272,7 @@ export function SearchClient() {
               <EmptyState
                 icon={Search}
                 title="Search Planitary"
-                description="Search tasks, journal entries, and calendar events."
+                description="Search tasks, calendar events, and journal entries."
               />
             ) : status === "error" ? (
               <EmptyState
