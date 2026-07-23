@@ -14,6 +14,7 @@ import { cn } from "@/utils/cn";
 import { PriorityBadge } from "@/components/ui/PriorityBadge";
 import { TagBadge } from "@/components/ui/TagBadge";
 import { relativeDate, formatDate, parseDateOnly } from "@/utils/date";
+import { formatTimeValue } from "@/components/ui/TimeDropdown";
 import type { TaskWithDetails } from "@/types";
 
 interface TaskCardProps {
@@ -151,7 +152,7 @@ export function TaskCard({
                 {task.due_time && (
                   <span className="flex items-center gap-0.5">
                     <Clock className="w-3 h-3 ml-1" />
-                    {task.due_time.slice(0, 5)}
+                    {formatTimeValue(task.due_time)}
                   </span>
                 )}
               </span>
