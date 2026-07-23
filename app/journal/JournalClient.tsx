@@ -75,12 +75,19 @@ export function JournalClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const clientToday = useClientLocalToday(initialDate);
-  const [manualDate, setManualDate] = useState<string | null>(null);
-  const [highlightEntryId, setHighlightEntryId] = useState<string | null>(null);
+
+  // Read deep-link params into initial state so the first load targets the
+  // linked date (not "today"). Applying them only in an effect raced the
+  // date-load effect and could leave the correct date with empty/stale rows.
+  const [manualDate, setManualDate] = useState<string | null>(() => searchParams.get("date"));
+  const [highlightEntryId, setHighlightEntryId] = useState<string | null>(() => searchParams.get("entry"));
   // Tracks today automatically (via clientToday) until the user manually
   // navigates, at which point the manually chosen date takes over.
   const selectedDate = manualDate ?? clientToday;
-  const [entries, setEntries] = useState<JournalEntry[]>(initialEntries);
+  const [entries, setEntries] = useState<JournalEntry[]>(() =>
+    // Only trust SSR rows when we're actually showing that SSR date.
+    (searchParams.get("date") ?? initialDate) === initialDate ? initialEntries : []
+  );
   const [quickAddValue, setQuickAddValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,18 +96,22 @@ export function JournalClient({
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
   const isFirstRun = useRef(true);
+  const loadRequestIdRef = useRef(0);
 
   // ---------------------------------------------------------------------------
   // Date-scoped entry loading
   // ---------------------------------------------------------------------------
 
   const loadEntriesForDate = useCallback(async (date: string) => {
+    const requestId = ++loadRequestIdRef.current;
     setError(null);
     try {
       const supabase = createClient();
       const data = await fetchJournalEntriesByDate(supabase, date);
+      if (requestId !== loadRequestIdRef.current) return; // superseded by a newer date
       setEntries(data);
     } catch (err) {
+      if (requestId !== loadRequestIdRef.current) return;
       setError(err instanceof Error ? err.message : "Failed to load entries.");
     }
   }, []);
@@ -123,16 +134,16 @@ export function JournalClient({
 
   // ---------------------------------------------------------------------------
   // Deep-link support: /journal?date=<date>&entry=<id> (e.g. from a Search
-  // result) selects that date, then briefly highlights the matching entry
-  // once it has loaded. The URL params are cleared immediately so navigating
-  // away and back doesn't reopen the highlight.
+  // result). State is seeded from the URL above; here we only clear the params
+  // so navigating away and back doesn't reopen the highlight, and handle
+  // soft-nav updates if the params change while already on /journal.
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
     const dateParam = searchParams.get("date");
     const entryParam = searchParams.get("entry");
     if (!dateParam && !entryParam) return;
-    /* eslint-disable react-hooks/set-state-in-effect -- navigate to the deep-linked date/entry once, from a URL navigation */
+    /* eslint-disable react-hooks/set-state-in-effect -- sync deep-link if params arrive via client navigation */
     if (dateParam) setManualDate(dateParam);
     if (entryParam) setHighlightEntryId(entryParam);
     /* eslint-enable react-hooks/set-state-in-effect */

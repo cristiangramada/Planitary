@@ -48,19 +48,26 @@ export function SearchFiltersPanel({
   const showTaskFilters = filters.entityTypes.length === 0 || filters.entityTypes.includes("task");
 
   return (
-    <div className="flex flex-wrap items-end gap-3 py-3">
+    <div className="flex w-max flex-nowrap items-end gap-3 py-3">
       {/* Date range */}
-      <div className="flex items-end gap-2">
+      <div className="flex items-end gap-2 shrink-0">
         <div>
           <label htmlFor="search-start-date" className="block text-[11px] font-medium text-[hsl(var(--muted-foreground))] mb-1">
             From
           </label>
           <MiniCalendarPicker
             value={filters.startDate}
-            onChange={(v) => onFiltersChange({ ...filters, startDate: v })}
+            onChange={(v) =>
+              onFiltersChange({
+                ...filters,
+                startDate: v,
+                // Keep the range valid if From moves past the current To.
+                endDate: v && filters.endDate && filters.endDate < v ? v : filters.endDate,
+              })
+            }
             placeholder="Any"
             nullable
-            className="w-36"
+            className="w-[12.25rem]"
           />
         </div>
         <div>
@@ -72,14 +79,15 @@ export function SearchFiltersPanel({
             onChange={(v) => onFiltersChange({ ...filters, endDate: v })}
             placeholder="Any"
             nullable
-            className="w-36"
+            minDate={filters.startDate ?? undefined}
+            className="w-[12.25rem]"
           />
         </div>
       </div>
 
       {/* Task status — only meaningful when Tasks can appear */}
       {showTaskFilters && (
-        <div>
+        <div className="shrink-0">
           <span className="block text-[11px] font-medium text-[hsl(var(--muted-foreground))] mb-1">
             Task status
           </span>
@@ -94,7 +102,7 @@ export function SearchFiltersPanel({
 
       {/* Priority — only meaningful when Tasks can appear */}
       {showTaskFilters && (
-        <div>
+        <div className="shrink-0">
           <span className="block text-[11px] font-medium text-[hsl(var(--muted-foreground))] mb-1">
             Priority
           </span>
@@ -120,7 +128,7 @@ export function SearchFiltersPanel({
       )}
 
       {/* Sort */}
-      <div>
+      <div className="shrink-0">
         <span className="block text-[11px] font-medium text-[hsl(var(--muted-foreground))] mb-1">Sort</span>
         <PickerSelect value={sortMode} options={SORT_OPTIONS} onChange={onSortModeChange} minWidth={130} />
       </div>
@@ -129,7 +137,7 @@ export function SearchFiltersPanel({
         <button
           type="button"
           onClick={clearFilters}
-          className="flex items-center gap-1 h-9 px-3 text-xs font-medium rounded-lg text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
+          className="flex shrink-0 items-center gap-1 h-9 px-3 text-xs font-medium rounded-lg whitespace-nowrap text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
         >
           <X className="w-3.5 h-3.5" />
           Clear filters

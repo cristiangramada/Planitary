@@ -4,7 +4,7 @@ import { PriorityBadge } from "@/components/ui/PriorityBadge";
 import { TagBadge } from "@/components/ui/TagBadge";
 import { formatDate, formatTime } from "@/utils/date";
 import type { SearchResult } from "@/types/search";
-import { highlightQuery, renderMarkedText } from "./highlightText";
+import { highlightQuery, stripHighlightMarks } from "./highlightText";
 
 const TYPE_CONFIG: Record<SearchResult["entityType"], { label: string; icon: LucideIcon }> = {
   task: { label: "Task", icon: CheckSquare },
@@ -72,18 +72,14 @@ export function SearchResultRow({ result, query, onOpen }: SearchResultRowProps)
         </div>
 
         <p className="text-sm font-semibold text-[hsl(var(--foreground))] truncate">
-          {/* Journal titles come from ts_headline (FTS marks). Trigram/substring-only
-              matches won't get <mark> tags — fall back to literal query highlight. */}
-          {result.entityType === "journal"
-            ? result.title.includes("<mark>")
-              ? renderMarkedText(result.title)
-              : highlightQuery(result.title, query)
-            : highlightQuery(result.title, query)}
+          {/* Prefer literal query highlighting over ts_headline marks: FTS
+              stemming wraps the whole word (e.g. query "chill" → <mark>chilled</mark>). */}
+          {highlightQuery(stripHighlightMarks(result.title), query)}
         </p>
 
         {result.excerpt && (
           <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5 line-clamp-2 break-words">
-            {renderMarkedText(result.excerpt)}
+            {highlightQuery(stripHighlightMarks(result.excerpt), query)}
           </p>
         )}
 
