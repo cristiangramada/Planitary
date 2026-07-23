@@ -237,6 +237,7 @@ function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps)
               closeConfirm();
             }}
             onFocus={() => setShowDropdown(true)}
+            onClick={() => setShowDropdown(true)}
             onKeyDown={handleKeyDown}
             placeholder="Add tags… (type and press Enter)"
             className="flex-1 text-xs bg-transparent outline-none text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
