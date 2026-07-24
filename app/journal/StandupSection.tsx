@@ -94,6 +94,8 @@ export function StandupSection() {
   function handleStartDateChange(value: string | null) {
     if (!value) return;
     setStartDate(value);
+    // Keep the range valid if start moves past the current end.
+    if (value > endDate) setEndDate(value);
     clearResultIfPresent();
   }
   function handleEndDateChange(value: string | null) {
@@ -253,7 +255,11 @@ export function StandupSection() {
               >
                 End date
               </label>
-              <MiniCalendarPicker value={endDate} onChange={handleEndDateChange} />
+              <MiniCalendarPicker
+                value={endDate}
+                onChange={handleEndDateChange}
+                minDate={startDate}
+              />
               <span id="standup-end-date" className="sr-only" />
             </div>
 
