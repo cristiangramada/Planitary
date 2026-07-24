@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { X, Plus, Trash2, Tag as TagIcon, AlertCircle, CalendarDays } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { TagBadge } from "@/components/ui/TagBadge";
 import type { TaskWithDetails, Tag, Priority } from "@/types";
 import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
+import { PLANET_TAG_COLORS } from "@/lib/tasks";
 import {
   TaskDatePicker,
   type DatePickerValue,
@@ -75,9 +76,16 @@ interface TagPickerProps {
   onDeleteTag?: (tagId: string) => Promise<void>;
 }
 
+function tagKey(tag: TagFormItem): string {
+  return tag.id ?? `session:${tag.name.toLowerCase()}`;
+}
+
 function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps) {
   const [input, setInput] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
+  const [newTagColor, setNewTagColor] = useState<string>(PLANET_TAG_COLORS[2].color);
+  /** Tags created this session (not yet in allTags until the task is saved). */
+  const [sessionTags, setSessionTags] = useState<TagFormItem[]>([]);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [confirmPos, setConfirmPos] = useState<{ top: number; left: number } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -86,11 +94,28 @@ function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps)
   const confirmRef = useRef<HTMLDivElement>(null);
   const deleteBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
-  const filtered = allTags.filter((t) =>
+  const knownTags = useMemo(() => {
+    const byName = new Map<string, TagFormItem>();
+    for (const t of allTags) {
+      byName.set(t.name.toLowerCase(), { id: t.id, name: t.name, color: t.color });
+    }
+    for (const t of sessionTags) {
+      const key = t.name.toLowerCase();
+      if (!byName.has(key)) byName.set(key, t);
+    }
+    return Array.from(byName.values());
+  }, [allTags, sessionTags]);
+
+  const trimmedInput = input.trim();
+  const canCreate =
+    trimmedInput.length > 0 &&
+    !knownTags.some((t) => t.name.toLowerCase() === trimmedInput.toLowerCase());
+
+  const filtered = knownTags.filter((t) =>
     t.name.toLowerCase().includes(input.toLowerCase())
   );
   const confirmingTag = confirmingDeleteId
-    ? allTags.find((t) => t.id === confirmingDeleteId) ?? null
+    ? knownTags.find((t) => tagKey(t) === confirmingDeleteId) ?? null
     : null;
 
   const closeConfirm = useCallback(() => {
@@ -98,7 +123,7 @@ function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps)
     setConfirmPos(null);
   }, []);
 
-  const openConfirm = useCallback((tagId: string, btn: HTMLButtonElement) => {
+  const openConfirm = useCallback((key: string, btn: HTMLButtonElement) => {
     const r = btn.getBoundingClientRect();
     const width = 224;
     const height = 110;
@@ -109,7 +134,7 @@ function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps)
     let left = r.right - width;
     left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
     setConfirmPos({ top, left });
-    setConfirmingDeleteId(tagId);
+    setConfirmingDeleteId(key);
   }, []);
 
   const addTag = useCallback(
@@ -119,10 +144,22 @@ function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps)
       }
       setInput("");
       setShowDropdown(false);
+      setNewTagColor(PLANET_TAG_COLORS[2].color);
       closeConfirm();
     },
     [selected, onChange, closeConfirm]
   );
+
+  const createNewTag = useCallback(() => {
+    if (!canCreate) return;
+    const tag: TagFormItem = { name: trimmedInput, color: newTagColor };
+    setSessionTags((prev) =>
+      prev.some((t) => t.name.toLowerCase() === tag.name.toLowerCase())
+        ? prev
+        : [...prev, tag]
+    );
+    addTag(tag);
+  }, [canCreate, trimmedInput, newTagColor, addTag]);
 
   const removeTag = useCallback(
     (name: string) => onChange(selected.filter((t) => t.name !== name)),
@@ -130,12 +167,25 @@ function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps)
   );
 
   const confirmDeleteTag = useCallback(
-    async (tag: Tag) => {
-      if (!onDeleteTag || deletingId) return;
-      setDeletingId(tag.id);
+    async (tag: TagFormItem) => {
+      const key = tagKey(tag);
+      if (deletingId) return;
+      setDeletingId(key);
       try {
-        await onDeleteTag(tag.id);
-        onChange(selected.filter((t) => t.id !== tag.id));
+        if (tag.id) {
+          if (!onDeleteTag) return;
+          await onDeleteTag(tag.id);
+        }
+        onChange(
+          selected.filter((t) =>
+            tag.id
+              ? t.id !== tag.id
+              : t.name.toLowerCase() !== tag.name.toLowerCase()
+          )
+        );
+        setSessionTags((prev) =>
+          prev.filter((t) => t.name.toLowerCase() !== tag.name.toLowerCase())
+        );
         closeConfirm();
       } finally {
         setDeletingId(null);
@@ -145,15 +195,15 @@ function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps)
   );
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter" && input.trim()) {
+    if (e.key === "Enter" && trimmedInput) {
       e.preventDefault();
-      const existing = allTags.find(
-        (t) => t.name.toLowerCase() === input.trim().toLowerCase()
+      const existing = knownTags.find(
+        (t) => t.name.toLowerCase() === trimmedInput.toLowerCase()
       );
       if (existing) {
         addTag({ id: existing.id, name: existing.name, color: existing.color });
       } else {
-        addTag({ name: input.trim(), color: null });
+        createNewTag();
       }
     }
     if (e.key === "Escape") {
@@ -244,11 +294,13 @@ function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps)
           />
         </div>
 
-        {showDropdown && (filtered.length > 0 || input.trim()) && (
+        {showDropdown && (filtered.length > 0 || canCreate) && (
           <div className="absolute z-10 mt-1 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-lg py-1">
-            {filtered.map((tag) => (
+            {filtered.map((tag) => {
+              const key = tagKey(tag);
+              return (
               <div
-                key={tag.id}
+                key={key}
                 className="relative flex items-center gap-1 px-1 hover:bg-[hsl(var(--muted))] transition-colors"
               >
                 <button
@@ -265,52 +317,72 @@ function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps)
                   />
                   <span className="truncate">{tag.name}</span>
                 </button>
-                {onDeleteTag && (
-                  <button
-                    ref={(el) => {
-                      if (el) deleteBtnRefs.current.set(tag.id, el);
-                      else deleteBtnRefs.current.delete(tag.id);
-                    }}
-                    type="button"
-                    disabled={deletingId === tag.id}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (confirmingDeleteId === tag.id) {
-                        closeConfirm();
-                      } else {
-                        openConfirm(tag.id, e.currentTarget);
-                      }
-                    }}
-                    className={cn(
-                      "shrink-0 p-1.5 rounded-md transition-colors cursor-pointer disabled:opacity-50",
-                      confirmingDeleteId === tag.id
-                        ? "bg-red-500/10 text-red-500"
-                        : "text-[hsl(var(--muted-foreground))] hover:text-red-500 hover:bg-red-500/10"
-                    )}
-                    aria-label={`Delete tag ${tag.name}`}
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                )}
+                <button
+                  ref={(el) => {
+                    if (el) deleteBtnRefs.current.set(key, el);
+                    else deleteBtnRefs.current.delete(key);
+                  }}
+                  type="button"
+                  disabled={deletingId === key}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (confirmingDeleteId === key) {
+                      closeConfirm();
+                    } else {
+                      openConfirm(key, e.currentTarget);
+                    }
+                  }}
+                  className={cn(
+                    "shrink-0 p-1.5 rounded-md transition-colors cursor-pointer disabled:opacity-50",
+                    confirmingDeleteId === key
+                      ? "bg-red-500/10 text-red-500"
+                      : "text-[hsl(var(--muted-foreground))] hover:text-red-500 hover:bg-red-500/10"
+                  )}
+                  aria-label={`Delete tag ${tag.name}`}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
               </div>
-            ))}
-            {input.trim() &&
-              !allTags.some(
-                (t) => t.name.toLowerCase() === input.trim().toLowerCase()
-              ) && (
+              );
+            })}
+            {canCreate && (
+              <div className="mt-1 pt-1.5 pb-1 px-3">
+                <div className="flex items-center justify-between gap-1">
+                  {PLANET_TAG_COLORS.map(({ planet, color }) => (
+                    <button
+                      key={planet}
+                      type="button"
+                      title={planet}
+                      aria-label={`${planet} color`}
+                      aria-pressed={newTagColor === color}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setNewTagColor(color);
+                      }}
+                      className={cn(
+                        "w-5 h-5 rounded-full shrink-0 transition-transform cursor-pointer",
+                        newTagColor === color
+                          ? "ring-2 ring-offset-2 ring-offset-[hsl(var(--card))] ring-[hsl(var(--foreground))] scale-110"
+                          : "hover:scale-110 opacity-80 hover:opacity-100"
+                      )}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
                 <button
                   type="button"
                   onMouseDown={(e) => {
                     e.preventDefault();
-                    addTag({ name: input.trim(), color: null });
+                    createNewTag();
                   }}
-                  className="flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:bg-[hsl(var(--muted))] text-[hsl(var(--primary))] transition-colors text-left cursor-pointer"
+                  className="flex items-center gap-2 w-full mt-3 py-1 text-xs text-[hsl(var(--primary))] hover:opacity-80 transition-opacity text-left cursor-pointer"
                 >
                   <Plus className="w-3 h-3" />
-                  Create &ldquo;{input.trim()}&rdquo;
+                  Create &ldquo;{trimmedInput}&rdquo;
                 </button>
-              )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -336,7 +408,9 @@ function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps)
               Delete tag &ldquo;{confirmingTag.name}&rdquo;?
             </p>
             <p className="text-xs text-[hsl(var(--muted-foreground))] mb-3">
-              It will be removed from all tasks.
+              {confirmingTag.id
+                ? "It will be removed from all tasks."
+                : "It hasn’t been saved yet and will be discarded."}
             </p>
             <div className="flex gap-2">
               <button
@@ -351,14 +425,14 @@ function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps)
               </button>
               <button
                 type="button"
-                disabled={deletingId === confirmingTag.id}
+                disabled={deletingId === tagKey(confirmingTag)}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   void confirmDeleteTag(confirmingTag);
                 }}
                 className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:opacity-60 transition-colors cursor-pointer"
               >
-                {deletingId === confirmingTag.id ? "Deleting…" : "Delete"}
+                {deletingId === tagKey(confirmingTag) ? "Deleting…" : "Delete"}
               </button>
             </div>
           </div>,

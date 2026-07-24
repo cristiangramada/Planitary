@@ -280,6 +280,11 @@ export function CalendarClient({
           const without = prev.filter((t) => t.id !== updated.id);
           return updated.due_date ? [...without, updated] : without;
         });
+        updated.tags.forEach((tag) => {
+          setAllTags((prev) =>
+            prev.some((t) => t.id === tag.id) ? prev : [...prev, tag]
+          );
+        });
       } else {
         const created = await createTask(
           supabase,
@@ -291,6 +296,11 @@ export function CalendarClient({
         if (created.due_date) {
           setTasks((prev) => [...prev, created]);
         }
+        created.tags.forEach((tag) => {
+          setAllTags((prev) =>
+            prev.some((t) => t.id === tag.id) ? prev : [...prev, tag]
+          );
+        });
       }
 
       setTaskFormOpen(false);
