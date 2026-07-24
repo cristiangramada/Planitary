@@ -71,3 +71,8 @@ export function shiftDateStr(dateString: string, deltaDays: number): string {
   d.setDate(d.getDate() + deltaDays);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+
+/** Converts a local YYYY-MM-DD date to the UTC ISO instant of local midnight on that day. */
+export function localDateToIsoStart(dateString: string): string {
+  return parseDateOnly(dateString).toISOString();
+}

@@ -28,7 +28,12 @@ import type {
 
 type GenerationStatus = "idle" | "loading" | "success" | "empty" | "error";
 
-export function StandupSection() {
+interface StandupSectionProps {
+  /** When true, forces the section open regardless of the saved localStorage state — used by the /journal?section=standup deep link from the Dashboard. */
+  autoExpand?: boolean;
+}
+
+export function StandupSection({ autoExpand = false }: StandupSectionProps) {
   const todayStr = localTodayStr();
   const defaults = defaultStandupRange(todayStr);
 
@@ -66,6 +71,15 @@ export function StandupSection() {
     setReady(true);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
+
+  // Deep-link override: always wins over the restored/saved expand state.
+  useEffect(() => {
+    if (!autoExpand) return;
+    /* eslint-disable react-hooks/set-state-in-effect -- open the section in response to a /journal?section=standup deep link */
+    userToggledExpand.current = true;
+    setExpanded(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [autoExpand]);
 
   useEffect(() => {
     return () => {
@@ -199,6 +213,7 @@ export function StandupSection() {
 
   return (
     <section
+      id="standup-section"
       aria-labelledby="standup-heading"
       className={cn(
         "mt-6 pt-5 border-t border-[hsl(var(--border))]",

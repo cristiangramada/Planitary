@@ -1,5 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Task, Subtask, Tag, TaskWithDetails, Priority } from "@/types";
+import { shiftDateStr, localDateToIsoStart } from "@/utils/date";
+
+/** Canonical priority ordering used everywhere tasks are priority-sorted. */
+export const TASK_PRIORITY_ORDER: Record<Priority, number> = {
+  high: 0,
+  medium: 1,
+  low: 2,
+};
 
 // ---------------------------------------------------------------------------
 // Internal raw shape returned by Supabase nested select
@@ -56,6 +64,72 @@ export async function fetchAllTags(supabase: SupabaseClient): Promise<Tag[]> {
 
   if (error) throw error;
   return (data as Tag[]) ?? [];
+}
+
+/** Fetches active tasks due on a specific local date (YYYY-MM-DD), for the Dashboard. */
+export async function fetchTasksDueOn(
+  supabase: SupabaseClient,
+  dateStr: string
+): Promise<TaskWithDetails[]> {
+  const { data, error } = await supabase
+    .from("tasks")
+    .select(TASK_SELECT)
+    .eq("status", "active")
+    .eq("due_date", dateStr)
+    .order("due_time", { ascending: true, nullsFirst: false });
+
+  if (error) throw error;
+  return ((data as RawTaskRow[]) ?? []).map(normalize);
+}
+
+/** Fetches active tasks due before a local date (YYYY-MM-DD), oldest due date first. */
+export async function fetchOverdueActiveTasks(
+  supabase: SupabaseClient,
+  beforeDateStr: string
+): Promise<TaskWithDetails[]> {
+  const { data, error } = await supabase
+    .from("tasks")
+    .select(TASK_SELECT)
+    .eq("status", "active")
+    .not("due_date", "is", null)
+    .lt("due_date", beforeDateStr)
+    .order("due_date", { ascending: true });
+
+  if (error) throw error;
+  return ((data as RawTaskRow[]) ?? []).map(normalize);
+}
+
+/**
+ * Counts tasks completed within [weekStart, weekEnd] (inclusive, local dates) and
+ * active tasks due within that same range — the two inputs to Dashboard Weekly progress.
+ */
+export async function fetchWeeklyTaskCounts(
+  supabase: SupabaseClient,
+  weekStart: string,
+  weekEnd: string
+): Promise<{ completed: number; activeDue: number }> {
+  const weekStartIso = localDateToIsoStart(weekStart);
+  const weekEndExclusiveIso = localDateToIsoStart(shiftDateStr(weekEnd, 1));
+
+  const [completedRes, activeRes] = await Promise.all([
+    supabase
+      .from("tasks")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "completed")
+      .gte("completed_at", weekStartIso)
+      .lt("completed_at", weekEndExclusiveIso),
+    supabase
+      .from("tasks")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active")
+      .gte("due_date", weekStart)
+      .lte("due_date", weekEnd),
+  ]);
+
+  if (completedRes.error) throw completedRes.error;
+  if (activeRes.error) throw activeRes.error;
+
+  return { completed: completedRes.count ?? 0, activeDue: activeRes.count ?? 0 };
 }
 
 /** Re-fetches a single task by id. Used after mutations to get the full object. */

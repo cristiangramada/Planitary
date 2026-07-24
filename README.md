@@ -182,3 +182,71 @@ No second Task/Event/Journal-entry detail UI was created — all three reuse the
 - [ ] Signing in as a second user never surfaces the first user's tasks/journal/calendar/tags.
 - [ ] Empty query shows the "Search Planitary…" prompt (or recent searches); a query with no matches shows the "No results found" state with suggestions.
 - [ ] Dark mode and light mode both render correctly; layout holds on a narrow (mobile-width) viewport.
+
+## Dashboard
+
+`/dashboard` is the "Today" page — a daily overview built entirely from existing Task, Calendar, and Journal logic. **No AI, no OpenRouter call.**
+
+### Sections
+
+1. **Header** — time-of-day greeting (`Good morning`/`afternoon`/`evening`, plus the profile's `display_name` if set), the friendly local date, and a Search field that pushes to `/search?q=...`.
+2. **Quick actions** — New Task, New Event, Add Journal Entry (focuses the quick-add input below), Generate Standup (`/journal?section=standup`).
+3. **Today's tasks** — active tasks due today (`lib/tasks.ts:fetchTasksDueOn`), rendered with the same `TaskCard` component as `/tasks`, sorted by the shared `TASK_PRIORITY_ORDER` then due time.
+4. **Today's events** — events starting today (`lib/calendar.ts:fetchEventsBetween`), chronological, with a "Now" badge for an event currently in progress.
+5. **Overdue** — active tasks with `due_date` before today (`lib/tasks.ts:fetchOverdueActiveTasks`), oldest first. The section is hidden entirely when there are none.
+6. **Journal** — today's entries (`lib/journal.ts:fetchJournalEntriesByDate`), read-only rows (no timestamps) plus a compact quick-add that calls `createJournalEntry` directly.
+7. **Weekly progress** — deterministic stats only (see below), with a "Weekly standup" shortcut to `/journal?section=standup`.
+
+### Data fetching
+
+`lib/dashboard.ts:fetchDashboardData(supabase, todayStr)` runs all of the above in parallel via `Promise.all`, wrapping each in a small `settle()` helper so one section's failure (e.g. Calendar) never blocks the others — each section carries its own `{ data, error }`. The Server Component (`app/dashboard/page.tsx`) calls this once with the server clock's date; the Client Component (`app/dashboard/DashboardClient.tsx`) re-runs it with the browser's local date if that differs (same pattern as the Journal page, since the server clock is UTC on Vercel), and after any mutation that isn't fully covered by an optimistic local update.
+
+### Weekly progress definition
+
+Week = **Sunday–Saturday**, matching the Calendar's existing `getWeekStart` convention (`app/calendar/calendarUtils.ts`), not the Mon–Sun default.
+
+- **Tasks completed** — `status = 'completed'` and `completed_at` within the week.
+- **Tasks active** — `status = 'active'` and `due_date` within the week (regardless of whether that's today, later this week, or already past).
+- **Journal days** — distinct `entry_date`s with at least one entry this week (0–7).
+- **Calendar events this week** — count of events with `start_time` in the week.
+- **Completion %** — `tasksCompleted / (tasksCompleted + tasksActiveDue)`, rounded; shown as "No tasks scheduled this week" instead of `0%` when the denominator is 0.
+
+### Deep links used
+
+- `/tasks?task=<id>` (existing) — Overdue/Today's tasks "Edit" reuses the on-page `TaskForm`, not this deep link (form opens in place).
+- `/journal?date=<date>&entry=<id>` (existing) — Journal preview rows.
+- `/journal?section=standup` (**new**) — Weekly standup / Generate Standup shortcuts. Adds an optional `autoExpand` prop to `StandupSection` and a `section` search param handled in `JournalClient.tsx`; expands the section and scrolls it into view, then clears the param.
+- `/search?q=<query>` — header search field.
+
+### Components reused (unmodified)
+
+`AppShell`, `TaskCard`, `TaskForm`, `EventForm`, and the mutation functions in `lib/tasks.ts`, `lib/calendar.ts`, `lib/journal.ts`. Task/Event/Journal validation, timestamps, and cascades are therefore identical to their source pages by construction.
+
+### Components added
+
+`app/dashboard/DashboardClient.tsx` (orchestrator), `DashboardSection.tsx` (shared card/header/error/skeleton/empty-state primitives), `WeeklyProgress.tsx`, `JournalPreview.tsx`, `EventsPreview.tsx`.
+
+### Small shared-logic extractions (to avoid duplicating rules the Dashboard also needs)
+
+- `TASK_PRIORITY_ORDER` moved from `TasksClient.tsx` into `lib/tasks.ts` (single source for the "priority, then due time" sort used by both `/tasks` and the Dashboard).
+- The local-date/local-hour `useSyncExternalStore` hooks moved from `JournalClient.tsx` into `hooks/useClientLocalToday.ts` (`useClientLocalToday`, `useClientLocalHour`), used by both Journal and Dashboard.
+
+### Known limitations
+
+- Section "Retry" buttons re-run the full bounded query set rather than retrying just the failed section — acceptable because every query here is cheap and bounded, but it does mean an unrelated section may briefly show its own "Refreshing…" state too.
+- No global `Cmd+K`/`Ctrl+K` search shortcut was added (optional in the spec); Search is reachable via the sidebar, the header field, and the Quick actions row.
+- Mobile stacking order is: Today's tasks → Today's events → Journal → Overdue → Weekly progress (the two-column desktop layout is implemented as two independently-stacking columns, so Overdue/Weekly appear after the main column's three sections on narrow screens rather than interleaved).
+- "New Task"/"New Event" quick actions default to today; there's no dedicated Dashboard-only creation form, by design.
+
+### Manual testing checklist
+
+- [ ] Greeting matches the local time of day and shows the display name only when `profiles.display_name` is set.
+- [ ] Completing a task on the Dashboard removes it from Today's tasks/Overdue and updates Weekly progress shortly after.
+- [ ] Creating a task due today (via Quick actions) appears in Today's tasks without a page reload.
+- [ ] Creating an event today (via Quick actions or "Add an event") appears in Today's events.
+- [ ] Adding a journal entry (Quick actions or the inline quick-add) appears at the top of the Journal preview.
+- [ ] The Overdue section is hidden when there are no overdue tasks, and appears when one exists.
+- [ ] "Generate Standup" and "Weekly standup" navigate to `/journal`, auto-expand the Standup section, and scroll it into view — no request to OpenRouter happens from the Dashboard.
+- [ ] The header Search field navigates to `/search?q=...`.
+- [ ] Simulating a Calendar query failure still renders Tasks/Journal/Weekly progress normally, with a section-level error + Retry for Events only.
+- [ ] Dark and light mode both render correctly; the layout holds (no horizontal scroll) at common mobile widths.

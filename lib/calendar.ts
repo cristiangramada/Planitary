@@ -1,4 +1,6 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { localDateToIsoStart } from "@/utils/date";
 import type { CalendarEvent } from "@/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -25,6 +27,41 @@ export interface EventFormData {
 /** Combine a local date + time string into a UTC ISO timestamp for storage. */
 function toTimestamp(date: string, time: string): string {
   return new Date(`${date}T${time}:00`).toISOString();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Read (bounded, injected client — used by the Dashboard)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Fetches events with start_time in [startDate, endDateExclusive), local dates. */
+export async function fetchEventsBetween(
+  supabase: SupabaseClient,
+  startDate: string,
+  endDateExclusive: string
+): Promise<CalendarEvent[]> {
+  const { data, error } = await supabase
+    .from("calendar_events")
+    .select("*")
+    .gte("start_time", localDateToIsoStart(startDate))
+    .lt("start_time", localDateToIsoStart(endDateExclusive))
+    .order("start_time", { ascending: true });
+  if (error) throw error;
+  return (data as CalendarEvent[]) ?? [];
+}
+
+/** Counts events with start_time in [startDate, endDateExclusive), local dates. */
+export async function fetchEventCountBetween(
+  supabase: SupabaseClient,
+  startDate: string,
+  endDateExclusive: string
+): Promise<number> {
+  const { count, error } = await supabase
+    .from("calendar_events")
+    .select("id", { count: "exact", head: true })
+    .gte("start_time", localDateToIsoStart(startDate))
+    .lt("start_time", localDateToIsoStart(endDateExclusive));
+  if (error) throw error;
+  return count ?? 0;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -18,6 +18,7 @@ import {
   deleteTag,
   setTaskComplete,
   setSubtaskComplete,
+  TASK_PRIORITY_ORDER,
 } from "@/lib/tasks";
 import type { TaskWithDetails, Tag } from "@/types";
 import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
@@ -29,7 +30,7 @@ import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
 type SortKey = "priority" | "due_date" | "created_at";
 type FilterKey = "all" | "active" | "completed";
 
-const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
+const PRIORITY_ORDER = TASK_PRIORITY_ORDER;
 
 function compareDueDateTime(a: TaskWithDetails, b: TaskWithDetails): number {
   if (a.due_date && b.due_date) {

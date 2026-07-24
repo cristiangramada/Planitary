@@ -6,7 +6,6 @@ import {
   useCallback,
   useRef,
   useEffect,
-  useSyncExternalStore,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -16,6 +15,7 @@ import { PriorityBadge } from "@/components/ui/PriorityBadge";
 import { MiniCalendarPicker } from "@/components/ui/MiniCalendarPicker";
 import { JournalEntryContextMenu } from "./JournalEntryContextMenu";
 import { StandupSection } from "./StandupSection";
+import { useClientLocalToday } from "@/hooks/useClientLocalToday";
 import { createClient } from "@/lib/supabase/client";
 import {
   fetchJournalEntriesByDate,
@@ -24,7 +24,7 @@ import {
   deleteJournalEntry,
 } from "@/lib/journal";
 import { cn } from "@/utils/cn";
-import { localTodayStr, toLocalDateStr, shiftDateStr } from "@/utils/date";
+import { toLocalDateStr, shiftDateStr } from "@/utils/date";
 import type { JournalEntry, Task } from "@/types";
 
 type CompletedTaskLite = Pick<Task, "id" | "title" | "priority" | "status" | "completed_at">;
@@ -46,25 +46,6 @@ interface ContextMenuState {
   entryId: string;
   x: number;
   y: number;
-}
-
-// Keeps "today" correct across a midnight rollover (and after the tab regains
-// focus) without ever calling setState from inside an effect: React re-renders
-// automatically whenever the external snapshot (the client's local date)
-// changes, and the server snapshot keeps first paint hydration-safe.
-function subscribeToLocalDate(callback: () => void) {
-  const interval = setInterval(callback, 60_000);
-  window.addEventListener("focus", callback);
-  document.addEventListener("visibilitychange", callback);
-  return () => {
-    clearInterval(interval);
-    window.removeEventListener("focus", callback);
-    document.removeEventListener("visibilitychange", callback);
-  };
-}
-
-function useClientLocalToday(serverToday: string): string {
-  return useSyncExternalStore(subscribeToLocalDate, localTodayStr, () => serverToday);
 }
 
 export function JournalClient({
@@ -94,6 +75,9 @@ export function JournalClient({
   const [sortBy, setSortBy] = useState<SortKey>("newest");
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [forceStandupExpand, setForceStandupExpand] = useState(
+    () => searchParams.get("section") === "standup"
+  );
 
   const isFirstRun = useRef(true);
   const loadRequestIdRef = useRef(0);
@@ -134,21 +118,29 @@ export function JournalClient({
 
   // ---------------------------------------------------------------------------
   // Deep-link support: /journal?date=<date>&entry=<id> (e.g. from a Search
-  // result). State is seeded from the URL above; here we only clear the params
-  // so navigating away and back doesn't reopen the highlight, and handle
-  // soft-nav updates if the params change while already on /journal.
+  // result) and /journal?section=standup (from the Dashboard). State is seeded
+  // from the URL above; here we only clear the params so navigating away and
+  // back doesn't reopen the highlight, and handle soft-nav updates if the
+  // params change while already on /journal.
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
     const dateParam = searchParams.get("date");
     const entryParam = searchParams.get("entry");
-    if (!dateParam && !entryParam) return;
+    const sectionParam = searchParams.get("section");
+    if (!dateParam && !entryParam && !sectionParam) return;
     /* eslint-disable react-hooks/set-state-in-effect -- sync deep-link if params arrive via client navigation */
     if (dateParam) setManualDate(dateParam);
     if (entryParam) setHighlightEntryId(entryParam);
+    if (sectionParam === "standup") setForceStandupExpand(true);
     /* eslint-enable react-hooks/set-state-in-effect */
     router.replace("/journal", { scroll: false });
   }, [searchParams, router]);
+
+  useEffect(() => {
+    if (!forceStandupExpand) return;
+    document.getElementById("standup-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [forceStandupExpand]);
 
   useEffect(() => {
     if (!highlightEntryId) return;
@@ -437,7 +429,7 @@ export function JournalClient({
           </div>
 
           {/* ── Standup ── */}
-          <StandupSection />
+          <StandupSection autoExpand={forceStandupExpand} />
         </div>
       </div>
 
