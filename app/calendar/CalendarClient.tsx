@@ -411,7 +411,7 @@ export function CalendarClient({
           </div>
 
           {/* Right: agenda panel */}
-          <div className="w-72 shrink-0 flex flex-col min-h-0 border-l border-[hsl(var(--border))] pl-4">
+          <div className="w-80 shrink-0 flex flex-col min-h-0 border-l border-[hsl(var(--border))] pl-4">
             <AgendaPanel
               selectedDay={selectedDay}
               events={events}

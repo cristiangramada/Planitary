@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { Calendar, CheckSquare, Plus, type LucideIcon } from "lucide-react";
 import { cn } from "@/utils/cn";
+import { formatTimeValue } from "@/components/ui/TimeDropdown";
 import { fmt12, parseDate, toLocalDate } from "./calendarUtils";
 import { AgendaItemContextMenu } from "./AgendaItemContextMenu";
 import type { CalendarEvent, TaskWithDetails } from "@/types";
@@ -56,11 +57,10 @@ export function AgendaPanel({
 
   const heading = useMemo(() => {
     const d = parseDate(selectedDay);
-    const weekday = `${d.toLocaleDateString("en-US", { weekday: "long" })},`;
+    const weekday = d.toLocaleDateString("en-US", { weekday: "long" });
     const month = d.toLocaleDateString("en-US", { month: "long" });
     const day = d.getDate();
-    const monthDay = `${month}\u00A0${day}`;
-    return { weekday, monthDay };
+    return `${weekday}, ${month}\u00A0${day}`;
   }, [selectedDay]);
 
   const dayTasks = useMemo(() => {
@@ -93,9 +93,8 @@ export function AgendaPanel({
   return (
     <section className="h-full flex flex-col min-h-0">
       <div className="shrink-0 mb-3">
-        <h3 className="flex flex-col gap-1.5 min-w-0 text-lg font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wide leading-none">
-          <span>{heading.weekday}</span>
-          <span className="whitespace-nowrap">{heading.monthDay}</span>
+        <h3 className="min-w-0 text-2xl font-semibold text-[hsl(var(--muted-foreground))] tracking-normal leading-none whitespace-nowrap">
+          {heading}
         </h3>
       </div>
 
@@ -279,7 +278,7 @@ function TaskAgendaItem({
           </span>
           {task.due_time && (
             <span className="text-[11px] text-[hsl(var(--muted-foreground))]">
-              {task.due_time.slice(0, 5)}
+              {formatTimeValue(task.due_time)}
             </span>
           )}
           {task.tags.slice(0, 2).map((tag) => (
