@@ -1,18 +1,20 @@
 "use client";
 
 import { useState, type RefObject } from "react";
-import { useRouter } from "next/navigation";
 import { BookOpen, Plus } from "lucide-react";
 import type { JournalEntry } from "@/types";
+import { JournalEntryContextMenu } from "@/app/journal/JournalEntryContextMenu";
+import { JournalEntryRow } from "@/app/journal/JournalEntryRow";
 import { DashboardSection, DashboardSkeletonRows } from "./DashboardSection";
 
 interface JournalPreviewProps {
   entries: JournalEntry[];
-  todayStr: string;
   error: string | null;
   loading: boolean;
   onRetry: () => void;
   onQuickAdd: (content: string) => Promise<void>;
+  onSave: (entryId: string, content: string) => Promise<void>;
+  onDelete: (entryId: string) => Promise<void>;
   inputRef?: RefObject<HTMLInputElement | null>;
 }
 
@@ -20,16 +22,19 @@ const PREVIEW_LIMIT = 5;
 
 export function JournalPreview({
   entries,
-  todayStr,
   error,
   loading,
   onRetry,
   onQuickAdd,
+  onSave,
+  onDelete,
   inputRef,
 }: JournalPreviewProps) {
-  const router = useRouter();
   const [value, setValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ entryId: string; x: number; y: number } | null>(
+    null
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -52,7 +57,6 @@ export function JournalPreview({
       icon={BookOpen}
       iconClassName="text-emerald-500"
       title="Journal"
-      viewAllHref={`/journal?date=${todayStr}`}
       error={error}
       onRetry={onRetry}
       loading={loading}
@@ -68,18 +72,19 @@ export function JournalPreview({
             type="text"
             value={value}
             onChange={(e) => setValue(e.target.value)}
+            aria-label="Add a journal entry"
             disabled={submitting}
             autoComplete="off"
-            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-[hsl(var(--input))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none transition disabled:opacity-60"
-          />
-          <Plus
-            aria-hidden="true"
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[hsl(var(--muted-foreground))]"
+            className="w-full pl-4 pr-4 py-3 text-sm rounded-xl border border-[hsl(var(--input))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] focus:outline-none transition disabled:opacity-60"
           />
           {value.length === 0 && (
-            <span className="pointer-events-none absolute left-9 top-1/2 -translate-y-1/2 text-sm text-[hsl(var(--muted-foreground))]">
-              Add entry
-            </span>
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 left-4 flex items-center gap-1.5 text-[hsl(var(--muted-foreground))]"
+            >
+              <Plus className="w-3.5 h-3.5 shrink-0" strokeWidth={2.25} />
+              <span className="text-sm leading-none">Add entry</span>
+            </div>
           )}
         </div>
       </form>
@@ -87,20 +92,31 @@ export function JournalPreview({
       {loading ? (
         <DashboardSkeletonRows count={3} />
       ) : visible.length === 0 ? (
-        <p className="py-3 text-sm text-[hsl(var(--muted-foreground))]">No journal entries today.</p>
+        <p className="py-6 pl-4 text-sm text-[hsl(var(--muted-foreground))]">
+          No journal entries today.
+        </p>
       ) : (
         <div className="divide-y divide-[hsl(var(--border))]">
           {visible.map((entry) => (
-            <button
+            <JournalEntryRow
               key={entry.id}
-              type="button"
-              onClick={() => router.push(`/journal?date=${todayStr}&entry=${entry.id}`)}
-              className="w-full text-left px-1 py-2.5 text-sm leading-relaxed hover:bg-[hsl(var(--muted)/0.5)] rounded-lg transition-colors cursor-pointer line-clamp-2"
-            >
-              {entry.content}
-            </button>
+              entry={entry}
+              onSave={onSave}
+              onOpenContextMenu={(entryId, x, y) => setContextMenu({ entryId, x, y })}
+            />
           ))}
         </div>
+      )}
+
+      {contextMenu && (
+        <JournalEntryContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onDelete={() => {
+            void onDelete(contextMenu.entryId);
+          }}
+          onClose={() => setContextMenu(null)}
+        />
       )}
     </DashboardSection>
   );

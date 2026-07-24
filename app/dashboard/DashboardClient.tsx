@@ -1,13 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   CheckSquare,
-  CalendarDays,
-  BookOpen,
-  Search,
-  Sparkles,
   Plus,
   AlertTriangle,
 } from "lucide-react";
@@ -25,13 +20,11 @@ import {
   setSubtaskComplete,
 } from "@/lib/tasks";
 import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
-import { createEvent, updateEvent } from "@/lib/calendar";
+import { createEvent, updateEvent, deleteEvent } from "@/lib/calendar";
 import type { EventFormData } from "@/lib/calendar";
-import { createJournalEntry } from "@/lib/journal";
+import { createJournalEntry, updateJournalEntry, deleteJournalEntry } from "@/lib/journal";
 import {
   fetchDashboardData,
-  fetchWeeklyProgress,
-  getDashboardWeekRange,
   sortTodayTasks,
   type DashboardData,
 } from "@/lib/dashboard";
@@ -39,7 +32,6 @@ import { useClientLocalToday, useClientLocalHour } from "@/hooks/useClientLocalT
 import { toLocalDate as eventLocalDate } from "@/app/calendar/calendarUtils";
 import { parseDateOnly } from "@/utils/date";
 import { DashboardSection, DashboardSkeletonRows, DashboardEmptyState } from "./DashboardSection";
-import { WeeklyProgress } from "./WeeklyProgress";
 import { JournalPreview } from "./JournalPreview";
 import { EventsPreview } from "./EventsPreview";
 import type { TaskWithDetails, Tag, CalendarEvent } from "@/types";
@@ -73,7 +65,6 @@ export function DashboardClient({
   allTags: initialAllTags,
   displayName,
 }: DashboardClientProps) {
-  const router = useRouter();
   const clientToday = useClientLocalToday(initialDate);
   const clientHour = useClientLocalHour(initialHour);
 
@@ -81,7 +72,6 @@ export function DashboardClient({
   const [allTags, setAllTags] = useState<Tag[]>(initialAllTags);
   const [refreshing, setRefreshing] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
 
   const [taskFormOpen, setTaskFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskWithDetails | null>(null);
@@ -104,17 +94,6 @@ export function DashboardClient({
       setData(fresh);
     } finally {
       setRefreshing(false);
-    }
-  }, [clientToday]);
-
-  const refreshWeekly = useCallback(async () => {
-    try {
-      const supabase = createClient();
-      const range = getDashboardWeekRange(clientToday);
-      const fresh = await fetchWeeklyProgress(supabase, range);
-      setData((d) => ({ ...d, weeklyProgress: { data: fresh, error: null } }));
-    } catch {
-      // Non-critical background refresh — keep the previous value on failure.
     }
   }, [clientToday]);
 
@@ -211,9 +190,8 @@ export function DashboardClient({
       }
       setTaskFormOpen(false);
       setEditingTask(null);
-      refreshWeekly();
     },
-    [editingTask, getUserId, refreshWeekly, placeTask]
+    [editingTask, getUserId, placeTask]
   );
 
   const handleDeleteTag = useCallback(async (tagId: string) => {
@@ -239,13 +217,12 @@ export function DashboardClient({
       try {
         const supabase = createClient();
         await setTaskComplete(supabase, taskId, completed);
-        refreshWeekly();
       } catch (err) {
         setMutationError(err instanceof Error ? err.message : "Failed to update task.");
         refetchAll();
       }
     },
-    [refreshWeekly, refetchAll, removeTask]
+    [refetchAll, removeTask]
   );
 
   const handleToggleSubtask = useCallback(
@@ -281,13 +258,12 @@ export function DashboardClient({
       try {
         const supabase = createClient();
         await deleteTask(supabase, taskId);
-        refreshWeekly();
       } catch (err) {
         setMutationError(err instanceof Error ? err.message : "Failed to delete task.");
         refetchAll();
       }
     },
-    [refreshWeekly, refetchAll, removeTask]
+    [refetchAll, removeTask]
   );
 
   // ---------------------------------------------------------------------------
@@ -313,13 +289,31 @@ export function DashboardClient({
       });
       setEventFormOpen(false);
       setEditingEvent(null);
-      refreshWeekly();
     },
-    [editingEvent, getUserId, clientToday, refreshWeekly]
+    [editingEvent, getUserId, clientToday]
+  );
+
+  const handleDeleteEvent = useCallback(
+    async (eventId: string) => {
+      setData((d) => ({
+        ...d,
+        todayEvents: {
+          ...d.todayEvents,
+          data: d.todayEvents.data.filter((e) => e.id !== eventId),
+        },
+      }));
+      try {
+        await deleteEvent(eventId);
+      } catch (err) {
+        setMutationError(err instanceof Error ? err.message : "Failed to delete event.");
+        refetchAll();
+      }
+    },
+    [refetchAll]
   );
 
   // ---------------------------------------------------------------------------
-  // Journal quick-add — reuses lib/journal.ts exactly like the Journal page.
+  // Journal — reuses lib/journal.ts exactly like the Journal page.
   // ---------------------------------------------------------------------------
 
   const handleJournalQuickAdd = useCallback(
@@ -331,14 +325,41 @@ export function DashboardClient({
         ...d,
         todayJournalEntries: { ...d.todayJournalEntries, data: [created, ...d.todayJournalEntries.data] },
       }));
-      refreshWeekly();
     },
-    [getUserId, clientToday, refreshWeekly]
+    [getUserId, clientToday]
   );
 
-  // ---------------------------------------------------------------------------
-  // Quick actions
-  // ---------------------------------------------------------------------------
+  const handleDeleteJournalEntry = useCallback(
+    async (entryId: string) => {
+      setData((d) => ({
+        ...d,
+        todayJournalEntries: {
+          ...d.todayJournalEntries,
+          data: d.todayJournalEntries.data.filter((e) => e.id !== entryId),
+        },
+      }));
+      try {
+        const supabase = createClient();
+        await deleteJournalEntry(supabase, entryId);
+      } catch (err) {
+        setMutationError(err instanceof Error ? err.message : "Failed to delete journal entry.");
+        refetchAll();
+      }
+    },
+    [refetchAll]
+  );
+
+  const handleSaveJournalEntry = useCallback(async (entryId: string, content: string) => {
+    const supabase = createClient();
+    const updated = await updateJournalEntry(supabase, entryId, content);
+    setData((d) => ({
+      ...d,
+      todayJournalEntries: {
+        ...d.todayJournalEntries,
+        data: d.todayJournalEntries.data.map((e) => (e.id === entryId ? updated : e)),
+      },
+    }));
+  }, []);
 
   function openNewTask() {
     setEditingTask(null);
@@ -356,15 +377,6 @@ export function DashboardClient({
     setEditingEvent(event);
     setEventFormOpen(true);
   }
-  function focusJournalQuickAdd() {
-    journalInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    journalInputRef.current?.focus();
-  }
-  function handleSearchSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const q = searchQuery.trim();
-    router.push(q ? `/search?q=${encodeURIComponent(q)}` : "/search");
-  }
 
   const greeting = displayName ? `${getGreeting(clientHour)}, ${displayName}` : getGreeting(clientHour);
   const overdueCount = data.overdueTasks.data.length;
@@ -373,30 +385,11 @@ export function DashboardClient({
     <AppShell title="Dashboard">
       <div className="h-full flex flex-col gap-4 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {/* ── Header ── */}
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 shrink-0">
-          <div>
-            <h2 className="text-xl font-bold tracking-tight">{greeting}</h2>
-            <p className="text-sm text-[hsl(var(--muted-foreground))] mt-0.5">
-              {friendlyDate(clientToday)}
-            </p>
-          </div>
-          <form onSubmit={handleSearchSubmit} className="relative w-full sm:w-64">
-            <label htmlFor="dashboard-search" className="sr-only">
-              Search Planitary
-            </label>
-            <Search
-              aria-hidden="true"
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--muted-foreground))]"
-            />
-            <input
-              id="dashboard-search"
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search tasks, journal, events…"
-              className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-[hsl(var(--input))] bg-[hsl(var(--card))] focus:outline-none"
-            />
-          </form>
+        <div className="shrink-0">
+          <h2 className="text-xl font-bold tracking-tight">{greeting}</h2>
+          <p className="text-2xl font-semibold tracking-tight mt-1">
+            {friendlyDate(clientToday)}
+          </p>
         </div>
 
         {/* ── Mutation error banner ── */}
@@ -409,18 +402,6 @@ export function DashboardClient({
           </div>
         )}
 
-        {/* ── Quick actions ── */}
-        <div className="flex flex-wrap gap-2 shrink-0">
-          <QuickActionButton icon={CheckSquare} label="New Task" onClick={openNewTask} primary />
-          <QuickActionButton icon={CalendarDays} label="New Event" onClick={openNewEvent} primary />
-          <QuickActionButton icon={BookOpen} label="Add Journal Entry" onClick={focusJournalQuickAdd} primary />
-          <QuickActionButton
-            icon={Sparkles}
-            label="Generate Standup"
-            onClick={() => router.push("/journal?section=standup")}
-          />
-        </div>
-
         {/* ── Sections ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pb-2">
           {/* Main column */}
@@ -429,7 +410,16 @@ export function DashboardClient({
               icon={CheckSquare}
               iconClassName="text-blue-500"
               title="Today's tasks"
-              viewAllHref="/tasks"
+              headerAction={
+                <button
+                  type="button"
+                  onClick={openNewTask}
+                  className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add task
+                </button>
+              }
               error={data.todayTasks.error}
               onRetry={refetchAll}
               loading={refreshing}
@@ -472,28 +462,29 @@ export function DashboardClient({
               loading={refreshing}
               onRetry={refetchAll}
               onOpenEvent={openEditEvent}
+              onDeleteEvent={handleDeleteEvent}
               onCreateEvent={openNewEvent}
             />
 
             <JournalPreview
               entries={data.todayJournalEntries.data}
-              todayStr={clientToday}
               error={data.todayJournalEntries.error}
               loading={refreshing}
               onRetry={refetchAll}
               onQuickAdd={handleJournalQuickAdd}
+              onSave={handleSaveJournalEntry}
+              onDelete={handleDeleteJournalEntry}
               inputRef={journalInputRef}
             />
           </div>
 
-          {/* Secondary column */}
-          <div className="flex flex-col gap-4">
-            {overdueCount > 0 && (
+          {/* Secondary column — overdue only */}
+          {overdueCount > 0 && (
+            <div className="flex flex-col gap-4">
               <DashboardSection
                 icon={AlertTriangle}
                 iconClassName="text-red-500"
                 title="Overdue"
-                viewAllHref="/tasks"
                 error={data.overdueTasks.error}
                 onRetry={refetchAll}
                 loading={refreshing}
@@ -519,15 +510,8 @@ export function DashboardClient({
                   </a>
                 )}
               </DashboardSection>
-            )}
-
-            <WeeklyProgress
-              data={data.weeklyProgress.data}
-              error={data.weeklyProgress.error}
-              loading={refreshing}
-              onRetry={refetchAll}
-            />
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -555,36 +539,5 @@ export function DashboardClient({
         defaultDate={clientToday}
       />
     </AppShell>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Quick action button
-// ─────────────────────────────────────────────────────────────────────────────
-
-function QuickActionButton({
-  icon: Icon,
-  label,
-  onClick,
-  primary,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  onClick: () => void;
-  primary?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={
-        primary
-          ? "flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 transition-opacity cursor-pointer"
-          : "flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary))] hover:text-[hsl(var(--primary))] transition-colors cursor-pointer"
-      }
-    >
-      <Icon className="w-4 h-4" />
-      {label}
-    </button>
   );
 }

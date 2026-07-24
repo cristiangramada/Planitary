@@ -1,16 +1,14 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import Link from "next/link";
 import { cn } from "@/utils/cn";
 
 interface DashboardSectionProps {
   icon: LucideIcon;
   iconClassName?: string;
   title: string;
-  /** Optional "View all" style link shown at the top-right of the header. */
-  viewAllHref?: string;
-  viewAllLabel?: string;
+  /** Optional control shown at the top-right of the header (e.g. Add task). */
+  headerAction?: React.ReactNode;
   /** Section-level error message. Rendered in place of children when present. */
   error?: string | null;
   onRetry?: () => void;
@@ -28,8 +26,7 @@ export function DashboardSection({
   icon: Icon,
   iconClassName,
   title,
-  viewAllHref,
-  viewAllLabel = "View all",
+  headerAction,
   error,
   onRetry,
   loading,
@@ -56,14 +53,7 @@ export function DashboardSection({
             Refreshing…
           </span>
         )}
-        {viewAllHref && (
-          <Link
-            href={viewAllHref}
-            className="ml-auto text-xs font-medium text-[hsl(var(--primary))] hover:underline cursor-pointer"
-          >
-            {viewAllLabel}
-          </Link>
-        )}
+        {headerAction && <div className="ml-auto">{headerAction}</div>}
       </div>
 
       {error ? (
