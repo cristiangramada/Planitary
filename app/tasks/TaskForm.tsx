@@ -88,9 +88,16 @@ function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps)
   const [sessionTags, setSessionTags] = useState<TagFormItem[]>([]);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [confirmPos, setConfirmPos] = useState<{ top: number; left: number } | null>(null);
+  const [dropdownPos, setDropdownPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const inputWrapRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const confirmRef = useRef<HTMLDivElement>(null);
   const deleteBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
@@ -123,6 +130,22 @@ function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps)
     setConfirmPos(null);
   }, []);
 
+  const updateDropdownPos = useCallback(() => {
+    if (!inputWrapRef.current) return;
+    const r = inputWrapRef.current.getBoundingClientRect();
+    setDropdownPos({ top: r.bottom + 4, left: r.left, width: r.width });
+  }, []);
+
+  const openDropdown = useCallback(() => {
+    updateDropdownPos();
+    setShowDropdown(true);
+  }, [updateDropdownPos]);
+
+  const closeDropdown = useCallback(() => {
+    setShowDropdown(false);
+    setDropdownPos(null);
+  }, []);
+
   const openConfirm = useCallback((key: string, btn: HTMLButtonElement) => {
     const r = btn.getBoundingClientRect();
     const width = 224;
@@ -143,11 +166,11 @@ function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps)
         onChange([...selected, tag]);
       }
       setInput("");
-      setShowDropdown(false);
+      closeDropdown();
       setNewTagColor(PLANET_TAG_COLORS[2].color);
       closeConfirm();
     },
-    [selected, onChange, closeConfirm]
+    [selected, onChange, closeConfirm, closeDropdown]
   );
 
   const createNewTag = useCallback(() => {
@@ -210,7 +233,7 @@ function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps)
       if (confirmingDeleteId) {
         closeConfirm();
       } else {
-        setShowDropdown(false);
+        closeDropdown();
       }
     }
   }
@@ -219,14 +242,38 @@ function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps)
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (confirmingDeleteId) return;
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
-        setShowDropdown(false);
-      }
+      if (wrapRef.current?.contains(e.target as Node)) return;
+      if (dropdownRef.current?.contains(e.target as Node)) return;
+      closeDropdown();
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
-  }, [confirmingDeleteId]);
+  }, [confirmingDeleteId, closeDropdown]);
 
+  // Keep dropdown anchored while open; close if layout scrolls away awkwardly
+  useEffect(() => {
+    if (!showDropdown) return;
+    function onScroll(e: Event) {
+      if (dropdownRef.current?.contains(e.target as Node)) return;
+      updateDropdownPos();
+    }
+    function onResize() {
+      updateDropdownPos();
+    }
+    window.addEventListener("scroll", onScroll, { capture: true });
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("scroll", onScroll, { capture: true });
+      window.removeEventListener("resize", onResize);
+    };
+  }, [showDropdown, updateDropdownPos]);
+
+  // Re-anchor when selected tags change (badges above the input shift its position)
+  useEffect(() => {
+    if (!showDropdown) return;
+    const id = requestAnimationFrame(() => updateDropdownPos());
+    return () => cancelAnimationFrame(id);
+  }, [selected, showDropdown, updateDropdownPos]);
   // Close confirm on outside click, Escape, or scroll
   useEffect(() => {
     if (!confirmingDeleteId) return;
@@ -275,7 +322,10 @@ function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps)
 
       {/* Input + dropdown */}
       <div className="relative">
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[hsl(var(--input))] bg-[hsl(var(--background))] focus-within:ring-2 focus-within:ring-[hsl(var(--primary))] transition">
+        <div
+          ref={inputWrapRef}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[hsl(var(--input))] bg-[hsl(var(--background))] focus-within:ring-2 focus-within:ring-[hsl(var(--primary))] transition"
+        >
           <TagIcon className="w-3.5 h-3.5 text-[hsl(var(--muted-foreground))] shrink-0" />
           <input
             ref={inputRef}
@@ -283,108 +333,126 @@ function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps)
             value={input}
             onChange={(e) => {
               setInput(e.target.value);
-              setShowDropdown(true);
+              openDropdown();
               closeConfirm();
             }}
-            onFocus={() => setShowDropdown(true)}
-            onClick={() => setShowDropdown(true)}
+            onFocus={() => openDropdown()}
+            onClick={() => openDropdown()}
             onKeyDown={handleKeyDown}
             placeholder="Add tags… (type and press Enter)"
             className="flex-1 text-xs bg-transparent outline-none text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
           />
         </div>
 
-        {showDropdown && (filtered.length > 0 || canCreate) && (
-          <div className="absolute z-10 mt-1 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-lg py-1">
-            {filtered.map((tag) => {
-              const key = tagKey(tag);
-              return (
-              <div
-                key={key}
-                className="relative flex items-center gap-1 px-1 hover:bg-[hsl(var(--muted))] transition-colors"
-              >
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    addTag({ id: tag.id, name: tag.name, color: tag.color });
-                  }}
-                  className="flex items-center gap-2 flex-1 min-w-0 px-2 py-1.5 text-xs text-left cursor-pointer"
-                >
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: tag.color ?? "hsl(var(--muted-foreground))" }}
-                  />
-                  <span className="truncate">{tag.name}</span>
-                </button>
-                <button
-                  ref={(el) => {
-                    if (el) deleteBtnRefs.current.set(key, el);
-                    else deleteBtnRefs.current.delete(key);
-                  }}
-                  type="button"
-                  disabled={deletingId === key}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (confirmingDeleteId === key) {
-                      closeConfirm();
-                    } else {
-                      openConfirm(key, e.currentTarget);
-                    }
-                  }}
-                  className={cn(
-                    "shrink-0 p-1.5 rounded-md transition-colors cursor-pointer disabled:opacity-50",
-                    confirmingDeleteId === key
-                      ? "bg-red-500/10 text-red-500"
-                      : "text-[hsl(var(--muted-foreground))] hover:text-red-500 hover:bg-red-500/10"
-                  )}
-                  aria-label={`Delete tag ${tag.name}`}
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </div>
-              );
-            })}
-            {canCreate && (
-              <div className="mt-1 pt-1.5 pb-1 px-3">
-                <div className="flex items-center justify-between gap-1">
-                  {PLANET_TAG_COLORS.map(({ planet, color }) => (
+        {showDropdown &&
+          dropdownPos &&
+          (filtered.length > 0 || canCreate) &&
+          typeof document !== "undefined" &&
+          createPortal(
+            <div
+              ref={dropdownRef}
+              style={{
+                position: "fixed",
+                top: dropdownPos.top,
+                left: dropdownPos.left,
+                width: dropdownPos.width,
+                zIndex: 9998,
+              }}
+              className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-lg overflow-hidden"
+            >
+              {filtered.map((tag) => {
+                const key = tagKey(tag);
+                return (
+                  <div
+                    key={key}
+                    className="relative flex items-center gap-1 px-1 hover:bg-[hsl(var(--muted))] transition-colors"
+                  >
                     <button
-                      key={planet}
                       type="button"
-                      title={planet}
-                      aria-label={`${planet} color`}
-                      aria-pressed={newTagColor === color}
                       onMouseDown={(e) => {
                         e.preventDefault();
-                        setNewTagColor(color);
+                        addTag({ id: tag.id, name: tag.name, color: tag.color });
+                      }}
+                      className="flex items-center gap-2 flex-1 min-w-0 px-2 py-1.5 text-xs text-left cursor-pointer"
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{
+                          backgroundColor:
+                            tag.color ?? "hsl(var(--muted-foreground))",
+                        }}
+                      />
+                      <span className="truncate">{tag.name}</span>
+                    </button>
+                    <button
+                      ref={(el) => {
+                        if (el) deleteBtnRefs.current.set(key, el);
+                        else deleteBtnRefs.current.delete(key);
+                      }}
+                      type="button"
+                      disabled={deletingId === key}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (confirmingDeleteId === key) {
+                          closeConfirm();
+                        } else {
+                          openConfirm(key, e.currentTarget);
+                        }
                       }}
                       className={cn(
-                        "w-5 h-5 rounded-full shrink-0 transition-transform cursor-pointer",
-                        newTagColor === color
-                          ? "ring-2 ring-offset-2 ring-offset-[hsl(var(--card))] ring-[hsl(var(--foreground))] scale-110"
-                          : "hover:scale-110 opacity-80 hover:opacity-100"
+                        "shrink-0 p-1.5 rounded-md transition-colors cursor-pointer disabled:opacity-50",
+                        confirmingDeleteId === key
+                          ? "bg-red-500/10 text-red-500"
+                          : "text-[hsl(var(--muted-foreground))] hover:text-red-500 hover:bg-red-500/10"
                       )}
-                      style={{ backgroundColor: color }}
-                    />
-                  ))}
+                      aria-label={`Delete tag ${tag.name}`}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              })}
+              {canCreate && (
+                <div className={cn("pt-1.5 pb-1 px-3", filtered.length > 0 && "mt-0")}>
+                  <div className="flex items-center justify-between gap-1">
+                    {PLANET_TAG_COLORS.map(({ planet, color }) => (
+                      <button
+                        key={planet}
+                        type="button"
+                        title={planet}
+                        aria-label={`${planet} color`}
+                        aria-pressed={newTagColor === color}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setNewTagColor(color);
+                        }}
+                        className={cn(
+                          "w-5 h-5 rounded-full shrink-0 transition-transform cursor-pointer",
+                          newTagColor === color
+                            ? "ring-2 ring-offset-2 ring-offset-[hsl(var(--card))] ring-[hsl(var(--foreground))] scale-110"
+                            : "hover:scale-110 opacity-80 hover:opacity-100"
+                        )}
+                        style={{ backgroundColor: color }}
+                      />
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      createNewTag();
+                    }}
+                    className="flex items-center gap-2 w-full mt-3 py-1 text-xs text-[hsl(var(--primary))] hover:opacity-80 transition-opacity text-left cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Create &ldquo;{trimmedInput}&rdquo;
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    createNewTag();
-                  }}
-                  className="flex items-center gap-2 w-full mt-3 py-1 text-xs text-[hsl(var(--primary))] hover:opacity-80 transition-opacity text-left cursor-pointer"
-                >
-                  <Plus className="w-3 h-3" />
-                  Create &ldquo;{trimmedInput}&rdquo;
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>,
+            document.body
+          )}
       </div>
 
       {confirmingTag &&
