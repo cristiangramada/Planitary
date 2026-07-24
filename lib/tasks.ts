@@ -99,10 +99,19 @@ export interface TagFormItem {
   color: string | null;
 }
 
-const TAG_COLORS = [
-  "#6366f1", "#8b5cf6", "#ec4899", "#ef4444",
-  "#f97316", "#eab308", "#22c55e", "#06b6d4", "#3b82f6",
-];
+/** Eight planet-inspired tag colors (Mercury → Neptune), kept visually distinct. */
+export const PLANET_TAG_COLORS = [
+  { planet: "Mercury", color: "#94A3B8" }, // cool slate gray
+  { planet: "Venus",   color: "#EAB308" }, // bright gold-yellow
+  { planet: "Earth",   color: "#16A34A" }, // verdant green
+  { planet: "Mars",    color: "#DC2626" }, // iron red
+  { planet: "Jupiter", color: "#EA580C" }, // banded orange
+  { planet: "Saturn",  color: "#D4A574" }, // pale bronze
+  { planet: "Uranus",  color: "#14B8A6" }, // icy teal
+  { planet: "Neptune", color: "#2563EB" }, // deep ocean blue
+] as const;
+
+const TAG_COLORS = PLANET_TAG_COLORS.map((p) => p.color);
 
 function pickColor(name: string): string {
   let hash = 0;
@@ -263,6 +272,15 @@ export async function deleteTask(
   taskId: string
 ): Promise<void> {
   const { error } = await supabase.from("tasks").delete().eq("id", taskId);
+  if (error) throw error;
+}
+
+/** Deletes a tag (cascades task_tags via DB constraints). */
+export async function deleteTag(
+  supabase: SupabaseClient,
+  tagId: string
+): Promise<void> {
+  const { error } = await supabase.from("tags").delete().eq("id", tagId);
   if (error) throw error;
 }
 

@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, ChevronDown, ChevronRight, SortAsc, CheckSquare } from "lucide-react";
+import { Plus, ChevronDown, ChevronRight, SortAsc, CheckSquare, Tag as TagIcon } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { TagBadge } from "@/components/ui/TagBadge";
 import { TaskCard } from "./TaskCard";
 import { TaskForm } from "./TaskForm";
 import { cn } from "@/utils/cn";
@@ -13,6 +15,7 @@ import {
   createTask,
   updateTask,
   deleteTask,
+  deleteTag,
   setTaskComplete,
   setSubtaskComplete,
 } from "@/lib/tasks";
@@ -75,7 +78,12 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
   const [tasks, setTasks] = useState<TaskWithDetails[]>(initialTasks);
   const [allTags, setAllTags] = useState<Tag[]>(initialTags);
   const [sortBy, setSortBy] = useState<SortKey>("priority");
-  const [filterBy, setFilterBy] = useState<FilterKey>("all");
+  const [filterBy, setFilterBy] = useState<FilterKey>("active");
+  const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
+  const [confirmingTag, setConfirmingTag] = useState<Tag | null>(null);
+  const [confirmPos, setConfirmPos] = useState<{ top: number; left: number } | null>(null);
+  const [deletingTag, setDeletingTag] = useState(false);
+  const confirmRef = useRef<HTMLDivElement>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskWithDetails | null>(null);
   const [completedExpanded, setCompletedExpanded] = useState(false);
@@ -104,13 +112,25 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
   // Derived state
   // ---------------------------------------------------------------------------
 
+  const sortedTags = useMemo(
+    () => [...allTags].sort((a, b) => a.name.localeCompare(b.name)),
+    [allTags]
+  );
+
   const { activeTasks, completedTasks } = useMemo(() => {
-    const sorted = sortTasks(tasks, sortBy);
+    const scoped = selectedTagId
+      ? tasks.filter((t) => t.tags.some((tag) => tag.id === selectedTagId))
+      : tasks;
+    const sorted = sortTasks(scoped, sortBy);
     return {
       activeTasks: sorted.filter((t) => t.status === "active"),
       completedTasks: sorted.filter((t) => t.status === "completed"),
     };
-  }, [tasks, sortBy]);
+  }, [tasks, sortBy, selectedTagId]);
+
+  const selectedTag = selectedTagId
+    ? allTags.find((t) => t.id === selectedTagId) ?? null
+    : null;
 
   const visibleActive =
     filterBy === "completed" ? [] : activeTasks;
@@ -181,6 +201,75 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
       setError(err instanceof Error ? err.message : "Failed to delete task.");
     }
   }, []);
+
+  const handleDeleteTag = useCallback(async (tagId: string) => {
+    const supabase = createClient();
+    await deleteTag(supabase, tagId);
+    setAllTags((prev) => prev.filter((t) => t.id !== tagId));
+    setTasks((prev) =>
+      prev.map((task) => ({
+        ...task,
+        tags: task.tags.filter((t) => t.id !== tagId),
+      }))
+    );
+    setSelectedTagId((prev) => (prev === tagId ? null : prev));
+  }, []);
+
+  const closeTagConfirm = useCallback(() => {
+    setConfirmingTag(null);
+    setConfirmPos(null);
+  }, []);
+
+  const openTagDeleteConfirm = useCallback((tag: Tag, e: React.MouseEvent) => {
+    e.preventDefault();
+    const width = 224;
+    const height = 110;
+    let top = e.clientY + 8;
+    if (top + height > window.innerHeight - 8) {
+      top = Math.max(8, e.clientY - height - 8);
+    }
+    let left = e.clientX;
+    left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+    setConfirmPos({ top, left });
+    setConfirmingTag(tag);
+  }, []);
+
+  const confirmDeleteTagFromList = useCallback(async () => {
+    if (!confirmingTag || deletingTag) return;
+    setDeletingTag(true);
+    try {
+      await handleDeleteTag(confirmingTag.id);
+      closeTagConfirm();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete tag.");
+      closeTagConfirm();
+    } finally {
+      setDeletingTag(false);
+    }
+  }, [confirmingTag, deletingTag, handleDeleteTag, closeTagConfirm]);
+
+  // Close tag delete confirm on outside click, Escape, or scroll
+  useEffect(() => {
+    if (!confirmingTag) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") closeTagConfirm();
+    }
+    function onOutside(e: MouseEvent) {
+      if (confirmRef.current?.contains(e.target as Node)) return;
+      closeTagConfirm();
+    }
+    function onScroll() {
+      closeTagConfirm();
+    }
+    window.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onOutside);
+    window.addEventListener("scroll", onScroll, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onOutside);
+      window.removeEventListener("scroll", onScroll, { capture: true });
+    };
+  }, [confirmingTag, closeTagConfirm]);
 
   const handleToggleComplete = useCallback(
     async (taskId: string, shouldComplete: boolean) => {
@@ -281,7 +370,11 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
   };
 
   const FILTER_TABS: { key: FilterKey; label: string; count?: number }[] = [
-    { key: "all", label: "All", count: tasks.length },
+    {
+      key: "all",
+      label: "All",
+      count: selectedTagId ? activeTasks.length + completedTasks.length : tasks.length,
+    },
     { key: "active", label: "Active", count: activeTasks.length },
     { key: "completed", label: "Completed", count: completedTasks.length },
   ];
@@ -364,7 +457,7 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
         )}
 
         {/* Filter tabs */}
-        <div className="flex gap-1 p-1 rounded-lg bg-[hsl(var(--muted))] mb-5 w-fit shrink-0">
+        <div className="flex gap-1 p-1 rounded-lg bg-[hsl(var(--muted))] mb-4 w-fit shrink-0">
           {FILTER_TABS.map(({ key, label, count }) => (
             <button
               key={key}
@@ -393,26 +486,144 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
           ))}
         </div>
 
+        {/* Tag filters */}
+        {sortedTags.length > 0 && (
+          <div className="mb-5 shrink-0">
+            <div className="flex items-center gap-1.5 mb-2">
+              <TagIcon className="w-3.5 h-3.5 text-[hsl(var(--muted-foreground))]" />
+              <p className="text-xs font-medium uppercase tracking-wide text-[hsl(var(--muted-foreground))]">
+                Tags
+              </p>
+              {selectedTag && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedTagId(null)}
+                  className="ml-auto text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {sortedTags.map((tag) => (
+                <TagBadge
+                  key={tag.id}
+                  tag={tag}
+                  selected={selectedTagId === tag.id}
+                  onClick={() =>
+                    setSelectedTagId((prev) => (prev === tag.id ? null : tag.id))
+                  }
+                  onContextMenu={(e) => openTagDeleteConfirm(tag, e)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {confirmingTag &&
+          confirmPos &&
+          typeof document !== "undefined" &&
+          createPortal(
+            <div
+              ref={confirmRef}
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="delete-tag-list-title"
+              style={{
+                position: "fixed",
+                top: confirmPos.top,
+                left: confirmPos.left,
+                zIndex: 9999,
+              }}
+              className="w-56 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-xl p-3"
+            >
+              <p id="delete-tag-list-title" className="text-sm font-medium mb-1">
+                Delete tag &ldquo;{confirmingTag.name}&rdquo;?
+              </p>
+              <p className="text-xs text-[hsl(var(--muted-foreground))] mb-3">
+                It will be removed from all tasks.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    closeTagConfirm();
+                  }}
+                  className="flex-1 py-1.5 text-xs font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={deletingTag}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    void confirmDeleteTagFromList();
+                  }}
+                  className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:opacity-60 transition-colors cursor-pointer"
+                >
+                  {deletingTag ? "Deleting…" : "Delete"}
+                </button>
+              </div>
+            </div>,
+            document.body
+          )}
         {/* Scrollable task list */}
         <div className="flex-1 overflow-y-auto min-h-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 
         {/* Active tasks */}
         {filterBy !== "completed" && (
           <div className="space-y-2 mb-4">
-            {visibleActive.length === 0 && filterBy !== "all" && (
+            {selectedTag &&
+              activeTasks.length === 0 &&
+              completedTasks.length === 0 && (
+              <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
+                <EmptyState
+                  icon={TagIcon}
+                  title={`No tasks with “${selectedTag.name}”`}
+                  description="Try another tag, or clear the filter to see all tasks."
+                  action={
+                    <button
+                      onClick={() => setSelectedTagId(null)}
+                      className="px-4 py-2 text-sm font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
+                    >
+                      Clear tag filter
+                    </button>
+                  }
+                />
+              </div>
+            )}
+
+            {visibleActive.length === 0 &&
+              filterBy === "active" &&
+              !(selectedTag && activeTasks.length === 0 && completedTasks.length === 0) && (
               <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
                 <EmptyState
                   icon={CheckSquare}
-                  title="No active tasks"
-                  description="All caught up! Create a new task to get started."
+                  title={selectedTag ? `No active tasks with “${selectedTag.name}”` : "No active tasks"}
+                  description={
+                    selectedTag
+                      ? "There are no active tasks with this tag."
+                      : "All caught up! Create a new task to get started."
+                  }
                   action={
-                    <button
-                      onClick={openCreate}
-                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 transition-opacity cursor-pointer"
-                    >
-                      <Plus className="w-4 h-4" />
-                      New task
-                    </button>
+                    selectedTag ? (
+                      <button
+                        onClick={() => setSelectedTagId(null)}
+                        className="px-4 py-2 text-sm font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
+                      >
+                        Clear tag filter
+                      </button>
+                    ) : (
+                      <button
+                        onClick={openCreate}
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 transition-opacity cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                        New task
+                      </button>
+                    )
                   }
                 />
               </div>
@@ -494,6 +705,7 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
           setEditingTask(null);
         }}
         onSave={handleSave}
+        onDeleteTag={handleDeleteTag}
         editTask={editingTask}
         allTags={allTags}
       />
