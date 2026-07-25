@@ -347,7 +347,7 @@ export function CalendarClient({
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <AppShell>
+    <AppShell flushTop>
       <div className="h-full flex flex-col">
         {/* ── Error banner ── */}
         {error && (

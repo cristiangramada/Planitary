@@ -8,7 +8,6 @@ import {
   CalendarDays,
   BookOpen,
   Search,
-  BarChart2,
   User,
   Globe,
 } from "lucide-react";
@@ -20,7 +19,6 @@ const navItems = [
   { label: "Calendar", href: "/calendar", icon: CalendarDays },
   { label: "Journal", href: "/journal", icon: BookOpen },
   { label: "Search", href: "/search", icon: Search },
-  { label: "Summary", href: "/summary", icon: BarChart2 },
 ];
 
 function navLinkClass(active: boolean) {

@@ -358,12 +358,13 @@ export function DashboardClient({
   const greeting = displayName ? `${getGreeting(clientHour)}, ${displayName}` : getGreeting(clientHour);
 
   return (
-    <AppShell>
+    <AppShell
+      topBar={<h2 className="text-xl font-bold tracking-tight">{greeting}</h2>}
+    >
       <div className="h-full flex flex-col gap-4 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {/* ── Header ── */}
         <div className="shrink-0">
-          <h2 className="text-xl font-bold tracking-tight">{greeting}</h2>
-          <p className="text-3xl font-semibold tracking-tight mt-4">
+          <p className="text-3xl font-semibold tracking-tight">
             {friendlyDate(clientToday)}
           </p>
         </div>

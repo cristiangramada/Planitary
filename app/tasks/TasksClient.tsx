@@ -417,8 +417,8 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
   ];
 
   return (
-    <AppShell>
-      <div className="h-full flex flex-col max-w-3xl mx-auto">
+    <AppShell flushTop>
+      <div className="h-full flex flex-col max-w-3xl mx-auto pt-4">
         {/* Page header */}
         <div className="flex items-center justify-between mb-5 shrink-0">
           <div>
