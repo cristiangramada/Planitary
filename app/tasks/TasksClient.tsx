@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, ChevronDown, ChevronRight, SortAsc, CheckSquare, Tag as TagIcon } from "lucide-react";
+import { Plus, SortAsc, CheckSquare, Tag as TagIcon } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { TagBadge } from "@/components/ui/TagBadge";
@@ -99,7 +99,6 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
   const confirmRef = useRef<HTMLDivElement>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskWithDetails | null>(null);
-  const [completedExpanded, setCompletedExpanded] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -727,32 +726,23 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
         {/* Completed section */}
         {filterBy !== "active" && filterBy !== "overdue" && visibleCompleted.length > 0 && (
           <div>
-            <button
-              onClick={() => setCompletedExpanded((v) => !v)}
-              className="flex items-center gap-2 text-sm font-medium text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors mb-3 cursor-pointer"
-            >
-              {completedExpanded ? (
-                <ChevronDown className="w-4 h-4" />
-              ) : (
-                <ChevronRight className="w-4 h-4" />
-              )}
-              Completed ({visibleCompleted.length})
-            </button>
-
-            {completedExpanded && (
-              <div className="space-y-2">
-                {visibleCompleted.map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onEdit={openEdit}
-                    onDelete={handleDelete}
-                    onToggleComplete={handleToggleComplete}
-                    onToggleSubtask={handleToggleSubtask}
-                  />
-                ))}
-              </div>
+            {filterBy === "all" && (
+              <h3 className="text-sm font-medium text-[hsl(var(--muted-foreground))] mb-3">
+                Completed ({visibleCompleted.length})
+              </h3>
             )}
+            <div className="space-y-2">
+              {visibleCompleted.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  onEdit={openEdit}
+                  onDelete={handleDelete}
+                  onToggleComplete={handleToggleComplete}
+                  onToggleSubtask={handleToggleSubtask}
+                />
+              ))}
+            </div>
           </div>
         )}
 
