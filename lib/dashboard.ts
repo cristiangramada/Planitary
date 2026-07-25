@@ -3,7 +3,6 @@ import type { CalendarEvent, JournalEntry, TaskWithDetails } from "@/types";
 import { shiftDateStr } from "@/utils/date";
 import {
   fetchTasksDueOn,
-  fetchOverdueActiveTasks,
   TASK_PRIORITY_ORDER,
 } from "@/lib/tasks";
 import { fetchJournalEntriesByDate } from "@/lib/journal";
@@ -34,7 +33,6 @@ async function settle<T>(
 
 export interface DashboardData {
   todayTasks: DashboardSection<TaskWithDetails[]>;
-  overdueTasks: DashboardSection<TaskWithDetails[]>;
   todayEvents: DashboardSection<CalendarEvent[]>;
   todayJournalEntries: DashboardSection<JournalEntry[]>;
 }
@@ -59,9 +57,8 @@ export async function fetchDashboardData(
 ): Promise<DashboardData> {
   const tomorrowStr = shiftDateStr(todayStr, 1);
 
-  const [todayTasks, overdueTasks, todayEvents, todayJournalEntries] = await Promise.all([
+  const [todayTasks, todayEvents, todayJournalEntries] = await Promise.all([
     settle(fetchTasksDueOn(supabase, todayStr), [], "Couldn't load today's tasks."),
-    settle(fetchOverdueActiveTasks(supabase, todayStr), [], "Couldn't load overdue tasks."),
     settle(
       fetchEventsBetween(supabase, todayStr, tomorrowStr),
       [],
@@ -76,7 +73,6 @@ export async function fetchDashboardData(
 
   return {
     todayTasks: { data: sortTodayTasks(todayTasks.data), error: todayTasks.error },
-    overdueTasks,
     todayEvents,
     todayJournalEntries,
   };

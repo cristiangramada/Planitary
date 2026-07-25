@@ -91,17 +91,10 @@ export function DashboardSkeletonRows({ count = 3 }: { count?: number }) {
 }
 
 /** Compact empty state for a Dashboard section (lighter than the full-page EmptyState). */
-export function DashboardEmptyState({
-  message,
-  action,
-}: {
-  message: string;
-  action?: React.ReactNode;
-}) {
+export function DashboardEmptyState({ message }: { message: string }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 py-6 text-center">
+    <div className="flex flex-col items-center justify-center py-6 text-center">
       <p className="text-sm text-[hsl(var(--muted-foreground))]">{message}</p>
-      {action}
     </div>
   );
 }

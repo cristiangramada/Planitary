@@ -79,19 +79,7 @@ export function EventsPreview({
       {loading ? (
         <DashboardSkeletonRows count={3} />
       ) : visible.length === 0 ? (
-        <DashboardEmptyState
-          message="No events scheduled today."
-          action={
-            <button
-              type="button"
-              onClick={onCreateEvent}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[hsl(var(--border))] hover:border-[hsl(var(--primary))] hover:text-[hsl(var(--primary))] transition-colors cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add an event
-            </button>
-          }
-        />
+        <DashboardEmptyState message="No events scheduled today." />
       ) : (
         <div className="space-y-1.5">
           {visible.map((event) => {

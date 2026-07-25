@@ -13,6 +13,7 @@ import {
 import { cn } from "@/utils/cn";
 import { PriorityBadge } from "@/components/ui/PriorityBadge";
 import { TagBadge } from "@/components/ui/TagBadge";
+import { AgendaItemContextMenu } from "@/app/calendar/AgendaItemContextMenu";
 import { relativeDate, formatDate, parseDateOnly } from "@/utils/date";
 import { formatTimeValue } from "@/components/ui/TimeDropdown";
 import type { TaskWithDetails } from "@/types";
@@ -34,6 +35,7 @@ export function TaskCard({
 }: TaskCardProps) {
   const [subtasksExpanded, setSubtasksExpanded] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const confirmRef = useRef<HTMLDivElement>(null);
 
   // Close confirmation on outside click or Escape
@@ -65,8 +67,16 @@ export function TaskCard({
     hasDue &&
     parseDateOnly(task.due_date!) < new Date(new Date().toDateString());
 
+  function handleContextMenu(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setConfirmingDelete(false);
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }
+
   return (
     <div
+      onContextMenu={handleContextMenu}
       className={cn(
         "group rounded-xl border bg-[hsl(var(--card))] transition-colors",
         isCompleted
@@ -299,6 +309,17 @@ export function TaskCard({
             </button>
           ))}
         </div>
+      )}
+
+      {contextMenu && (
+        <AgendaItemContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          kind="task"
+          onEdit={() => onEdit(task)}
+          onDelete={() => onDelete(task.id)}
+          onClose={() => setContextMenu(null)}
+        />
       )}
     </div>
   );

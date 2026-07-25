@@ -22,13 +22,14 @@ import {
 } from "@/lib/tasks";
 import type { TaskWithDetails, Tag } from "@/types";
 import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
+import { localTodayStr } from "@/utils/date";
 
 // ---------------------------------------------------------------------------
 // Sorting helpers
 // ---------------------------------------------------------------------------
 
 type SortKey = "priority" | "due_date" | "created_at";
-type FilterKey = "all" | "active" | "completed";
+type FilterKey = "all" | "active" | "overdue" | "completed";
 
 const PRIORITY_ORDER = TASK_PRIORITY_ORDER;
 
@@ -118,13 +119,16 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
     [allTags]
   );
 
-  const { activeTasks, completedTasks } = useMemo(() => {
+  const { activeTasks, overdueTasks, completedTasks } = useMemo(() => {
+    const today = localTodayStr();
     const scoped = selectedTagId
       ? tasks.filter((t) => t.tags.some((tag) => tag.id === selectedTagId))
       : tasks;
     const sorted = sortTasks(scoped, sortBy);
+    const active = sorted.filter((t) => t.status === "active");
     return {
-      activeTasks: sorted.filter((t) => t.status === "active"),
+      activeTasks: active,
+      overdueTasks: active.filter((t) => !!t.due_date && t.due_date < today),
       completedTasks: sorted.filter((t) => t.status === "completed"),
     };
   }, [tasks, sortBy, selectedTagId]);
@@ -134,9 +138,13 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
     : null;
 
   const visibleActive =
-    filterBy === "completed" ? [] : activeTasks;
+    filterBy === "completed"
+      ? []
+      : filterBy === "overdue"
+        ? overdueTasks
+        : activeTasks;
   const visibleCompleted =
-    filterBy === "active" ? [] : completedTasks;
+    filterBy === "active" || filterBy === "overdue" ? [] : completedTasks;
 
   // ---------------------------------------------------------------------------
   // Mutations
@@ -377,6 +385,7 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
       count: selectedTagId ? activeTasks.length + completedTasks.length : tasks.length,
     },
     { key: "active", label: "Active", count: activeTasks.length },
+    { key: "overdue", label: "Overdue", count: overdueTasks.length },
     { key: "completed", label: "Completed", count: completedTasks.length },
   ];
 
@@ -387,9 +396,6 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
         <div className="flex items-center justify-between mb-5 shrink-0">
           <div>
             <h2 className="text-xl font-bold">My Tasks</h2>
-            <p className="text-sm text-[hsl(var(--muted-foreground))] mt-0.5">
-              {activeTasks.length} active · {completedTasks.length} completed
-            </p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -630,6 +636,32 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
               </div>
             )}
 
+            {visibleActive.length === 0 &&
+              filterBy === "overdue" &&
+              !(selectedTag && activeTasks.length === 0 && completedTasks.length === 0) && (
+              <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
+                <EmptyState
+                  icon={CheckSquare}
+                  title={selectedTag ? `No overdue tasks with “${selectedTag.name}”` : "No overdue tasks"}
+                  description={
+                    selectedTag
+                      ? "There are no overdue tasks with this tag."
+                      : "You're all caught up — nothing past due."
+                  }
+                  action={
+                    selectedTag ? (
+                      <button
+                        onClick={() => setSelectedTagId(null)}
+                        className="px-4 py-2 text-sm font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
+                      >
+                        Clear tag filter
+                      </button>
+                    ) : undefined
+                  }
+                />
+              </div>
+            )}
+
             {/* Empty state for very first task */}
             {tasks.length === 0 && (
               <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
@@ -664,7 +696,7 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
         )}
 
         {/* Completed section */}
-        {filterBy !== "active" && visibleCompleted.length > 0 && (
+        {filterBy !== "active" && filterBy !== "overdue" && visibleCompleted.length > 0 && (
           <div>
             <button
               onClick={() => setCompletedExpanded((v) => !v)}

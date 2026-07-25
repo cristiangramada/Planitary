@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CheckSquare,
   Plus,
-  AlertTriangle,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { TaskCard } from "@/app/tasks/TaskCard";
@@ -120,30 +119,17 @@ export function DashboardClient({
   const placeTask = useCallback(
     (task: TaskWithDetails) => {
       setData((d) => {
-        const withoutTask = {
-          todayTasks: d.todayTasks.data.filter((t) => t.id !== task.id),
-          overdueTasks: d.overdueTasks.data.filter((t) => t.id !== task.id),
-        };
+        const withoutTask = d.todayTasks.data.filter((t) => t.id !== task.id);
         const isActive = task.status === "active";
         const dueToday = task.due_date === clientToday;
-        const isOverdue = !!task.due_date && task.due_date < clientToday;
         return {
           ...d,
           todayTasks: {
             ...d.todayTasks,
             data:
               isActive && dueToday
-                ? sortTodayTasks([...withoutTask.todayTasks, task])
-                : withoutTask.todayTasks,
-          },
-          overdueTasks: {
-            ...d.overdueTasks,
-            data:
-              isActive && isOverdue
-                ? [...withoutTask.overdueTasks, task].sort((a, b) =>
-                    (a.due_date ?? "").localeCompare(b.due_date ?? "")
-                  )
-                : withoutTask.overdueTasks,
+                ? sortTodayTasks([...withoutTask, task])
+                : withoutTask,
           },
         };
       });
@@ -155,10 +141,6 @@ export function DashboardClient({
     setData((d) => ({
       ...d,
       todayTasks: { ...d.todayTasks, data: d.todayTasks.data.filter((t) => t.id !== taskId) },
-      overdueTasks: {
-        ...d.overdueTasks,
-        data: d.overdueTasks.data.filter((t) => t.id !== taskId),
-      },
     }));
   }, []);
 
@@ -204,10 +186,6 @@ export function DashboardClient({
         ...d.todayTasks,
         data: d.todayTasks.data.map((t) => ({ ...t, tags: t.tags.filter((tg) => tg.id !== tagId) })),
       },
-      overdueTasks: {
-        ...d.overdueTasks,
-        data: d.overdueTasks.data.map((t) => ({ ...t, tags: t.tags.filter((tg) => tg.id !== tagId) })),
-      },
     }));
   }, []);
 
@@ -238,7 +216,6 @@ export function DashboardClient({
         return {
           ...d,
           todayTasks: { ...d.todayTasks, data: patch(d.todayTasks.data) },
-          overdueTasks: { ...d.overdueTasks, data: patch(d.overdueTasks.data) },
         };
       });
       try {
@@ -379,7 +356,6 @@ export function DashboardClient({
   }
 
   const greeting = displayName ? `${getGreeting(clientHour)}, ${displayName}` : getGreeting(clientHour);
-  const overdueCount = data.overdueTasks.data.length;
 
   return (
     <AppShell title="Dashboard">
@@ -403,9 +379,7 @@ export function DashboardClient({
         )}
 
         {/* ── Sections ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pb-2">
-          {/* Main column */}
-          <div className="lg:col-span-2 flex flex-col gap-4">
+        <div className="flex flex-col gap-4 pb-2 max-w-4xl">
             <DashboardSection
               icon={CheckSquare}
               iconClassName="text-blue-500"
@@ -427,19 +401,7 @@ export function DashboardClient({
               {refreshing && data.todayTasks.data.length === 0 ? (
                 <DashboardSkeletonRows />
               ) : data.todayTasks.data.length === 0 ? (
-                <DashboardEmptyState
-                  message="No tasks due today."
-                  action={
-                    <button
-                      type="button"
-                      onClick={openNewTask}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-[hsl(var(--border))] hover:border-[hsl(var(--primary))] hover:text-[hsl(var(--primary))] transition-colors cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Add a task
-                    </button>
-                  }
-                />
+                <DashboardEmptyState message="No tasks due today." />
               ) : (
                 <div className="space-y-2">
                   {data.todayTasks.data.slice(0, 8).map((task) => (
@@ -476,42 +438,6 @@ export function DashboardClient({
               onDelete={handleDeleteJournalEntry}
               inputRef={journalInputRef}
             />
-          </div>
-
-          {/* Secondary column — overdue only */}
-          {overdueCount > 0 && (
-            <div className="flex flex-col gap-4">
-              <DashboardSection
-                icon={AlertTriangle}
-                iconClassName="text-red-500"
-                title="Overdue"
-                error={data.overdueTasks.error}
-                onRetry={refetchAll}
-                loading={refreshing}
-              >
-                <div className="space-y-2">
-                  {data.overdueTasks.data.slice(0, 6).map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      onEdit={openEditTask}
-                      onDelete={handleDeleteTask}
-                      onToggleComplete={handleToggleComplete}
-                      onToggleSubtask={handleToggleSubtask}
-                    />
-                  ))}
-                </div>
-                {data.overdueTasks.data.length > 6 && (
-                  <a
-                    href="/tasks"
-                    className="block mt-2 text-center text-xs font-medium text-[hsl(var(--primary))] hover:underline"
-                  >
-                    View all overdue tasks
-                  </a>
-                )}
-              </DashboardSection>
-            </div>
-          )}
         </div>
       </div>
 

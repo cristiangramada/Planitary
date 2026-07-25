@@ -82,23 +82,6 @@ export async function fetchTasksDueOn(
   return ((data as RawTaskRow[]) ?? []).map(normalize);
 }
 
-/** Fetches active tasks due before a local date (YYYY-MM-DD), oldest due date first. */
-export async function fetchOverdueActiveTasks(
-  supabase: SupabaseClient,
-  beforeDateStr: string
-): Promise<TaskWithDetails[]> {
-  const { data, error } = await supabase
-    .from("tasks")
-    .select(TASK_SELECT)
-    .eq("status", "active")
-    .not("due_date", "is", null)
-    .lt("due_date", beforeDateStr)
-    .order("due_date", { ascending: true });
-
-  if (error) throw error;
-  return ((data as RawTaskRow[]) ?? []).map(normalize);
-}
-
 /**
  * Counts tasks completed within [weekStart, weekEnd] (inclusive, local dates) and
  * active tasks due within that same range — the two inputs to Dashboard Weekly progress.
