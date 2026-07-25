@@ -7,7 +7,6 @@ import {
   ChevronDown,
   ChevronRight,
   Calendar,
-  RotateCcw,
   Clock,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -202,24 +201,13 @@ export function TaskCard({
             confirmingDelete ? "opacity-100" : "opacity-0 group-hover:opacity-100"
           )}
         >
-          {isCompleted ? (
-            <button
-              onClick={() => onToggleComplete(task.id, false)}
-              title="Reopen task"
-              className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Reopen
-            </button>
-          ) : (
-            <button
-              onClick={() => onEdit(task)}
-              title="Edit task"
-              className="p-1.5 rounded-md text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-          )}
+          <button
+            onClick={() => onEdit(task)}
+            title="Edit task"
+            className="p-1.5 rounded-md text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
           <button
             onClick={() => setConfirmingDelete(true)}
             title="Delete task"
