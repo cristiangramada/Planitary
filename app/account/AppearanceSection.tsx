@@ -8,8 +8,7 @@ import { AccountCard } from "./AccountCard";
 
 /**
  * Uses useSyncExternalStore to correctly detect client-side rendering without
- * triggering the react-hooks/set-state-in-effect lint rule (same pattern as
- * ThemeToggle).
+ * triggering the react-hooks/set-state-in-effect lint rule.
  */
 function useIsClient() {
   return useSyncExternalStore(
