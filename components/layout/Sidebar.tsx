@@ -9,6 +9,7 @@ import {
   BookOpen,
   Search,
   BarChart2,
+  User,
   Globe,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -21,6 +22,7 @@ const navItems = [
   { label: "Journal", href: "/journal", icon: BookOpen },
   { label: "Search", href: "/search", icon: Search },
   { label: "Summary", href: "/summary", icon: BarChart2 },
+  { label: "Account", href: "/account", icon: User },
 ];
 
 export function Sidebar() {
