@@ -23,12 +23,17 @@ import {
 import type { TaskWithDetails, Tag } from "@/types";
 import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
 import { localTodayStr } from "@/utils/date";
+import {
+  readTasksSortPreference,
+  writeTasksSortPreference,
+  type TasksSortKey,
+} from "@/lib/tasks-sort-preference";
 
 // ---------------------------------------------------------------------------
 // Sorting helpers
 // ---------------------------------------------------------------------------
 
-type SortKey = "priority" | "due_date" | "created_at" | "created_oldest";
+type SortKey = TasksSortKey;
 type FilterKey = "all" | "active" | "overdue" | "completed";
 
 const PRIORITY_ORDER = TASK_PRIORITY_ORDER;
@@ -75,14 +80,17 @@ function sortTasks(tasks: TaskWithDetails[], sortBy: SortKey): TaskWithDetails[]
 interface TasksClientProps {
   initialTasks: TaskWithDetails[];
   initialTags: Tag[];
+  userId: string;
 }
 
-export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
+export function TasksClient({ initialTasks, initialTags, userId }: TasksClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [tasks, setTasks] = useState<TaskWithDetails[]>(initialTasks);
   const [allTags, setAllTags] = useState<Tag[]>(initialTags);
+  // Default matches SSR; restored preference applied after mount to avoid hydration mismatch.
   const [sortBy, setSortBy] = useState<SortKey>("priority");
+  const [sortReady, setSortReady] = useState(false);
   const [filterBy, setFilterBy] = useState<FilterKey>("active");
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
   const [confirmingTag, setConfirmingTag] = useState<Tag | null>(null);
@@ -94,6 +102,23 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
   const [completedExpanded, setCompletedExpanded] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ---------------------------------------------------------------------------
+  // Per-account sort preference (localStorage) — restore after mount, then persist.
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- hydrate sort preference from localStorage after mount */
+    const saved = readTasksSortPreference(userId);
+    if (saved) setSortBy(saved);
+    setSortReady(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [userId]);
+
+  useEffect(() => {
+    if (!sortReady) return;
+    writeTasksSortPreference(userId, sortBy);
+  }, [userId, sortBy, sortReady]);
 
   // ---------------------------------------------------------------------------
   // Deep-link support: /tasks?task=<id> (e.g. from a Search result) opens

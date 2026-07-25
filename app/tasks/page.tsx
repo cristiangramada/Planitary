@@ -12,6 +12,9 @@ export const metadata: Metadata = { title: "Tasks" };
  */
 export default async function TasksPage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   // Both fetches run in parallel
   const [tasks, tags] = await Promise.all([
@@ -23,7 +26,11 @@ export default async function TasksPage() {
     // Suspense required because TasksClient uses useSearchParams (for the
     // /tasks?task=<id> deep-link opened from Search results).
     <Suspense fallback={null}>
-      <TasksClient initialTasks={tasks} initialTags={tags} />
+      <TasksClient
+        initialTasks={tasks}
+        initialTags={tags}
+        userId={user!.id}
+      />
     </Suspense>
   );
 }
