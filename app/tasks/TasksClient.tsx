@@ -28,7 +28,7 @@ import { localTodayStr } from "@/utils/date";
 // Sorting helpers
 // ---------------------------------------------------------------------------
 
-type SortKey = "priority" | "due_date" | "created_at";
+type SortKey = "priority" | "due_date" | "created_at" | "created_oldest";
 type FilterKey = "all" | "active" | "overdue" | "completed";
 
 const PRIORITY_ORDER = TASK_PRIORITY_ORDER;
@@ -48,6 +48,9 @@ function compareDueDateTime(a: TaskWithDetails, b: TaskWithDetails): number {
 
 function sortTasks(tasks: TaskWithDetails[], sortBy: SortKey): TaskWithDetails[] {
   return [...tasks].sort((a, b) => {
+    if (sortBy === "created_oldest") {
+      return a.created_at.localeCompare(b.created_at);
+    }
     if (sortBy === "priority") {
       const diff = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
       if (diff !== 0) return diff;
@@ -60,7 +63,7 @@ function sortTasks(tasks: TaskWithDetails[], sortBy: SortKey): TaskWithDetails[]
         if (p !== 0) return p;
       }
     }
-    // Newest first by default
+    // Newest first by default (also used for "Created date")
     return b.created_at.localeCompare(a.created_at);
   });
 }
@@ -375,7 +378,8 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
   const SORT_LABELS: Record<SortKey, string> = {
     priority: "Priority",
     due_date: "Due date",
-    created_at: "Created date",
+    created_at: "Newest first",
+    created_oldest: "Oldest first",
   };
 
   const FILTER_TABS: { key: FilterKey; label: string; count?: number }[] = [
