@@ -327,7 +327,6 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
         setTasks((prev) =>
           prev.map((t) => (t.id === taskId ? { ...t, ...result } : t))
         );
-        if (shouldComplete) setCompletedExpanded(true);
       } catch (err) {
         // Revert
         setTasks((prev) =>
