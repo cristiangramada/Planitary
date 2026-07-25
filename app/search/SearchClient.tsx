@@ -59,10 +59,8 @@ export function SearchClient() {
   useEffect(() => {
     if (inputFocusedRef.current) return;
     if (urlState.query === lastWrittenQueryRef.current) return;
-    /* eslint-disable react-hooks/set-state-in-effect -- mirror external URL navigation into the input */
     lastWrittenQueryRef.current = urlState.query;
     setInputValue(urlState.query);
-    /* eslint-enable react-hooks/set-state-in-effect */
   }, [searchParams, urlState.query]);
 
   // Debounced typing updates the URL (replace — avoids a history entry per keystroke).
@@ -183,7 +181,7 @@ export function SearchClient() {
   const isInitialLoading = status === "loading" && results.length === 0;
 
   return (
-    <AppShell title="Search">
+    <AppShell>
       <div className="h-full flex flex-col w-full">
         <div className="w-full max-w-3xl mx-auto shrink-0">
           {/* ── Search input ── */}

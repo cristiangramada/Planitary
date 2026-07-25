@@ -417,8 +417,8 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
   ];
 
   return (
-    <AppShell title="Tasks">
-      <div className="h-full flex flex-col max-w-3xl mx-auto">
+    <AppShell flushTop>
+      <div className="h-full flex flex-col max-w-3xl mx-auto pt-4">
         {/* Page header */}
         <div className="flex items-center justify-between mb-5 shrink-0">
           <div>
@@ -629,7 +629,8 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
               </div>
             )}
 
-            {visibleActive.length === 0 &&
+            {tasks.length > 0 &&
+              visibleActive.length === 0 &&
               filterBy === "active" &&
               !(selectedTag && activeTasks.length === 0 && completedTasks.length === 0) && (
               <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
@@ -639,7 +640,7 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
                   description={
                     selectedTag
                       ? "There are no active tasks with this tag."
-                      : "All caught up! Create a new task to get started."
+                      : "All caught up!"
                   }
                   action={
                     selectedTag ? (
@@ -663,7 +664,8 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
               </div>
             )}
 
-            {visibleActive.length === 0 &&
+            {tasks.length > 0 &&
+              visibleActive.length === 0 &&
               filterBy === "overdue" &&
               !(selectedTag && activeTasks.length === 0 && completedTasks.length === 0) && (
               <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">

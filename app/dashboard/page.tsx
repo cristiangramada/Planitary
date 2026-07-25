@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllTags } from "@/lib/tasks";
 import { fetchDashboardData } from "@/lib/dashboard";
+import { fetchDisplayName } from "@/lib/profile";
 import { localTodayStr } from "@/utils/date";
 import { DashboardClient } from "./DashboardClient";
 
@@ -18,13 +19,11 @@ export default async function DashboardPage() {
   const initialDate = localTodayStr();
   const initialHour = new Date().getHours();
 
-  const [dashboardData, allTags, profileResult] = await Promise.all([
+  const [dashboardData, allTags, displayName] = await Promise.all([
     fetchDashboardData(supabase, initialDate),
     fetchAllTags(supabase).catch(() => []),
-    supabase.from("profiles").select("display_name").maybeSingle(),
+    fetchDisplayName(supabase).catch(() => null),
   ]);
-
-  const displayName = profileResult.data?.display_name?.trim() || null;
 
   return (
     <DashboardClient

@@ -243,7 +243,7 @@ export function JournalClient({
   }, []);
 
   return (
-    <AppShell title="Journal">
+    <AppShell>
       <div className="h-full flex flex-col max-w-3xl mx-auto w-full">
         {/* ── Error banner ── */}
         {error && (
