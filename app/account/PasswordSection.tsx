@@ -4,7 +4,12 @@ import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { PASSWORD_MIN_LENGTH, validatePasswordChange } from "@/lib/account";
+import {
+  PASSWORD_MIN_LENGTH,
+  validatePasswordChange,
+  mapReauthError,
+  mapPasswordError,
+} from "@/lib/account";
 import { AccountCard } from "./AccountCard";
 import { inputClass, labelClass, primaryButtonClass, errorBannerClass, successBannerClass } from "./formStyles";
 
@@ -59,18 +64,13 @@ export function PasswordSection() {
         password: current,
       });
       if (reauthError) {
-        const lower = reauthError.message.toLowerCase();
-        setError(
-          lower.includes("rate limit") || lower.includes("too many")
-            ? "Too many attempts. Please wait a moment and try again."
-            : "Your current password is incorrect."
-        );
+        setError(mapReauthError(reauthError));
         return;
       }
 
       const { error: updateError } = await supabase.auth.updateUser({ password: next });
       if (updateError) {
-        setError(mapPasswordError(updateError.message));
+        setError(mapPasswordError(updateError));
         return;
       }
 
@@ -182,23 +182,4 @@ function ShowHideToggle({ show, onToggle }: { show: boolean; onToggle: () => voi
       {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
     </button>
   );
-}
-
-// Maps Supabase Auth error text to a safe, concise user-facing message —
-// never surfaces the raw provider string.
-function mapPasswordError(message: string): string {
-  const lower = message.toLowerCase();
-  if (lower.includes("at least") || lower.includes("short") || lower.includes("weak")) {
-    return "That password is too weak. Please choose a stronger password.";
-  }
-  if (lower.includes("rate limit") || lower.includes("too many")) {
-    return "Too many attempts. Please wait a moment and try again.";
-  }
-  if (lower.includes("session") || lower.includes("expired") || lower.includes("jwt")) {
-    return "Your session has expired. Please sign in again.";
-  }
-  if (lower.includes("same") || lower.includes("different")) {
-    return "New password must be different from your current password.";
-  }
-  return "Couldn't update your password. Please try again.";
 }
