@@ -39,7 +39,7 @@ export function DashboardSection({
     <section
       aria-labelledby={headingId}
       className={cn(
-        "flex flex-col rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4",
+        "flex flex-col rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4 min-h-0",
         className
       )}
     >

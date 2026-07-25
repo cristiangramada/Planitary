@@ -379,7 +379,9 @@ export function DashboardClient({
         )}
 
         {/* ── Sections ── */}
-        <div className="flex flex-col gap-4 pb-2 max-w-4xl">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pb-2 min-h-0">
+          {/* Left — tasks + events */}
+          <div className="lg:col-span-2 flex flex-col gap-4 min-w-0">
             <DashboardSection
               icon={CheckSquare}
               iconClassName="text-blue-500"
@@ -427,7 +429,10 @@ export function DashboardClient({
               onDeleteEvent={handleDeleteEvent}
               onCreateEvent={openNewEvent}
             />
+          </div>
 
+          {/* Right — journal */}
+          <div className="min-w-0 lg:min-h-full">
             <JournalPreview
               entries={data.todayJournalEntries.data}
               error={data.todayJournalEntries.error}
@@ -437,7 +442,9 @@ export function DashboardClient({
               onSave={handleSaveJournalEntry}
               onDelete={handleDeleteJournalEntry}
               inputRef={journalInputRef}
+              className="lg:h-full"
             />
+          </div>
         </div>
       </div>
 

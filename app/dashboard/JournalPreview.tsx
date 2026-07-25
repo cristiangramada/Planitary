@@ -16,9 +16,10 @@ interface JournalPreviewProps {
   onSave: (entryId: string, content: string) => Promise<void>;
   onDelete: (entryId: string) => Promise<void>;
   inputRef?: RefObject<HTMLInputElement | null>;
+  className?: string;
 }
 
-const PREVIEW_LIMIT = 5;
+const PREVIEW_LIMIT = 8;
 
 export function JournalPreview({
   entries,
@@ -29,6 +30,7 @@ export function JournalPreview({
   onSave,
   onDelete,
   inputRef,
+  className,
 }: JournalPreviewProps) {
   const [value, setValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -60,6 +62,7 @@ export function JournalPreview({
       error={error}
       onRetry={onRetry}
       loading={loading}
+      className={className}
     >
       <form onSubmit={handleSubmit} className="mb-2 shrink-0">
         <label htmlFor="dashboard-journal-quick-add" className="sr-only">
@@ -92,11 +95,11 @@ export function JournalPreview({
       {loading ? (
         <DashboardSkeletonRows count={3} />
       ) : visible.length === 0 ? (
-        <p className="py-6 pl-4 text-sm text-[hsl(var(--muted-foreground))]">
+        <p className="flex-1 flex items-center justify-center py-6 text-sm text-[hsl(var(--muted-foreground))] text-center">
           No journal entries today.
         </p>
       ) : (
-        <div className="divide-y divide-[hsl(var(--border))]">
+        <div className="flex-1 min-h-0 divide-y divide-[hsl(var(--border))] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {visible.map((entry) => (
             <JournalEntryRow
               key={entry.id}
