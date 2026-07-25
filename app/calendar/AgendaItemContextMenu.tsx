@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Pencil, Trash2 } from "lucide-react";
 
 interface AgendaItemContextMenuProps {
@@ -46,7 +47,9 @@ export function AgendaItemContextMenu({
   const left = Math.min(x, window.innerWidth - menuWidth - 8);
   const top = Math.min(y, window.innerHeight - 120);
 
-  return (
+  // Portal out of card stacking contexts (e.g. completed tasks use opacity,
+  // which would otherwise trap this menu under the next sibling card).
+  return createPortal(
     <div
       ref={ref}
       className="fixed z-50 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-xl overflow-hidden w-max"
@@ -101,6 +104,7 @@ export function AgendaItemContextMenu({
           </button>
         </>
       )}
-    </div>
+    </div>,
+    document.body
   );
 }
