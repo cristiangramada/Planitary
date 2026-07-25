@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, ChevronDown, ChevronRight, SortAsc, CheckSquare, Tag as TagIcon } from "lucide-react";
+import { Plus, SortAsc, CheckSquare, Tag as TagIcon } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { TagBadge } from "@/components/ui/TagBadge";
@@ -18,18 +18,25 @@ import {
   deleteTag,
   setTaskComplete,
   setSubtaskComplete,
+  TASK_PRIORITY_ORDER,
 } from "@/lib/tasks";
 import type { TaskWithDetails, Tag } from "@/types";
 import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
+import { localTodayStr } from "@/utils/date";
+import {
+  readTasksSortPreference,
+  writeTasksSortPreference,
+  type TasksSortKey,
+} from "@/lib/tasks-sort-preference";
 
 // ---------------------------------------------------------------------------
 // Sorting helpers
 // ---------------------------------------------------------------------------
 
-type SortKey = "priority" | "due_date" | "created_at";
-type FilterKey = "all" | "active" | "completed";
+type SortKey = TasksSortKey;
+type FilterKey = "all" | "active" | "overdue" | "completed";
 
-const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
+const PRIORITY_ORDER = TASK_PRIORITY_ORDER;
 
 function compareDueDateTime(a: TaskWithDetails, b: TaskWithDetails): number {
   if (a.due_date && b.due_date) {
@@ -46,6 +53,9 @@ function compareDueDateTime(a: TaskWithDetails, b: TaskWithDetails): number {
 
 function sortTasks(tasks: TaskWithDetails[], sortBy: SortKey): TaskWithDetails[] {
   return [...tasks].sort((a, b) => {
+    if (sortBy === "created_oldest") {
+      return a.created_at.localeCompare(b.created_at);
+    }
     if (sortBy === "priority") {
       const diff = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
       if (diff !== 0) return diff;
@@ -58,7 +68,7 @@ function sortTasks(tasks: TaskWithDetails[], sortBy: SortKey): TaskWithDetails[]
         if (p !== 0) return p;
       }
     }
-    // Newest first by default
+    // Newest first by default (also used for "Created date")
     return b.created_at.localeCompare(a.created_at);
   });
 }
@@ -70,14 +80,17 @@ function sortTasks(tasks: TaskWithDetails[], sortBy: SortKey): TaskWithDetails[]
 interface TasksClientProps {
   initialTasks: TaskWithDetails[];
   initialTags: Tag[];
+  userId: string;
 }
 
-export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
+export function TasksClient({ initialTasks, initialTags, userId }: TasksClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [tasks, setTasks] = useState<TaskWithDetails[]>(initialTasks);
   const [allTags, setAllTags] = useState<Tag[]>(initialTags);
+  // Default matches SSR; restored preference applied after mount to avoid hydration mismatch.
   const [sortBy, setSortBy] = useState<SortKey>("priority");
+  const [sortReady, setSortReady] = useState(false);
   const [filterBy, setFilterBy] = useState<FilterKey>("active");
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
   const [confirmingTag, setConfirmingTag] = useState<Tag | null>(null);
@@ -86,9 +99,25 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
   const confirmRef = useRef<HTMLDivElement>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskWithDetails | null>(null);
-  const [completedExpanded, setCompletedExpanded] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ---------------------------------------------------------------------------
+  // Per-account sort preference (localStorage) — restore after mount, then persist.
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- hydrate sort preference from localStorage after mount */
+    const saved = readTasksSortPreference(userId);
+    if (saved) setSortBy(saved);
+    setSortReady(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [userId]);
+
+  useEffect(() => {
+    if (!sortReady) return;
+    writeTasksSortPreference(userId, sortBy);
+  }, [userId, sortBy, sortReady]);
 
   // ---------------------------------------------------------------------------
   // Deep-link support: /tasks?task=<id> (e.g. from a Search result) opens
@@ -117,13 +146,16 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
     [allTags]
   );
 
-  const { activeTasks, completedTasks } = useMemo(() => {
+  const { activeTasks, overdueTasks, completedTasks } = useMemo(() => {
+    const today = localTodayStr();
     const scoped = selectedTagId
       ? tasks.filter((t) => t.tags.some((tag) => tag.id === selectedTagId))
       : tasks;
     const sorted = sortTasks(scoped, sortBy);
+    const active = sorted.filter((t) => t.status === "active");
     return {
-      activeTasks: sorted.filter((t) => t.status === "active"),
+      activeTasks: active,
+      overdueTasks: active.filter((t) => !!t.due_date && t.due_date < today),
       completedTasks: sorted.filter((t) => t.status === "completed"),
     };
   }, [tasks, sortBy, selectedTagId]);
@@ -133,9 +165,13 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
     : null;
 
   const visibleActive =
-    filterBy === "completed" ? [] : activeTasks;
+    filterBy === "completed"
+      ? []
+      : filterBy === "overdue"
+        ? overdueTasks
+        : activeTasks;
   const visibleCompleted =
-    filterBy === "active" ? [] : completedTasks;
+    filterBy === "active" || filterBy === "overdue" ? [] : completedTasks;
 
   // ---------------------------------------------------------------------------
   // Mutations
@@ -291,7 +327,6 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
         setTasks((prev) =>
           prev.map((t) => (t.id === taskId ? { ...t, ...result } : t))
         );
-        if (shouldComplete) setCompletedExpanded(true);
       } catch (err) {
         // Revert
         setTasks((prev) =>
@@ -366,7 +401,8 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
   const SORT_LABELS: Record<SortKey, string> = {
     priority: "Priority",
     due_date: "Due date",
-    created_at: "Created date",
+    created_at: "Newest first",
+    created_oldest: "Oldest first",
   };
 
   const FILTER_TABS: { key: FilterKey; label: string; count?: number }[] = [
@@ -376,6 +412,7 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
       count: selectedTagId ? activeTasks.length + completedTasks.length : tasks.length,
     },
     { key: "active", label: "Active", count: activeTasks.length },
+    { key: "overdue", label: "Overdue", count: overdueTasks.length },
     { key: "completed", label: "Completed", count: completedTasks.length },
   ];
 
@@ -386,9 +423,6 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
         <div className="flex items-center justify-between mb-5 shrink-0">
           <div>
             <h2 className="text-xl font-bold">My Tasks</h2>
-            <p className="text-sm text-[hsl(var(--muted-foreground))] mt-0.5">
-              {activeTasks.length} active · {completedTasks.length} completed
-            </p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -407,7 +441,7 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
                     className="fixed inset-0 z-10"
                     onClick={() => setShowSortMenu(false)}
                   />
-                  <div className="absolute right-0 z-20 mt-1 w-36 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-lg py-1">
+                  <div className="absolute right-0 z-20 mt-1 w-36 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-lg overflow-hidden">
                     {(Object.entries(SORT_LABELS) as [SortKey, string][]).map(
                       ([key, label]) => (
                         <button
@@ -629,6 +663,32 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
               </div>
             )}
 
+            {visibleActive.length === 0 &&
+              filterBy === "overdue" &&
+              !(selectedTag && activeTasks.length === 0 && completedTasks.length === 0) && (
+              <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
+                <EmptyState
+                  icon={CheckSquare}
+                  title={selectedTag ? `No overdue tasks with “${selectedTag.name}”` : "No overdue tasks"}
+                  description={
+                    selectedTag
+                      ? "There are no overdue tasks with this tag."
+                      : "You're all caught up — nothing past due."
+                  }
+                  action={
+                    selectedTag ? (
+                      <button
+                        onClick={() => setSelectedTagId(null)}
+                        className="px-4 py-2 text-sm font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
+                      >
+                        Clear tag filter
+                      </button>
+                    ) : undefined
+                  }
+                />
+              </div>
+            )}
+
             {/* Empty state for very first task */}
             {tasks.length === 0 && (
               <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
@@ -663,34 +723,25 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
         )}
 
         {/* Completed section */}
-        {filterBy !== "active" && visibleCompleted.length > 0 && (
+        {filterBy !== "active" && filterBy !== "overdue" && visibleCompleted.length > 0 && (
           <div>
-            <button
-              onClick={() => setCompletedExpanded((v) => !v)}
-              className="flex items-center gap-2 text-sm font-medium text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors mb-3 cursor-pointer"
-            >
-              {completedExpanded ? (
-                <ChevronDown className="w-4 h-4" />
-              ) : (
-                <ChevronRight className="w-4 h-4" />
-              )}
-              Completed ({visibleCompleted.length})
-            </button>
-
-            {completedExpanded && (
-              <div className="space-y-2">
-                {visibleCompleted.map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onEdit={openEdit}
-                    onDelete={handleDelete}
-                    onToggleComplete={handleToggleComplete}
-                    onToggleSubtask={handleToggleSubtask}
-                  />
-                ))}
-              </div>
+            {filterBy === "all" && (
+              <h3 className="text-sm font-medium text-[hsl(var(--muted-foreground))] mb-3">
+                Completed ({visibleCompleted.length})
+              </h3>
             )}
+            <div className="space-y-2">
+              {visibleCompleted.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  onEdit={openEdit}
+                  onDelete={handleDelete}
+                  onToggleComplete={handleToggleComplete}
+                  onToggleSubtask={handleToggleSubtask}
+                />
+              ))}
+            </div>
           </div>
         )}
 

@@ -1,6 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Task, Subtask, Tag, TaskWithDetails, Priority } from "@/types";
 
+/** Canonical priority ordering used everywhere tasks are priority-sorted. */
+export const TASK_PRIORITY_ORDER: Record<Priority, number> = {
+  high: 0,
+  medium: 1,
+  low: 2,
+};
+
 // ---------------------------------------------------------------------------
 // Internal raw shape returned by Supabase nested select
 // ---------------------------------------------------------------------------
@@ -56,6 +63,22 @@ export async function fetchAllTags(supabase: SupabaseClient): Promise<Tag[]> {
 
   if (error) throw error;
   return (data as Tag[]) ?? [];
+}
+
+/** Fetches active tasks due on a specific local date (YYYY-MM-DD), for the Dashboard. */
+export async function fetchTasksDueOn(
+  supabase: SupabaseClient,
+  dateStr: string
+): Promise<TaskWithDetails[]> {
+  const { data, error } = await supabase
+    .from("tasks")
+    .select(TASK_SELECT)
+    .eq("status", "active")
+    .eq("due_date", dateStr)
+    .order("due_time", { ascending: true, nullsFirst: false });
+
+  if (error) throw error;
+  return ((data as RawTaskRow[]) ?? []).map(normalize);
 }
 
 /** Re-fetches a single task by id. Used after mutations to get the full object. */

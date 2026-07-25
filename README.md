@@ -182,3 +182,66 @@ No second Task/Event/Journal-entry detail UI was created — all three reuse the
 - [ ] Signing in as a second user never surfaces the first user's tasks/journal/calendar/tags.
 - [ ] Empty query shows the "Search Planitary…" prompt (or recent searches); a query with no matches shows the "No results found" state with suggestions.
 - [ ] Dark mode and light mode both render correctly; layout holds on a narrow (mobile-width) viewport.
+
+## Dashboard
+
+`/dashboard` is the "Today" page — a daily overview built entirely from existing Task, Calendar, and Journal logic. **No AI, no OpenRouter call.**
+
+### Layout
+
+Desktop (`lg+`): two columns — **Today's tasks** and **Today's events** stacked on the left (2/3 width); **Journal** on the right (1/3), stretched to match the left column height. On narrow screens the sections stack: tasks → events → journal.
+
+### Sections
+
+1. **Header** — time-of-day greeting (`Good morning`/`afternoon`/`evening`, plus the profile's `display_name` if set) and the friendly local date.
+2. **Today's tasks** — active tasks due today (`lib/tasks.ts:fetchTasksDueOn`), rendered with the same `TaskCard` as `/tasks` (including right-click Edit/Delete). Header **Add task** opens `TaskForm` with due date defaulted to today. Sorted by shared `TASK_PRIORITY_ORDER`, then due time.
+3. **Today's events** — events starting today (`lib/calendar.ts:fetchEventsBetween`), chronological, with a "Now" badge when an event is in progress. Header **Add event** opens `EventForm` for today; right-click uses the same Edit/Delete menu as the Calendar agenda.
+4. **Journal** — today's entries with the same click-to-edit row as `/journal`, plus an inline quick-add. Right-click deletes an entry (same menu as Journal).
+
+### Data fetching
+
+`lib/dashboard.ts:fetchDashboardData(supabase, todayStr)` runs the bounded section queries in parallel via `Promise.all`, wrapping each in `settle()` so one section's failure never blocks the others — each section carries its own `{ data, error }`. The Server Component (`app/dashboard/page.tsx`) fetches with the server clock's date; `DashboardClient` re-runs with the browser's local date if that differs (same pattern as Journal; server clock is UTC on Vercel), and after mutations that need a full refresh.
+
+### Deep links
+
+- `/tasks?task=<id>` (existing) — not used by Dashboard edit (form opens in place).
+- `/journal?date=<date>&entry=<id>` (existing) — available from Search; Dashboard journal edits in place.
+- `/journal?section=standup` — expands and scrolls to Standup on the Journal page (`StandupSection` `autoExpand`).
+
+### Components reused
+
+`AppShell`, `TaskCard`, `TaskForm`, `EventForm`, `AgendaItemContextMenu`, `JournalEntryRow`, `JournalEntryContextMenu`, and the mutation helpers in `lib/tasks.ts`, `lib/calendar.ts`, `lib/journal.ts`.
+
+### Components added
+
+`app/dashboard/DashboardClient.tsx`, `DashboardSection.tsx`, `JournalPreview.tsx`, `EventsPreview.tsx`.
+
+### Shared extractions
+
+- `TASK_PRIORITY_ORDER` in `lib/tasks.ts` (Tasks + Dashboard).
+- `hooks/useClientLocalToday.ts` (`useClientLocalToday`, `useClientLocalHour`) shared by Journal and Dashboard.
+- `app/journal/JournalEntryRow.tsx` shared by Journal and Dashboard.
+
+### Related Tasks page changes (same branch)
+
+- Filter tabs: All / Active / Overdue / Completed (Overdue = active tasks with `due_date` before today).
+- Sort options include Newest first / Oldest first; choice is persisted per account in localStorage (`lib/tasks-sort-preference.ts`).
+- Completed list is always expanded (no fold control). Completed cards no longer show a Reopen button (checkbox still reopens).
+
+### Known limitations
+
+- Section "Retry" re-runs the full dashboard query set (cheap/bounded), so unrelated sections may briefly show "Refreshing…".
+- Mobile order is tasks → events → journal.
+
+### Manual testing checklist
+
+- [ ] Greeting matches local time of day and shows `display_name` only when set.
+- [ ] Completing a task on the Dashboard removes it from Today's tasks.
+- [ ] **Add task** / empty-state flows create a task due today and it appears in Today's tasks.
+- [ ] **Add event** creates today's event and it appears in Today's events; right-click Edit/Delete works.
+- [ ] Journal quick-add appears in the list; click-to-edit and right-click delete work.
+- [ ] Two-column layout holds on desktop; stacks cleanly on mobile; no horizontal scroll.
+- [ ] A Calendar query failure still renders Tasks/Journal with a section-level error + Retry for Events only.
+- [ ] Dark and light mode both render correctly.
+- [ ] Tasks page: Overdue filter, Oldest/Newest sort persistence across reload, and Completed list without fold.
+
