@@ -418,7 +418,7 @@ export function TasksClient({ initialTasks, initialTags }: TasksClientProps) {
                     className="fixed inset-0 z-10"
                     onClick={() => setShowSortMenu(false)}
                   />
-                  <div className="absolute right-0 z-20 mt-1 w-36 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-lg py-1">
+                  <div className="absolute right-0 z-20 mt-1 w-36 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-lg overflow-hidden">
                     {(Object.entries(SORT_LABELS) as [SortKey, string][]).map(
                       ([key, label]) => (
                         <button
