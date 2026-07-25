@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
-import { Moon, Sun, Monitor } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { AccountCard } from "./AccountCard";
 
@@ -22,7 +22,6 @@ function useIsClient() {
 const OPTIONS = [
   { value: "dark", label: "Dark", icon: Moon },
   { value: "light", label: "Light", icon: Sun },
-  { value: "system", label: "System", icon: Monitor },
 ] as const;
 
 export function AppearanceSection() {
@@ -31,7 +30,7 @@ export function AppearanceSection() {
 
   return (
     <AccountCard title="Appearance" description="Choose how Planitary looks on this device.">
-      <div role="radiogroup" aria-label="Theme" className="grid grid-cols-3 gap-2">
+      <div role="radiogroup" aria-label="Theme" className="grid grid-cols-2 gap-2">
         {OPTIONS.map(({ value, label, icon: Icon }) => {
           const selected = isClient && theme === value;
           return (
