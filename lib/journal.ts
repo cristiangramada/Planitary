@@ -23,27 +23,6 @@ export async function fetchJournalEntriesByDate(
   return (data as JournalEntry[]) ?? [];
 }
 
-/**
- * Fetches the distinct local dates (YYYY-MM-DD) within [startDate, endDate] that
- * have at least one journal entry. Used for the Dashboard's "journal days this
- * week" metric — only the date column is selected to keep this bounded and cheap.
- */
-export async function fetchJournalEntryDatesBetween(
-  supabase: SupabaseClient,
-  startDate: string,
-  endDate: string
-): Promise<string[]> {
-  const { data, error } = await supabase
-    .from("journal_entries")
-    .select("entry_date")
-    .gte("entry_date", startDate)
-    .lte("entry_date", endDate);
-
-  if (error) throw error;
-  const rows = (data as { entry_date: string }[]) ?? [];
-  return Array.from(new Set(rows.map((r) => r.entry_date)));
-}
-
 // ---------------------------------------------------------------------------
 // Write
 // ---------------------------------------------------------------------------

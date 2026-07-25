@@ -49,21 +49,6 @@ export async function fetchEventsBetween(
   return (data as CalendarEvent[]) ?? [];
 }
 
-/** Counts events with start_time in [startDate, endDateExclusive), local dates. */
-export async function fetchEventCountBetween(
-  supabase: SupabaseClient,
-  startDate: string,
-  endDateExclusive: string
-): Promise<number> {
-  const { count, error } = await supabase
-    .from("calendar_events")
-    .select("id", { count: "exact", head: true })
-    .gte("start_time", localDateToIsoStart(startDate))
-    .lt("start_time", localDateToIsoStart(endDateExclusive));
-  if (error) throw error;
-  return count ?? 0;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // CRUD
 // ─────────────────────────────────────────────────────────────────────────────

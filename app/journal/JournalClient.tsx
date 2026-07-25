@@ -118,10 +118,10 @@ export function JournalClient({
 
   // ---------------------------------------------------------------------------
   // Deep-link support: /journal?date=<date>&entry=<id> (e.g. from a Search
-  // result) and /journal?section=standup (from the Dashboard). State is seeded
-  // from the URL above; here we only clear the params so navigating away and
-  // back doesn't reopen the highlight, and handle soft-nav updates if the
-  // params change while already on /journal.
+  // result) and /journal?section=standup. State is seeded from the URL above;
+  // here we only clear the params so navigating away and back doesn't reopen
+  // the highlight, and handle soft-nav updates if the params change while
+  // already on /journal.
   // ---------------------------------------------------------------------------
 
   useEffect(() => {

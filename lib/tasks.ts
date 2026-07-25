@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Task, Subtask, Tag, TaskWithDetails, Priority } from "@/types";
-import { shiftDateStr, localDateToIsoStart } from "@/utils/date";
 
 /** Canonical priority ordering used everywhere tasks are priority-sorted. */
 export const TASK_PRIORITY_ORDER: Record<Priority, number> = {
@@ -80,39 +79,6 @@ export async function fetchTasksDueOn(
 
   if (error) throw error;
   return ((data as RawTaskRow[]) ?? []).map(normalize);
-}
-
-/**
- * Counts tasks completed within [weekStart, weekEnd] (inclusive, local dates) and
- * active tasks due within that same range — the two inputs to Dashboard Weekly progress.
- */
-export async function fetchWeeklyTaskCounts(
-  supabase: SupabaseClient,
-  weekStart: string,
-  weekEnd: string
-): Promise<{ completed: number; activeDue: number }> {
-  const weekStartIso = localDateToIsoStart(weekStart);
-  const weekEndExclusiveIso = localDateToIsoStart(shiftDateStr(weekEnd, 1));
-
-  const [completedRes, activeRes] = await Promise.all([
-    supabase
-      .from("tasks")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "completed")
-      .gte("completed_at", weekStartIso)
-      .lt("completed_at", weekEndExclusiveIso),
-    supabase
-      .from("tasks")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "active")
-      .gte("due_date", weekStart)
-      .lte("due_date", weekEnd),
-  ]);
-
-  if (completedRes.error) throw completedRes.error;
-  if (activeRes.error) throw activeRes.error;
-
-  return { completed: completedRes.count ?? 0, activeDue: activeRes.count ?? 0 };
 }
 
 /** Re-fetches a single task by id. Used after mutations to get the full object. */

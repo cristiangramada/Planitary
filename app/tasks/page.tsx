@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { fetchTasksWithDetails, fetchAllTags } from "@/lib/tasks";
 import { TasksClient } from "./TasksClient";
@@ -15,6 +16,7 @@ export default async function TasksPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
   // Both fetches run in parallel
   const [tasks, tags] = await Promise.all([
@@ -29,7 +31,7 @@ export default async function TasksPage() {
       <TasksClient
         initialTasks={tasks}
         initialTags={tags}
-        userId={user!.id}
+        userId={user.id}
       />
     </Suspense>
   );
