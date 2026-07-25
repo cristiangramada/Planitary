@@ -15,7 +15,7 @@ interface AccountClientProps {
 
 export function AccountClient({ userId, email, initialDisplayName }: AccountClientProps) {
   return (
-    <AppShell title="Account">
+    <AppShell>
       <div className="h-full overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="max-w-4xl mx-auto flex flex-col gap-4 pb-8">
           <div>

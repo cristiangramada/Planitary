@@ -417,7 +417,7 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
   ];
 
   return (
-    <AppShell title="Tasks">
+    <AppShell>
       <div className="h-full flex flex-col max-w-3xl mx-auto">
         {/* Page header */}
         <div className="flex items-center justify-between mb-5 shrink-0">

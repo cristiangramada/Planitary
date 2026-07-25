@@ -183,7 +183,7 @@ export function SearchClient() {
   const isInitialLoading = status === "loading" && results.length === 0;
 
   return (
-    <AppShell title="Search">
+    <AppShell>
       <div className="h-full flex flex-col w-full">
         <div className="w-full max-w-3xl mx-auto shrink-0">
           {/* ── Search input ── */}

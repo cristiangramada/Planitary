@@ -15,7 +15,7 @@ const PERIOD_TABS = ["This week", "This month", "Last 90 days"];
 
 export default function SummaryPage() {
   return (
-    <AppShell title="Summary">
+    <AppShell>
       <div className="h-full flex flex-col gap-4">
 
         {/* ── Top row: title + period tabs + stats ── */}

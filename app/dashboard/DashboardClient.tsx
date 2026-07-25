@@ -358,7 +358,7 @@ export function DashboardClient({
   const greeting = displayName ? `${getGreeting(clientHour)}, ${displayName}` : getGreeting(clientHour);
 
   return (
-    <AppShell title="Dashboard">
+    <AppShell>
       <div className="h-full flex flex-col gap-4 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {/* ── Header ── */}
         <div className="shrink-0">
