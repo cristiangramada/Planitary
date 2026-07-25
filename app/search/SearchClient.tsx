@@ -59,10 +59,8 @@ export function SearchClient() {
   useEffect(() => {
     if (inputFocusedRef.current) return;
     if (urlState.query === lastWrittenQueryRef.current) return;
-    /* eslint-disable react-hooks/set-state-in-effect -- mirror external URL navigation into the input */
     lastWrittenQueryRef.current = urlState.query;
     setInputValue(urlState.query);
-    /* eslint-enable react-hooks/set-state-in-effect */
   }, [searchParams, urlState.query]);
 
   // Debounced typing updates the URL (replace — avoids a history entry per keystroke).
