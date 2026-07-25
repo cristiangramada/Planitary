@@ -363,7 +363,7 @@ export function DashboardClient({
         {/* ── Header ── */}
         <div className="shrink-0">
           <h2 className="text-xl font-bold tracking-tight">{greeting}</h2>
-          <p className="text-2xl font-semibold tracking-tight mt-1">
+          <p className="text-3xl font-semibold tracking-tight mt-4">
             {friendlyDate(clientToday)}
           </p>
         </div>
