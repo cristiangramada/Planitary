@@ -472,7 +472,7 @@ export function ListsPanel({
                   }}
                   className={cn(
                     "group flex items-center rounded-lg transition-colors",
-                    draggingId ? "cursor-move" : "cursor-pointer",
+                    draggingId ? "cursor-move" : "cursor-default",
                     isActive
                       ? "bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]"
                       : "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted)/0.6)] hover:text-[hsl(var(--foreground))]",
@@ -485,13 +485,8 @@ export function ListsPanel({
                   >
                     <Menu className="w-[1.125rem] h-3.5 scale-x-125" strokeWidth={2.25} />
                   </span>
-                  <span
-                    className={cn(
-                      "flex flex-1 min-w-0 items-center pl-2 pr-2 py-2.5 text-sm text-left",
-                      isActive && "font-medium"
-                    )}
-                  >
-                    <span className="truncate leading-none">{list.name}</span>
+                  <span className="flex flex-1 min-w-0 items-center pl-2 pr-2 py-2.5 text-sm text-left">
+                    <span className="truncate leading-snug">{list.name}</span>
                   </span>
                   <div className="relative w-6 h-6 shrink-0 mr-1 flex items-center justify-center">
                     {count > 0 && (
