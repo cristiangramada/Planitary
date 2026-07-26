@@ -5,7 +5,8 @@ import { createPortal } from "react-dom";
 import { X, Plus, Trash2, Tag as TagIcon, AlertCircle, CalendarDays } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { TagBadge } from "@/components/ui/TagBadge";
-import type { TaskWithDetails, Tag, Priority } from "@/types";
+import { PickerSelect, type PickerSelectOption } from "@/components/ui/PickerSelect";
+import type { TaskWithDetails, Tag, TaskList, Priority } from "@/types";
 import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
 import { PLANET_TAG_COLORS } from "@/lib/tasks";
 import {
@@ -14,6 +15,9 @@ import {
   type ReminderOption,
   type RepeatOption,
 } from "./TaskDatePicker";
+
+/** Sentinel PickerSelect value for "no list" (Inbox), since it only supports string values. */
+const INBOX_VALUE = "__inbox__";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -32,7 +36,11 @@ interface TaskFormProps {
   editTask?: TaskWithDetails | null;
   /** Pre-fill due date when creating from calendar agenda. */
   defaultDueDate?: string | null;
+  /** Pre-select a List when creating from within that List's view. Ignored when editing. */
+  defaultListId?: string | null;
   allTags: Tag[];
+  /** All of the user's Lists, for the List selector. Defaults to none (Inbox only). */
+  allLists?: TaskList[];
 }
 
 const PRIORITIES: { value: Priority; label: string; color: string }[] = [
@@ -592,13 +600,28 @@ interface TaskFormBodyProps extends TaskFormProps {
   isEdit: boolean;
 }
 
-function TaskFormBody({ onClose, onSave, onDeleteTag, editTask, allTags, isEdit, defaultDueDate }: TaskFormBodyProps) {
+function TaskFormBody({
+  onClose,
+  onSave,
+  onDeleteTag,
+  editTask,
+  allTags,
+  allLists = [],
+  isEdit,
+  defaultDueDate,
+  defaultListId,
+}: TaskFormBodyProps) {
   // State initializers derive from editTask at mount time.
   // No useEffect needed — the `key` prop on the outer wrapper resets this
   // component whenever the editing task changes.
   const [title, setTitle] = useState(editTask?.title ?? "");
   const [notes, setNotes] = useState(editTask?.notes ?? "");
   const [priority, setPriority] = useState<Priority>(editTask?.priority ?? "medium");
+  // A deleted current List falls back to Inbox rather than crashing.
+  const [listId, setListId] = useState<string | null>(() => {
+    const initial = editTask ? editTask.list_id : (defaultListId ?? null);
+    return initial && allLists.some((l) => l.id === initial) ? initial : null;
+  });
   const [dueDate, setDueDate] = useState<string | null>(
     editTask?.due_date ?? defaultDueDate ?? null
   );
@@ -649,6 +672,7 @@ function TaskFormBody({ onClose, onSave, onDeleteTag, editTask, allTags, isEdit,
           priority,
           due_date: dueDate,
           due_time: dueDate && dueTime ? dueTime + ":00" : null,
+          list_id: listId,
         },
         subtasks.filter((s) => s.title.trim()),
         selectedTags
@@ -743,6 +767,27 @@ function TaskFormBody({ onClose, onSave, onDeleteTag, editTask, allTags, isEdit,
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* List */}
+          <div>
+            <label
+              id="task-list-label"
+              className="block text-xs font-medium mb-1.5 text-[hsl(var(--muted-foreground))] uppercase tracking-wide"
+            >
+              List
+            </label>
+            <PickerSelect
+              value={listId ?? INBOX_VALUE}
+              onChange={(v) => setListId(v === INBOX_VALUE ? null : v)}
+              minWidth={180}
+              options={[
+                { value: INBOX_VALUE, label: "Inbox" } satisfies PickerSelectOption<string>,
+                ...allLists.map(
+                  (list): PickerSelectOption<string> => ({ value: list.id, label: list.name })
+                ),
+              ]}
+            />
           </div>
 
           {/* Schedule (date + time picker trigger) */}
@@ -867,7 +912,7 @@ export function TaskForm(props: TaskFormProps) {
     // whenever the editing task changes, resetting all form state cleanly
     // without calling setState inside a useEffect.
     <TaskFormBody
-      key={props.editTask?.id ?? `new-${props.defaultDueDate ?? "none"}`}
+      key={props.editTask?.id ?? `new-${props.defaultDueDate ?? "none"}-${props.defaultListId ?? "none"}`}
       {...props}
       isEdit={isEdit}
     />

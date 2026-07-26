@@ -15,6 +15,7 @@ function makeRow(overrides: Record<string, unknown> = {}) {
     priority: "high",
     status: "active",
     tags: ["urgent"],
+    list_name: null,
     relevance_score: 40.4,
     matched_fields: ["title"],
     ...overrides,
@@ -31,6 +32,19 @@ describe("normalizeRow", () => {
     assert.equal(result.status, "active");
     assert.deepEqual(result.tags, ["urgent"]);
     assert.deepEqual(result.matchedFields, ["title"]);
+  });
+
+  test("maps list_name to listName, and passes through 'list' as a matched field", () => {
+    const result = normalizeRow(
+      makeRow({ list_name: "Work", matched_fields: ["title", "list"] })
+    );
+    assert.equal(result.listName, "Work");
+    assert.deepEqual(result.matchedFields, ["title", "list"]);
+  });
+
+  test("defaults a null list_name to null", () => {
+    const result = normalizeRow(makeRow({ list_name: null }));
+    assert.equal(result.listName, null);
   });
 
   test("defaults null tags/matched_fields to empty arrays", () => {

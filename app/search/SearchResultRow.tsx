@@ -69,6 +69,11 @@ export function SearchResultRow({ result, query, onOpen }: SearchResultRowProps)
           <span className="text-[10px] font-semibold tracking-wide uppercase text-[hsl(var(--muted-foreground))]">
             {label}
           </span>
+          {result.entityType === "task" && result.listName && (
+            <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
+              · {result.listName}
+            </span>
+          )}
         </div>
 
         <p className="text-sm font-semibold text-[hsl(var(--foreground))] truncate">

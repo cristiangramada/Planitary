@@ -12,10 +12,15 @@ import {
 import { cn } from "@/utils/cn";
 import { PriorityBadge } from "@/components/ui/PriorityBadge";
 import { TagBadge } from "@/components/ui/TagBadge";
-import { AgendaItemContextMenu } from "@/app/calendar/AgendaItemContextMenu";
+import { AgendaItemContextMenu, type MoveToListOption } from "@/app/calendar/AgendaItemContextMenu";
 import { relativeDate, formatDate, parseDateOnly } from "@/utils/date";
 import { formatTimeValue } from "@/components/ui/TimeDropdown";
+import { LIST_COLOR_SWATCH, isListColorKey } from "@/lib/task-lists";
 import type { TaskWithDetails } from "@/types";
+
+function listSwatch(color: string | null): string | null {
+  return color && isListColorKey(color) ? LIST_COLOR_SWATCH[color] : null;
+}
 
 interface TaskCardProps {
   task: TaskWithDetails;
@@ -23,6 +28,9 @@ interface TaskCardProps {
   onDelete: (taskId: string) => void;
   onToggleComplete: (taskId: string, completed: boolean) => void;
   onToggleSubtask: (taskId: string, subtaskId: string, completed: boolean) => void;
+  /** Move-to-list options (Inbox + user's lists) for the context menu. Omit to hide the option. */
+  lists?: MoveToListOption[];
+  onMoveToList?: (taskId: string, listId: string | null) => void;
 }
 
 export function TaskCard({
@@ -31,6 +39,8 @@ export function TaskCard({
   onDelete,
   onToggleComplete,
   onToggleSubtask,
+  lists,
+  onMoveToList,
 }: TaskCardProps) {
   const [subtasksExpanded, setSubtasksExpanded] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -146,6 +156,19 @@ export function TaskCard({
 
           {/* Meta row */}
           <div className="flex items-center gap-3 mt-2 flex-wrap">
+            {/* List label */}
+            {task.list && (
+              <span className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))]">
+                {listSwatch(task.list.color) && (
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ backgroundColor: listSwatch(task.list.color)! }}
+                  />
+                )}
+                {task.list.name}
+              </span>
+            )}
+
             {/* Due date */}
             {hasDue && (
               <span
@@ -307,6 +330,11 @@ export function TaskCard({
           onEdit={() => onEdit(task)}
           onDelete={() => onDelete(task.id)}
           onClose={() => setContextMenu(null)}
+          lists={lists}
+          currentListId={task.list_id}
+          onMoveToList={
+            onMoveToList ? (listId) => onMoveToList(task.id, listId) : undefined
+          }
         />
       )}
     </div>

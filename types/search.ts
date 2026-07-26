@@ -25,7 +25,7 @@ export function isSearchSortMode(value: string): value is SearchSortMode {
 }
 
 /** Fields the server reports as having contributed to a result's match. */
-export type SearchMatchedField = "title" | "notes" | "content" | "details" | "tags";
+export type SearchMatchedField = "title" | "notes" | "content" | "details" | "tags" | "list";
 
 /**
  * Structured search filters. This shape is intentionally the same whether it
@@ -97,6 +97,8 @@ export interface SearchResult {
   status: TaskStatus | null;
   /** Task only — names of tags associated with the task. */
   tags: string[];
+  /** Task only — name of the List the task belongs to, if any. */
+  listName: string | null;
   relevanceScore: number;
   matchedFields: SearchMatchedField[];
 }

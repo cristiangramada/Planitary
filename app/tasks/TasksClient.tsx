@@ -3,12 +3,13 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, SortAsc, CheckSquare, Tag as TagIcon } from "lucide-react";
+import { Plus, SortAsc, CheckSquare, Tag as TagIcon, PanelLeft } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { TagBadge } from "@/components/ui/TagBadge";
 import { TaskCard } from "./TaskCard";
 import { TaskForm } from "./TaskForm";
+import { ListsPanel } from "./ListsPanel";
 import { cn } from "@/utils/cn";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -20,8 +21,21 @@ import {
   setSubtaskComplete,
   TASK_PRIORITY_ORDER,
 } from "@/lib/tasks";
-import type { TaskWithDetails, Tag } from "@/types";
+import type { TaskWithDetails, Tag, TaskList } from "@/types";
 import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
+import {
+  createTaskList,
+  renameTaskList,
+  updateTaskListColor,
+  deleteTaskList,
+  moveTaskToList,
+  computeListTaskCounts,
+  isListColorKey,
+  LIST_COLOR_SWATCH,
+  type ListColorKey,
+} from "@/lib/task-lists";
+import type { MoveToListOption } from "@/app/calendar/AgendaItemContextMenu";
+import { parseTasksScope, buildTasksScopeParams, type TasksScope } from "@/lib/tasks-url-state";
 import { localTodayStr } from "@/utils/date";
 import {
   readTasksSortPreference,
@@ -80,14 +94,16 @@ function sortTasks(tasks: TaskWithDetails[], sortBy: SortKey): TaskWithDetails[]
 interface TasksClientProps {
   initialTasks: TaskWithDetails[];
   initialTags: Tag[];
+  initialLists: TaskList[];
   userId: string;
 }
 
-export function TasksClient({ initialTasks, initialTags, userId }: TasksClientProps) {
+export function TasksClient({ initialTasks, initialTags, initialLists, userId }: TasksClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [tasks, setTasks] = useState<TaskWithDetails[]>(initialTasks);
   const [allTags, setAllTags] = useState<Tag[]>(initialTags);
+  const [lists, setLists] = useState<TaskList[]>(initialLists);
   // Default matches SSR; restored preference applied after mount to avoid hydration mismatch.
   const [sortBy, setSortBy] = useState<SortKey>("priority");
   const [sortReady, setSortReady] = useState(false);
@@ -101,6 +117,41 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
   const [editingTask, setEditingTask] = useState<TaskWithDetails | null>(null);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mobileListsOpen, setMobileListsOpen] = useState(false);
+
+  // ---------------------------------------------------------------------------
+  // Lists / scope — the selected smart view or custom List, driven by the URL
+  // (?list=<uuid> / ?view=inbox) so refresh and browser back/forward work.
+  // ---------------------------------------------------------------------------
+
+  const ownedListIds = useMemo(() => new Set(lists.map((l) => l.id)), [lists]);
+  const scope = useMemo<TasksScope>(
+    () => parseTasksScope(searchParams, ownedListIds),
+    [searchParams, ownedListIds]
+  );
+
+  const selectScope = useCallback(
+    (next: TasksScope) => {
+      const qs = buildTasksScopeParams(next).toString();
+      router.push(qs ? `/tasks?${qs}` : "/tasks", { scroll: false });
+      setMobileListsOpen(false);
+    },
+    [router]
+  );
+
+  const listTaskCounts = useMemo(() => computeListTaskCounts(tasks), [tasks]);
+
+  const moveToListOptions = useMemo<MoveToListOption[]>(
+    () => [
+      { id: null, name: "Inbox" },
+      ...lists.map((l) => ({
+        id: l.id,
+        name: l.name,
+        color: l.color && isListColorKey(l.color) ? LIST_COLOR_SWATCH[l.color] : null,
+      })),
+    ],
+    [lists]
+  );
 
   // ---------------------------------------------------------------------------
   // Per-account sort preference (localStorage) — restore after mount, then persist.
@@ -146,11 +197,20 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
     [allTags]
   );
 
+  // Tasks within the selected smart view / List — applied before the
+  // existing tag filter, sort, and status tabs, all of which are preserved
+  // unchanged and simply operate on this narrower set.
+  const scopedTasks = useMemo(() => {
+    if (scope.type === "list") return tasks.filter((t) => t.list_id === scope.id);
+    if (scope.type === "inbox") return tasks.filter((t) => t.list_id === null);
+    return tasks;
+  }, [tasks, scope]);
+
   const { activeTasks, overdueTasks, completedTasks } = useMemo(() => {
     const today = localTodayStr();
     const scoped = selectedTagId
-      ? tasks.filter((t) => t.tags.some((tag) => tag.id === selectedTagId))
-      : tasks;
+      ? scopedTasks.filter((t) => t.tags.some((tag) => tag.id === selectedTagId))
+      : scopedTasks;
     const sorted = sortTasks(scoped, sortBy);
     const active = sorted.filter((t) => t.status === "active");
     return {
@@ -158,7 +218,11 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
       overdueTasks: active.filter((t) => !!t.due_date && t.due_date < today),
       completedTasks: sorted.filter((t) => t.status === "completed"),
     };
-  }, [tasks, sortBy, selectedTagId]);
+  }, [scopedTasks, sortBy, selectedTagId]);
+
+  const selectedList = scope.type === "list" ? lists.find((l) => l.id === scope.id) ?? null : null;
+  const scopeTitle =
+    scope.type === "inbox" ? "Inbox" : scope.type === "list" ? (selectedList?.name ?? "List") : "My Tasks";
 
   const selectedTag = selectedTagId
     ? allTags.find((t) => t.id === selectedTagId) ?? null
@@ -394,6 +458,105 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
     setFormOpen(true);
   }
 
+  // Creating a task from within a selected List auto-assigns it to that List;
+  // Inbox and smart views default to Inbox (null), matching current behavior.
+  const formDefaultListId = scope.type === "list" ? scope.id : null;
+
+  // ---------------------------------------------------------------------------
+  // List mutations
+  // ---------------------------------------------------------------------------
+
+  const handleCreateList = useCallback(
+    async (name: string, color: ListColorKey | null) => {
+      const supabase = createClient();
+      const newList = await createTaskList(supabase, userId, name, color, lists);
+      setLists((prev) => [...prev, newList]);
+      selectScope({ type: "list", id: newList.id });
+    },
+    [userId, lists, selectScope]
+  );
+
+  const handleRenameList = useCallback(
+    async (listId: string, name: string) => {
+      const supabase = createClient();
+      const updated = await renameTaskList(supabase, listId, name, lists);
+      setLists((prev) => prev.map((l) => (l.id === listId ? updated : l)));
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.list_id === listId && t.list ? { ...t, list: { ...t.list, name: updated.name } } : t
+        )
+      );
+    },
+    [lists]
+  );
+
+  const handleChangeListColor = useCallback(async (listId: string, color: ListColorKey | null) => {
+    try {
+      const supabase = createClient();
+      const updated = await updateTaskListColor(supabase, listId, color);
+      setLists((prev) => prev.map((l) => (l.id === listId ? updated : l)));
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.list_id === listId && t.list ? { ...t, list: { ...t.list, color: updated.color } } : t
+        )
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't update the list color.");
+    }
+  }, []);
+
+  const handleDeleteList = useCallback(
+    async (listId: string) => {
+      try {
+        const supabase = createClient();
+        await deleteTaskList(supabase, listId);
+        setLists((prev) => prev.filter((l) => l.id !== listId));
+        // The DB's `on delete set null` already unassigned these tasks server-side;
+        // mirror that locally so the UI doesn't need a refetch.
+        setTasks((prev) =>
+          prev.map((t) => (t.list_id === listId ? { ...t, list_id: null, list: null } : t))
+        );
+        if (scope.type === "list" && scope.id === listId) {
+          selectScope({ type: "inbox" });
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't delete the list.");
+      }
+    },
+    [scope, selectScope]
+  );
+
+  const handleMoveTask = useCallback(
+    async (taskId: string, listId: string | null) => {
+      const previous = tasks.find((t) => t.id === taskId);
+      if (!previous) return;
+      const nextList = listId ? lists.find((l) => l.id === listId) ?? null : null;
+      // Optimistic update
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId
+            ? {
+                ...t,
+                list_id: listId,
+                list: nextList
+                  ? { id: nextList.id, name: nextList.name, color: nextList.color, icon: nextList.icon }
+                  : null,
+              }
+            : t
+        )
+      );
+      try {
+        const supabase = createClient();
+        await moveTaskToList(supabase, taskId, listId);
+      } catch (err) {
+        // Revert
+        setTasks((prev) => prev.map((t) => (t.id === taskId ? previous : t)));
+        setError(err instanceof Error ? err.message : "Couldn't move the task.");
+      }
+    },
+    [tasks, lists]
+  );
+
   // ---------------------------------------------------------------------------
   // Render helpers
   // ---------------------------------------------------------------------------
@@ -409,7 +572,7 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
     {
       key: "all",
       label: "All",
-      count: selectedTagId ? activeTasks.length + completedTasks.length : tasks.length,
+      count: selectedTagId ? activeTasks.length + completedTasks.length : scopedTasks.length,
     },
     { key: "active", label: "Active", count: activeTasks.length },
     { key: "overdue", label: "Overdue", count: overdueTasks.length },
@@ -418,11 +581,63 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
 
   return (
     <AppShell flushTop>
-      <div className="h-full flex flex-col max-w-3xl mx-auto pt-4">
+      <div className="h-full flex gap-6 max-w-5xl mx-auto pt-4">
+        {/* Desktop Lists panel — extends the Tasks page's own sub-navigation
+            rather than adding a second global sidebar. */}
+        <aside className="hidden lg:block w-[240px] shrink-0 pr-5 border-r border-[hsl(var(--border))] overflow-y-auto">
+          <ListsPanel
+            scope={scope}
+            onSelectScope={selectScope}
+            lists={lists}
+            counts={listTaskCounts}
+            onCreateList={handleCreateList}
+            onRenameList={handleRenameList}
+            onChangeListColor={handleChangeListColor}
+            onDeleteList={handleDeleteList}
+          />
+        </aside>
+
+        {/* Mobile Lists drawer */}
+        {mobileListsOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+              onClick={() => setMobileListsOpen(false)}
+            />
+            <div className="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-[hsl(var(--background))] border-r border-[hsl(var(--border))] shadow-2xl p-4 overflow-y-auto lg:hidden">
+              <ListsPanel
+                scope={scope}
+                onSelectScope={selectScope}
+                lists={lists}
+                counts={listTaskCounts}
+                onCreateList={handleCreateList}
+                onRenameList={handleRenameList}
+                onChangeListColor={handleChangeListColor}
+                onDeleteList={handleDeleteList}
+                onRequestClose={() => setMobileListsOpen(false)}
+              />
+            </div>
+          </>
+        )}
+
+      <div className="flex-1 min-w-0 flex flex-col max-w-3xl">
         {/* Page header */}
         <div className="flex items-center justify-between mb-5 shrink-0">
           <div>
-            <h2 className="text-xl font-bold">My Tasks</h2>
+            <button
+              type="button"
+              onClick={() => setMobileListsOpen(true)}
+              className="flex items-center gap-1.5 mb-1 text-xs font-medium text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer lg:hidden"
+            >
+              <PanelLeft className="w-3.5 h-3.5" />
+              Lists
+            </button>
+            <h2 className="text-xl font-bold">{scopeTitle}</h2>
+            {selectedList && (
+              <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+                {activeTasks.length} active task{activeTasks.length === 1 ? "" : "s"}
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -629,7 +844,7 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
               </div>
             )}
 
-            {tasks.length > 0 &&
+            {scopedTasks.length > 0 &&
               visibleActive.length === 0 &&
               filterBy === "active" &&
               !(selectedTag && activeTasks.length === 0 && completedTasks.length === 0) && (
@@ -664,7 +879,7 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
               </div>
             )}
 
-            {tasks.length > 0 &&
+            {scopedTasks.length > 0 &&
               visibleActive.length === 0 &&
               filterBy === "overdue" &&
               !(selectedTag && activeTasks.length === 0 && completedTasks.length === 0) && (
@@ -691,13 +906,23 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
               </div>
             )}
 
-            {/* Empty state for very first task */}
-            {tasks.length === 0 && (
+            {/* Empty state — either the account's very first task, or an empty List/Inbox */}
+            {scopedTasks.length === 0 && (
               <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
                 <EmptyState
                   icon={CheckSquare}
-                  title="No tasks yet"
-                  description="Add your first task to start tracking what you need to accomplish."
+                  title={
+                    scope.type === "inbox"
+                      ? "No tasks in Inbox."
+                      : scope.type === "list"
+                        ? "No tasks in this list."
+                        : "No tasks yet"
+                  }
+                  description={
+                    scope.type === "all"
+                      ? "Add your first task to start tracking what you need to accomplish."
+                      : "Add a task to get started."
+                  }
                   action={
                     <button
                       onClick={openCreate}
@@ -719,6 +944,8 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
                 onDelete={handleDelete}
                 onToggleComplete={handleToggleComplete}
                 onToggleSubtask={handleToggleSubtask}
+                lists={moveToListOptions}
+                onMoveToList={handleMoveTask}
               />
             ))}
           </div>
@@ -741,6 +968,8 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
                   onDelete={handleDelete}
                   onToggleComplete={handleToggleComplete}
                   onToggleSubtask={handleToggleSubtask}
+                  lists={moveToListOptions}
+                  onMoveToList={handleMoveTask}
                 />
               ))}
             </div>
@@ -748,7 +977,8 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
         )}
 
         </div>{/* end scrollable list */}
-      </div>
+      </div>{/* end main content column */}
+      </div>{/* end Lists panel + main content row */}
 
       {/* Task form drawer */}
       <TaskForm
@@ -761,6 +991,8 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
         onDeleteTag={handleDeleteTag}
         editTask={editingTask}
         allTags={allTags}
+        allLists={lists}
+        defaultListId={formDefaultListId}
       />
     </AppShell>
   );

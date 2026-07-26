@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Task, Subtask, Tag, TaskWithDetails, Priority } from "@/types";
+import type { Task, Subtask, Tag, TaskList, TaskWithDetails, Priority } from "@/types";
 
 /** Canonical priority ordering used everywhere tasks are priority-sorted. */
 export const TASK_PRIORITY_ORDER: Record<Priority, number> = {
@@ -17,24 +17,27 @@ interface RawTaskRow extends Omit<Task, "priority" | "status"> {
   status: string;
   subtasks: Subtask[];
   task_tags: Array<{ tags: Tag | null }>;
+  task_lists: Pick<TaskList, "id" | "name" | "color" | "icon"> | null;
 }
 
 /** Normalizes the Supabase nested-select shape into TaskWithDetails. */
 function normalize(raw: RawTaskRow): TaskWithDetails {
-  const { task_tags, ...fields } = raw;
+  const { task_tags, task_lists, ...fields } = raw;
   return {
     ...(fields as unknown as Task),
     subtasks: raw.subtasks ?? [],
     tags: (task_tags ?? [])
       .map((tt) => tt.tags)
       .filter((t): t is Tag => t !== null),
+    list: task_lists ?? null,
   };
 }
 
 const TASK_SELECT = `
   *,
   subtasks ( * ),
-  task_tags ( tags ( * ) )
+  task_tags ( tags ( * ) ),
+  task_lists ( id, name, color, icon )
 ` as const;
 
 // ---------------------------------------------------------------------------
@@ -106,6 +109,8 @@ export interface TaskFormData {
   priority: Priority;
   due_date: string | null;
   due_time: string | null;
+  /** The List this task belongs to, or null for Inbox. */
+  list_id: string | null;
 }
 
 /** Subtask items as represented in the form (new items have no id). */
@@ -197,6 +202,7 @@ export async function createTask(
       priority: data.priority,
       due_date: data.due_date,
       due_time: data.due_time,
+      list_id: data.list_id,
     })
     .select("id")
     .single();
@@ -248,6 +254,7 @@ export async function updateTask(
       priority: data.priority,
       due_date: data.due_date,
       due_time: data.due_time,
+      list_id: data.list_id,
     })
     .eq("id", taskId);
   if (taskErr) throw taskErr;

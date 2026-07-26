@@ -19,6 +19,20 @@ export interface Task {
   due_date: string | null;   // ISO date string (YYYY-MM-DD)
   due_time: string | null;   // HH:MM:SS
   completed_at: string | null;
+  list_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A user-owned container for Tasks (e.g. "Work", "Personal"). A task with a
+ *  null `list_id` belongs to no List and appears in the "Inbox" system view. */
+export interface TaskList {
+  id: string;
+  user_id: string;
+  name: string;
+  color: string | null;
+  icon: string | null;
+  position: number;
   created_at: string;
   updated_at: string;
 }
@@ -72,6 +86,8 @@ export interface TaskTag {
 export interface TaskWithDetails extends Task {
   subtasks: Subtask[];
   tags: Tag[];
+  /** Populated from the joined `task_lists` row; null when `list_id` is null. */
+  list: Pick<TaskList, "id" | "name" | "color" | "icon"> | null;
 }
 
 // Search types (SearchEntityType, SearchResult, SearchFilters, etc.) live in

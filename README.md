@@ -245,3 +245,85 @@ Desktop (`lg+`): two columns — **Today's tasks** and **Today's events** stacke
 - [ ] Dark and light mode both render correctly.
 - [ ] Tasks page: Overdue filter, Oldest/Newest sort persistence across reload, and Completed list without fold.
 
+## Lists (Tasks page)
+
+`/tasks` adds a TickTick-style **Lists** panel alongside the existing smart-view filter tabs (All / Active / Overdue / Completed), which are unchanged. A List is a user-owned container for Tasks; a Task belongs to zero or one List. This is a V1 — see [Known limitations](#known-limitations-2) below for what's intentionally out of scope.
+
+### Database
+
+- **Migrations:** `supabase/migrations/0006_task_lists.sql` and `0007_search_list_support.sql` (run in order; do not modify `0001`–`0005`).
+- **Schema:** `public.task_lists (id, user_id, name, color, icon, position, created_at, updated_at)`; `public.tasks` gains a nullable `list_id uuid references public.task_lists(id) on delete set null`.
+- **Inbox is not a database row.** A task with `list_id = null` is the "Inbox" system view — same convention as the existing smart views (All/Active/Overdue/Completed), which also aren't stored rows.
+- **Deleting a List never deletes its Tasks.** `on delete set null` moves them to Inbox automatically; the app also mirrors this locally so the UI doesn't need a refetch.
+- **Uniqueness:** a unique index on `(user_id, lower(name))` enforces case-insensitive duplicate names ("Work" / "work" / " WORK " all conflict) at the database level; the client also validates before submitting for instant feedback.
+- **Ownership:** a `before insert or update of list_id` trigger (`enforce_task_list_ownership`) rejects assigning a task to a List the task's `user_id` doesn't own — defense-in-depth on top of RLS, since the foreign key alone doesn't check ownership.
+- **Indexes:** `task_lists(user_id)`, `task_lists(user_id, position)`, `tasks(list_id)`, plus the unique `(user_id, lower(name))` index above.
+- **RLS:** `task_lists` has the same four-policy pattern (`select/insert/update/delete own`, `auth.uid() = user_id`) as every other user-owned table. `tasks` RLS is unchanged.
+- **Colors:** a fixed 8-key palette (`red/orange/yellow/green/blue/purple/pink/gray`, see `lib/task-lists.ts:LIST_COLOR_SWATCH`) — the stored value is the color *key*, not a hex/CSS value, so the palette can be restyled without a migration. Color is optional.
+- **Search:** `search_planitary()` (from `0004_search.sql`) is recreated in `0007` to also return `list_name` for task rows and let a matching List name weakly boost relevance (+8) — well below an exact/prefix title match (+100/+50) or a tag match (+15), so it can never outrank a real title match.
+
+### Application layer
+
+| Concern | File |
+|---|---|
+| `TaskList` type, `Task.list_id`, `TaskWithDetails.list` | `types/index.ts` |
+| List CRUD, color palette, name validation, count aggregation | `lib/task-lists.ts` |
+| Task fetch/create/update — `list_id` plumbed through `TASK_SELECT` | `lib/tasks.ts` |
+| Scope (`all`/`inbox`/`list:<id>`) ⇄ URL helpers | `lib/tasks-url-state.ts` |
+| Lists panel (smart views, Lists, add/rename/delete UI) | `app/tasks/ListsPanel.tsx` |
+| List right-click/overflow menu (Rename, Change color, Delete) | `app/tasks/ListContextMenu.tsx` |
+| List selector in the Task form | `app/tasks/TaskForm.tsx` |
+| "Move to list" submenu on the task context menu | `app/calendar/AgendaItemContextMenu.tsx` (shared with Calendar events; the submenu only renders when a `lists` prop is passed, so Calendar's usage is unaffected) |
+| Task row's subtle List chip + move handler wiring | `app/tasks/TaskCard.tsx` |
+| Search's `listName`/`"list"` matched field | `lib/search.ts`, `types/search.ts`, `app/search/SearchResultRow.tsx` |
+
+### Behavior
+
+- **Task counts** shown beside each List (and Inbox) are **active tasks only**, computed client-side from the Tasks page's already-loaded task set (`computeListTaskCounts`) — no extra query, no N+1.
+- **Creating a task while a custom List is selected** auto-assigns `list_id` to that List; Inbox and smart views default new tasks to Inbox. The Task form's List selector can always override this before saving.
+- **Moving a task** (Edit form's List selector, or the task context menu's "Move to list") updates `list_id` optimistically, with rollback + an inline error ("Couldn't move the task.") on failure.
+- **Deleting a List** shows a confirmation naming the List and stating its Tasks move to Inbox; after confirming, the List's Tasks are preserved with `list_id = null`, and if the deleted List was selected, the view falls back to Inbox.
+- **A deleted or foreign List id in the URL** (`?list=<id>`) falls back to the "All Tasks" view rather than erroring or leaking another user's data — verified by `parseTasksScope`'s unit tests.
+
+### URL parameters
+
+`/tasks` (default, All Tasks — unchanged from before Lists) · `/tasks?view=inbox` (Inbox) · `/tasks?list=<uuid>` (a custom List). Selecting a scope uses `router.push` (not `replace`), so browser Back/Forward step through List/view changes; refreshing preserves the current scope.
+
+### Mobile
+
+The Lists panel is a persistent ~240px column on desktop (`lg+`), and a left slide-over drawer on mobile (reusing `AppShell`'s existing overlay + translate-x pattern), opened via a "Lists" button in the Tasks header. List creation, rename, delete, and color are all available from the same panel on both layouts — nothing is desktop-only.
+
+### Known limitations
+
+- **V1 does not include:** folders, sections within a List, shared/collaborative Lists, List permissions, archived Lists, or assigning one Task to multiple Lists. The schema/types are intentionally minimal so these could be added later without a Tasks rewrite.
+- The Task form's List selector (built on the existing `PickerSelect`) shows List names but not color swatches inline in the dropdown list — `PickerSelect`'s option type is plain-text and is shared elsewhere in the app, so it wasn't widened just for this. The List's color still appears everywhere else (Lists panel, task row chip, context menu).
+- **No local Supabase/Postgres test environment exists in this repo** (no `supabase/config.toml`), so RLS cross-user isolation, the ownership trigger, the `on delete set null` cascade, and the unique-index duplicate rejection are **not** covered by the automated test suite — see the manual Supabase steps below. Everything expressible as a pure function (name validation, URL scope parsing, count aggregation, search row normalization) has unit tests instead.
+
+### Manual Supabase steps
+
+- [ ] Apply `supabase/migrations/0006_task_lists.sql`, then `0007_search_list_support.sql` (SQL editor or `supabase db push`), in that order.
+- [ ] Confirm `task_lists` has RLS enabled with 4 policies (Database → Tables → task_lists → RLS).
+- [ ] Confirm the unique index `task_lists_user_id_name_lower_idx` exists (Database → Indexes).
+- [ ] As User A, create a List, then as User B confirm `select * from task_lists` (via the app, not the SQL editor's superuser context) never returns User A's List.
+- [ ] As User A, attempt to `update tasks set list_id = '<a User B list id>' where id = '<a User A task id>'` directly in the SQL editor while impersonating User A (`set local role authenticated; set local request.jwt.claims = ...`) and confirm the ownership trigger raises an exception.
+- [ ] Delete a List with Tasks in it and confirm the Tasks still exist afterward with `list_id = null`.
+- [ ] Attempt to create two Lists named `Work` and `work` for the same user and confirm the second is rejected.
+
+### Manual testing checklist
+
+- [ ] Create a List, select it, and confirm only its Tasks show.
+- [ ] Create a Task while a List is selected; confirm it's assigned to that List without extra steps.
+- [ ] Create a Task from Inbox/All Tasks/a smart view; confirm it defaults to Inbox.
+- [ ] Move a Task via the Edit form's List selector, and separately via the task's right-click → "Move to list"; confirm it disappears from the old List's view and appears in the new one.
+- [ ] Move a Task to Inbox; confirm `list_id` becomes null.
+- [ ] Rename a List; confirm Enter saves, Escape cancels, and a duplicate name is rejected with the existing name preserved.
+- [ ] Delete a List with Tasks; confirm the confirmation mentions Inbox, the Tasks survive, and the view falls back to Inbox if it was selected.
+- [ ] Refresh on `/tasks?list=<id>` and confirm the same List stays selected; use Back/Forward after switching Lists.
+- [ ] Visit `/tasks?list=<a deleted or nonexistent id>` and confirm it falls back to All Tasks without an error.
+- [ ] Confirm existing (pre-Lists) Tasks appear in Inbox.
+- [ ] Confirm the existing sort options, tag filter, and Completed section all still work identically within a selected List.
+- [ ] Search for a List's name and confirm a Task in that List can appear in results with the List name shown, without outranking an exact title match elsewhere.
+- [ ] Confirm the Dashboard's Today's tasks section is unaffected (still shows tasks due today regardless of List).
+- [ ] Mobile: open the Lists drawer from the Tasks header, select/create/rename/delete a List, and confirm no horizontal overflow.
+- [ ] Dark mode and light mode both render the Lists panel, color swatches, and context menus correctly.
+
