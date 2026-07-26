@@ -26,13 +26,10 @@ import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
 import {
   createTaskList,
   renameTaskList,
-  updateTaskListColor,
   deleteTaskList,
   moveTaskToList,
+  reorderTaskLists,
   computeListTaskCounts,
-  isListColorKey,
-  LIST_COLOR_SWATCH,
-  type ListColorKey,
 } from "@/lib/task-lists";
 import type { MoveToListOption } from "@/app/calendar/AgendaItemContextMenu";
 import { parseTasksScope, buildTasksScopeParams, type TasksScope } from "@/lib/tasks-url-state";
@@ -147,7 +144,6 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
       ...lists.map((l) => ({
         id: l.id,
         name: l.name,
-        color: l.color && isListColorKey(l.color) ? LIST_COLOR_SWATCH[l.color] : null,
       })),
     ],
     [lists]
@@ -467,9 +463,9 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
   // ---------------------------------------------------------------------------
 
   const handleCreateList = useCallback(
-    async (name: string, color: ListColorKey | null) => {
+    async (name: string) => {
       const supabase = createClient();
-      const newList = await createTaskList(supabase, userId, name, color, lists);
+      const newList = await createTaskList(supabase, userId, name, null, lists);
       setLists((prev) => [...prev, newList]);
       selectScope({ type: "list", id: newList.id });
     },
@@ -490,21 +486,6 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
     [lists]
   );
 
-  const handleChangeListColor = useCallback(async (listId: string, color: ListColorKey | null) => {
-    try {
-      const supabase = createClient();
-      const updated = await updateTaskListColor(supabase, listId, color);
-      setLists((prev) => prev.map((l) => (l.id === listId ? updated : l)));
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.list_id === listId && t.list ? { ...t, list: { ...t.list, color: updated.color } } : t
-        )
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't update the list color.");
-    }
-  }, []);
-
   const handleDeleteList = useCallback(
     async (listId: string) => {
       try {
@@ -524,6 +505,28 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
       }
     },
     [scope, selectScope]
+  );
+
+  const handleReorderLists = useCallback(
+    async (orderedIds: string[]) => {
+      const previous = lists;
+      const byId = new Map(lists.map((l) => [l.id, l]));
+      const next = orderedIds
+        .map((id, position) => {
+          const list = byId.get(id);
+          return list ? { ...list, position } : null;
+        })
+        .filter((l): l is TaskList => l !== null);
+      setLists(next);
+      try {
+        const supabase = createClient();
+        await reorderTaskLists(supabase, orderedIds);
+      } catch (err) {
+        setLists(previous);
+        setError(err instanceof Error ? err.message : "Couldn't reorder lists.");
+      }
+    },
+    [lists]
   );
 
   const handleMoveTask = useCallback(
@@ -592,8 +595,8 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
             counts={listTaskCounts}
             onCreateList={handleCreateList}
             onRenameList={handleRenameList}
-            onChangeListColor={handleChangeListColor}
             onDeleteList={handleDeleteList}
+            onReorderLists={handleReorderLists}
           />
         </aside>
 
@@ -612,8 +615,8 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
                 counts={listTaskCounts}
                 onCreateList={handleCreateList}
                 onRenameList={handleRenameList}
-                onChangeListColor={handleChangeListColor}
                 onDeleteList={handleDeleteList}
+                onReorderLists={handleReorderLists}
                 onRequestClose={() => setMobileListsOpen(false)}
               />
             </div>
@@ -633,11 +636,6 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
               Lists
             </button>
             <h2 className="text-xl font-bold">{scopeTitle}</h2>
-            {selectedList && (
-              <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
-                {activeTasks.length} active task{activeTasks.length === 1 ? "" : "s"}
-              </p>
-            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -712,20 +710,20 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
               key={key}
               onClick={() => setFilterBy(key)}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+                "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors text-[hsl(var(--foreground))]",
                 filterBy === key
-                  ? "bg-[hsl(var(--background))] text-[hsl(var(--foreground))] shadow-sm cursor-default"
-                  : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] cursor-pointer"
+                  ? "bg-[hsl(var(--background))] shadow-sm cursor-default"
+                  : "cursor-pointer"
               )}
             >
               {label}
               {count !== undefined && count > 0 && (
                 <span
                   className={cn(
-                    "text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center",
+                    "text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center text-[hsl(var(--foreground))]",
                     filterBy === key
-                      ? "bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]"
-                      : "bg-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"
+                      ? "bg-[hsl(var(--muted))]"
+                      : "bg-[hsl(var(--border))]"
                   )}
                 >
                   {count}

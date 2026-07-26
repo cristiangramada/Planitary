@@ -2,17 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Pencil, Trash2, Palette } from "lucide-react";
-import { cn } from "@/utils/cn";
-import { LIST_COLOR_KEYS, LIST_COLOR_SWATCH, type ListColorKey } from "@/lib/task-lists";
+import { Pencil, Trash2 } from "lucide-react";
 
 interface ListContextMenuProps {
   x: number;
   y: number;
   listName: string;
-  currentColor: ListColorKey | null;
   onRename: () => void;
-  onChangeColor: (color: ListColorKey | null) => void;
   onDelete: () => void;
   onClose: () => void;
 }
@@ -24,15 +20,12 @@ export function ListContextMenu({
   x,
   y,
   listName,
-  currentColor,
   onRename,
-  onChangeColor,
   onDelete,
   onClose,
 }: ListContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [colorOpen, setColorOpen] = useState(false);
 
   useEffect(() => {
     function handleOutside(e: MouseEvent) {
@@ -51,7 +44,7 @@ export function ListContextMenu({
 
   const menuWidth = 168;
   const left = Math.min(x, window.innerWidth - menuWidth - 8);
-  const top = Math.min(y, window.innerHeight - (colorOpen ? 210 : 160));
+  const top = Math.min(y, window.innerHeight - 120);
 
   return createPortal(
     <div
@@ -100,57 +93,6 @@ export function ListContextMenu({
             <Pencil className="w-4 h-4 text-[hsl(var(--muted-foreground))] shrink-0" />
             Rename
           </button>
-
-          <div className="border-t border-[hsl(var(--border))]">
-            <button
-              type="button"
-              role="menuitem"
-              aria-expanded={colorOpen}
-              onClick={() => setColorOpen((v) => !v)}
-              className="flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-left whitespace-nowrap hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
-            >
-              <Palette className="w-4 h-4 text-[hsl(var(--muted-foreground))] shrink-0" />
-              Change color
-            </button>
-            {colorOpen && (
-              <div className="flex flex-wrap gap-1.5 px-3 pb-3">
-                <button
-                  type="button"
-                  title="No color"
-                  aria-label="No color"
-                  aria-pressed={currentColor === null}
-                  onClick={() => {
-                    onChangeColor(null);
-                    onClose();
-                  }}
-                  className={cn(
-                    "w-5 h-5 rounded-full shrink-0 border-2 border-dashed border-[hsl(var(--muted-foreground))] transition-transform cursor-pointer",
-                    currentColor === null ? "scale-110" : "hover:scale-110 opacity-70 hover:opacity-100"
-                  )}
-                />
-                {LIST_COLOR_KEYS.map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    title={key}
-                    aria-label={`${key} color`}
-                    aria-pressed={currentColor === key}
-                    onClick={() => {
-                      onChangeColor(key);
-                      onClose();
-                    }}
-                    className={cn(
-                      "w-5 h-5 rounded-full shrink-0 transition-transform cursor-pointer",
-                      currentColor === key
-                        ? "ring-2 ring-offset-2 ring-offset-[hsl(var(--background))] ring-[hsl(var(--foreground))] scale-110"
-                        : "hover:scale-110 opacity-80 hover:opacity-100"
-                    )}
-                    style={{ backgroundColor: LIST_COLOR_SWATCH[key] }}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
 
           <button
             type="button"

@@ -1,33 +1,28 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { TaskList, TaskWithDetails } from "@/types";
+import { PLANET_TAG_COLORS } from "@/lib/tasks";
 
 // ---------------------------------------------------------------------------
-// Fixed color palette
-//
-// A small, stable set of named colors rather than a free-form color picker.
-// The stored value is the color key (e.g. "blue"), not a hex/CSS value, so
-// the palette's exact shades can change without touching stored data.
+// Fixed color palette — same 8 planet hexes as tags (Mercury → Neptune).
+// Stored value is the hex string (e.g. "#2563EB"), matching tag colors.
 // ---------------------------------------------------------------------------
 
-export const LIST_COLOR_KEYS = [
-  "red",
-  "orange",
-  "yellow",
-  "green",
-  "blue",
-  "purple",
-  "pink",
-  "gray",
-] as const;
+export const LIST_COLORS = PLANET_TAG_COLORS.map((p) => p.color);
 
-export type ListColorKey = (typeof LIST_COLOR_KEYS)[number];
+export type ListColor = (typeof PLANET_TAG_COLORS)[number]["color"];
 
-export function isListColorKey(value: string): value is ListColorKey {
-  return (LIST_COLOR_KEYS as readonly string[]).includes(value);
+/** @deprecated Prefer `ListColor`. Kept as an alias for existing call sites. */
+export type ListColorKey = ListColor;
+
+export function isListColor(value: string): value is ListColor {
+  return (LIST_COLORS as readonly string[]).includes(value);
 }
 
-/** Swatch hex per color key. Chosen to be legible in both dark and light themes. */
-export const LIST_COLOR_SWATCH: Record<ListColorKey, string> = {
+/** @deprecated Prefer `isListColor`. */
+export const isListColorKey = isListColor;
+
+/** Legacy named keys from the first Lists palette → planet hex, for display only. */
+const LEGACY_LIST_COLOR_KEYS: Record<string, string> = {
   red: "#DC2626",
   orange: "#EA580C",
   yellow: "#EAB308",
@@ -37,6 +32,13 @@ export const LIST_COLOR_SWATCH: Record<ListColorKey, string> = {
   pink: "#DB2777",
   gray: "#94A3B8",
 };
+
+/** Resolves a stored list color to a CSS hex for swatches. */
+export function resolveListColor(color: string | null | undefined): string | null {
+  if (!color) return null;
+  if (isListColor(color)) return color;
+  return LEGACY_LIST_COLOR_KEYS[color] ?? null;
+}
 
 const MAX_LIST_NAME_LENGTH = 50;
 
@@ -142,7 +144,7 @@ export async function createTaskList(
   supabase: SupabaseClient,
   userId: string,
   name: string,
-  color: ListColorKey | null,
+  color: ListColor | null,
   existingLists: TaskList[]
 ): Promise<TaskList> {
   const validation = validateListName(name, existingLists.map((l) => l.name));
@@ -204,7 +206,7 @@ export async function renameTaskList(
 export async function updateTaskListColor(
   supabase: SupabaseClient,
   listId: string,
-  color: ListColorKey | null
+  color: ListColor | null
 ): Promise<TaskList> {
   const { data, error } = await supabase
     .from("task_lists")
@@ -222,6 +224,20 @@ export async function updateTaskListColor(
 export async function deleteTaskList(supabase: SupabaseClient, listId: string): Promise<void> {
   const { error } = await supabase.from("task_lists").delete().eq("id", listId);
   if (error) throw new Error("Couldn't delete the list.");
+}
+
+/** Persists a new List order by writing contiguous `position` values (0..n-1). */
+export async function reorderTaskLists(
+  supabase: SupabaseClient,
+  orderedIds: string[]
+): Promise<void> {
+  const results = await Promise.all(
+    orderedIds.map((id, position) =>
+      supabase.from("task_lists").update({ position }).eq("id", id)
+    )
+  );
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw new Error("Couldn't reorder lists.");
 }
 
 // ---------------------------------------------------------------------------

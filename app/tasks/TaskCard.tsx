@@ -15,12 +15,7 @@ import { TagBadge } from "@/components/ui/TagBadge";
 import { AgendaItemContextMenu, type MoveToListOption } from "@/app/calendar/AgendaItemContextMenu";
 import { relativeDate, formatDate, parseDateOnly } from "@/utils/date";
 import { formatTimeValue } from "@/components/ui/TimeDropdown";
-import { LIST_COLOR_SWATCH, isListColorKey } from "@/lib/task-lists";
 import type { TaskWithDetails } from "@/types";
-
-function listSwatch(color: string | null): string | null {
-  return color && isListColorKey(color) ? LIST_COLOR_SWATCH[color] : null;
-}
 
 interface TaskCardProps {
   task: TaskWithDetails;
@@ -158,13 +153,7 @@ export function TaskCard({
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             {/* List label */}
             {task.list && (
-              <span className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))]">
-                {listSwatch(task.list.color) && (
-                  <span
-                    className="w-1.5 h-1.5 rounded-full shrink-0"
-                    style={{ backgroundColor: listSwatch(task.list.color)! }}
-                  />
-                )}
+              <span className="text-xs text-[hsl(var(--muted-foreground))]">
                 {task.list.name}
               </span>
             )}
