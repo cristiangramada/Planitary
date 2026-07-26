@@ -78,17 +78,31 @@ export function TaskCard({
   lists,
   onMoveToList,
 }: TaskCardProps) {
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    align: "start" | "end";
+    anchorTop?: number;
+  } | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState(task.title);
+  const [optimisticTitle, setOptimisticTitle] = useState<string | null>(null);
   const [savingTitle, setSavingTitle] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const caretIndexRef = useRef<number | null>(null);
+  const selectionRangeRef = useRef<{ start: number; end: number } | null>(null);
+  const pendingSelectionRef = useRef<{ start: number; end: number } | null>(null);
 
   useEffect(() => {
     if (!editingTitle || !titleInputRef.current) return;
     const el = titleInputRef.current;
     el.focus();
+    const sel = selectionRangeRef.current;
+    selectionRangeRef.current = null;
+    if (sel) {
+      el.setSelectionRange(sel.start, sel.end);
+      return;
+    }
     const len = el.value.length;
     const idx = caretIndexRef.current;
     caretIndexRef.current = null;
@@ -99,6 +113,14 @@ export function TaskCard({
     }
   }, [editingTitle]);
 
+  useEffect(() => {
+    if (optimisticTitle != null && task.title === optimisticTitle) {
+      setOptimisticTitle(null);
+    }
+  }, [task.title, optimisticTitle]);
+
+  const displayTitle = optimisticTitle ?? task.title;
+
   const isCompleted = task.status === "completed";
   const hasDue = !!task.due_date;
   const dueDateStr = hasDue ? formatDate(task.due_date!) : null;
@@ -107,39 +129,64 @@ export function TaskCard({
     hasDue &&
     parseDateOnly(task.due_date!) < new Date(new Date().toDateString());
 
-  function startTitleEdit(caretIndex: number | null = null) {
+  function startTitleEdit(
+    caretIndex: number | null = null,
+    selectionEnd: number | null = null
+  ) {
     if (!onRenameTitle || editingTitle || savingTitle) return;
-    caretIndexRef.current = caretIndex;
-    setTitleValue(task.title);
+    if (caretIndex != null && selectionEnd != null && selectionEnd !== caretIndex) {
+      selectionRangeRef.current = {
+        start: Math.min(caretIndex, selectionEnd),
+        end: Math.max(caretIndex, selectionEnd),
+      };
+      caretIndexRef.current = null;
+    } else {
+      selectionRangeRef.current = null;
+      caretIndexRef.current = caretIndex;
+    }
+    setTitleValue(displayTitle);
     setEditingTitle(true);
+  }
+
+  function selectionOffsetsInTitle(container: HTMLElement): { start: number; end: number } | null {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
+    const textNode = container.firstChild;
+    if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return null;
+    if (sel.anchorNode !== textNode || sel.focusNode !== textNode) return null;
+    const start = Math.min(sel.anchorOffset, sel.focusOffset);
+    const end = Math.max(sel.anchorOffset, sel.focusOffset);
+    if (start === end) return null;
+    return { start, end };
   }
 
   async function commitTitleEdit() {
     if (!onRenameTitle || savingTitle) return;
     const trimmed = titleValue.trim();
     if (!trimmed) {
-      setTitleValue(task.title);
+      setTitleValue(displayTitle);
       setEditingTitle(false);
       return;
     }
-    if (trimmed === task.title.trim()) {
+    if (trimmed === displayTitle.trim()) {
       setEditingTitle(false);
       return;
     }
+    setOptimisticTitle(trimmed);
+    setEditingTitle(false);
     setSavingTitle(true);
     try {
       await onRenameTitle(task.id, trimmed);
-      setEditingTitle(false);
     } catch {
+      setOptimisticTitle(null);
       setTitleValue(task.title);
-      setEditingTitle(false);
     } finally {
       setSavingTitle(false);
     }
   }
 
   function cancelTitleEdit() {
-    setTitleValue(task.title);
+    setTitleValue(displayTitle);
     setEditingTitle(false);
   }
 
@@ -157,7 +204,7 @@ export function TaskCard({
     e.preventDefault();
     e.stopPropagation();
     onSelect?.(task);
-    setContextMenu({ x: e.clientX, y: e.clientY });
+    setContextMenu({ x: e.clientX, y: e.clientY, align: "start" });
   }
 
   function openMenuFromButton(e: React.MouseEvent<HTMLButtonElement>) {
@@ -168,10 +215,20 @@ export function TaskCard({
       return;
     }
     const rect = e.currentTarget.getBoundingClientRect();
-    setContextMenu({ x: rect.right, y: rect.bottom });
+    setContextMenu({
+      x: rect.right,
+      y: rect.bottom,
+      align: "end",
+      anchorTop: rect.top,
+    });
   }
 
   const canOpenMenu = !!(onSetPriority && onSetDue && onSetTags);
+  const hasMeta =
+    !!task.list ||
+    hasDue ||
+    task.tags.length > 0 ||
+    (isCompleted && !!task.completed_at);
 
   return (
     <div
@@ -187,15 +244,14 @@ export function TaskCard({
       }}
       onContextMenu={handleContextMenu}
       className={cn(
-        "group rounded-xl border bg-[hsl(var(--card))] transition-colors",
-        onSelect ? "cursor-pointer" : "cursor-default",
+        "group rounded-xl border bg-[hsl(var(--card))] transition-colors cursor-default",
         isCompleted
           ? "border-[hsl(var(--border))] opacity-70"
           : "border-[hsl(var(--border))] hover:border-[hsl(var(--primary)/0.4)]",
         selected && "border-[hsl(var(--primary)/0.55)] ring-1 ring-[hsl(var(--primary)/0.25)]"
       )}
     >
-      <div className="flex items-start gap-3 p-4">
+      <div className={cn("flex gap-3 p-4", hasMeta ? "items-start" : "items-center")}>
         <button
           type="button"
           onClick={(e) => {
@@ -203,7 +259,7 @@ export function TaskCard({
             onToggleComplete(task.id, !isCompleted);
           }}
           aria-label={isCompleted ? "Reopen task" : "Complete task"}
-          className="mt-0.5 shrink-0 cursor-pointer"
+          className={cn("shrink-0 cursor-pointer", hasMeta && "mt-0.5")}
         >
           <span
             className={cn(
@@ -228,61 +284,104 @@ export function TaskCard({
         </button>
 
         <div className="flex-1 min-w-0">
-          {editingTitle ? (
-            <>
-              <label htmlFor={`task-title-edit-${task.id}`} className="sr-only">
-                Edit task title
-              </label>
-              <input
-                id={`task-title-edit-${task.id}`}
-                ref={titleInputRef}
-                type="text"
-                value={titleValue}
-                onChange={(e) => setTitleValue(e.target.value)}
-                onKeyDown={handleTitleKeyDown}
-                onBlur={() => void commitTitleEdit()}
-                onClick={(e) => e.stopPropagation()}
-                disabled={savingTitle}
-                className={cn(
-                  "w-full bg-transparent text-sm font-medium leading-snug text-[hsl(var(--foreground))] cursor-text focus:outline-none disabled:opacity-60",
-                  isCompleted && "line-through text-[hsl(var(--muted-foreground))]"
-                )}
-              />
-            </>
-          ) : (
-            <span
-              role={onRenameTitle ? "button" : undefined}
-              tabIndex={onRenameTitle ? 0 : undefined}
-              onClick={(e) => {
+          <span
+            role={onRenameTitle && !editingTitle ? "button" : undefined}
+            tabIndex={onRenameTitle && !editingTitle ? 0 : undefined}
+            onMouseUp={(e) => {
+              if (editingTitle || !onRenameTitle) return;
+              pendingSelectionRef.current = selectionOffsetsInTitle(e.currentTarget);
+            }}
+            onClick={(e) => {
+              if (editingTitle) {
+                e.stopPropagation();
+                return;
+              }
+              e.stopPropagation();
+              onSelect?.(task);
+              if (!onRenameTitle) return;
+              const pending = pendingSelectionRef.current;
+              pendingSelectionRef.current = null;
+              if (pending) {
+                startTitleEdit(pending.start, pending.end);
+                return;
+              }
+              const textNode = e.currentTarget.firstChild;
+              if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+                const range = document.createRange();
+                range.selectNodeContents(textNode);
+                const textRect = range.getBoundingClientRect();
+                if (e.clientX > textRect.right) {
+                  startTitleEdit(null);
+                  return;
+                }
+              }
+              startTitleEdit(caretIndexFromPoint(e.clientX, e.clientY));
+            }}
+            onKeyDown={(e) => {
+              if (!onRenameTitle || editingTitle) return;
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
                 e.stopPropagation();
                 onSelect?.(task);
-                if (onRenameTitle) {
-                  startTitleEdit(caretIndexFromPoint(e.clientX, e.clientY));
-                }
-              }}
-              onKeyDown={(e) => {
-                if (!onRenameTitle) return;
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onSelect?.(task);
-                  startTitleEdit(null);
-                }
-              }}
-              aria-label={
-                onRenameTitle
-                  ? `Task title: ${task.title}. Press Enter to edit.`
-                  : undefined
+                startTitleEdit(null);
               }
-              className={cn(
-                "text-sm font-medium leading-snug select-none",
-                onRenameTitle ? "cursor-text" : undefined,
-                isCompleted && "line-through text-[hsl(var(--muted-foreground))]"
-              )}
-            >
-              {task.title}
-            </span>
-          )}
+            }}
+            aria-label={
+              onRenameTitle && !editingTitle
+                ? `Task title: ${displayTitle}. Press Enter to edit.`
+                : undefined
+            }
+            className={cn(
+              "inline-block max-w-full text-sm font-medium leading-snug select-text pr-24",
+              onRenameTitle ? "cursor-text" : undefined,
+              isCompleted && !editingTitle && "line-through text-[hsl(var(--muted-foreground))]"
+            )}
+          >
+            {editingTitle ? (
+              <>
+                <label htmlFor={`task-title-edit-${task.id}`} className="sr-only">
+                  Edit task title
+                </label>
+                <span className="relative inline-grid max-w-full align-baseline">
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "invisible col-start-1 row-start-1 box-border block whitespace-pre text-sm font-medium leading-snug",
+                      isCompleted && "line-through"
+                    )}
+                  >
+                    {/* Trailing thin space reserves room for the caret after the last glyph. */}
+                    {`${titleValue || " "}\u2009`}
+                  </span>
+                  <input
+                    id={`task-title-edit-${task.id}`}
+                    ref={titleInputRef}
+                    type="text"
+                    name={`task-title-${task.id}`}
+                    size={1}
+                    value={titleValue}
+                    autoComplete="new-password"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    data-1p-ignore
+                    data-lpignore="true"
+                    data-form-type="other"
+                    onChange={(e) => setTitleValue(e.target.value)}
+                    onKeyDown={handleTitleKeyDown}
+                    onBlur={() => void commitTitleEdit()}
+                    onClick={(e) => e.stopPropagation()}
+                    className={cn(
+                      "col-start-1 row-start-1 box-border m-0 block h-[1.375em] w-full min-w-0 appearance-none border-0 bg-transparent p-0 text-sm font-medium leading-snug text-[hsl(var(--foreground))] shadow-none cursor-text focus:outline-none",
+                      isCompleted && "line-through text-[hsl(var(--muted-foreground))]"
+                    )}
+                  />
+                </span>
+              </>
+            ) : (
+              displayTitle
+            )}
+          </span>
 
           {isCompleted && task.completed_at && (
             <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
@@ -290,41 +389,43 @@ export function TaskCard({
             </p>
           )}
 
-          <div className="flex items-center gap-3 mt-2 flex-wrap">
-            {task.list && (
-              <span className="text-xs text-[hsl(var(--muted-foreground))]">
-                {task.list.name}
-              </span>
-            )}
+          {(!!task.list || hasDue || task.tags.length > 0) && (
+            <div className="flex items-center gap-3 mt-2 flex-wrap">
+              {task.list && (
+                <span className="text-xs text-[hsl(var(--muted-foreground))]">
+                  {task.list.name}
+                </span>
+              )}
 
-            {hasDue && (
-              <span
-                className={cn(
-                  "flex items-center gap-1 text-xs",
-                  isOverdue
-                    ? "text-red-500 font-medium"
-                    : "text-[hsl(var(--muted-foreground))]"
-                )}
-              >
-                <Calendar className="w-3 h-3" />
-                {dueDateStr}
-                {task.due_time && (
-                  <span className="flex items-center gap-0.5">
-                    <Clock className="w-3 h-3 ml-1" />
-                    {formatTimeValue(task.due_time)}
-                  </span>
-                )}
-              </span>
-            )}
+              {hasDue && (
+                <span
+                  className={cn(
+                    "flex items-center gap-1 text-xs",
+                    isOverdue
+                      ? "text-red-500 font-medium"
+                      : "text-[hsl(var(--muted-foreground))]"
+                  )}
+                >
+                  <Calendar className="w-3 h-3" />
+                  {dueDateStr}
+                  {task.due_time && (
+                    <span className="flex items-center gap-0.5">
+                      <Clock className="w-3 h-3 ml-1" />
+                      {formatTimeValue(task.due_time)}
+                    </span>
+                  )}
+                </span>
+              )}
 
-            {task.tags.length > 0 && (
-              <div className="flex items-center gap-1 flex-wrap">
-                {task.tags.map((tag) => (
-                  <TagBadge key={tag.id} tag={tag} />
-                ))}
-              </div>
-            )}
-          </div>
+              {task.tags.length > 0 && (
+                <div className="flex items-center gap-1 flex-wrap">
+                  {task.tags.map((tag) => (
+                    <TagBadge key={tag.id} tag={tag} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {canOpenMenu && (
@@ -340,7 +441,8 @@ export function TaskCard({
             }}
             onClick={openMenuFromButton}
             className={cn(
-              "mt-0.5 shrink-0 p-1 rounded-md text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-opacity cursor-pointer",
+              "shrink-0 p-1 rounded-md text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-opacity cursor-pointer",
+              hasMeta && "mt-0.5",
               contextMenu
                 ? "opacity-100"
                 : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
@@ -355,6 +457,8 @@ export function TaskCard({
         <TaskContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
+          align={contextMenu.align}
+          anchorTop={contextMenu.anchorTop}
           task={task}
           allTags={allTags}
           lists={lists}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CalendarDays, Tag as TagIcon, Trash2, FolderInput, Check, ChevronRight } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -15,9 +15,59 @@ import { TagPicker } from "./TagPicker";
 import { PriorityFlag, PRIORITY_OPTIONS } from "./priority-ui";
 import type { MoveToListOption } from "@/app/calendar/AgendaItemContextMenu";
 
+const MENU_WIDTH = 200;
+
+function fitMenuPos(
+  ax: number,
+  ay: number,
+  align: "start" | "end",
+  height: number,
+  anchorTop?: number
+): { left: number; top: number } {
+  const pad = 8;
+  const gap = 4;
+  let left = align === "end" ? ax - MENU_WIDTH : ax;
+  left = Math.max(pad, Math.min(left, window.innerWidth - MENU_WIDTH - pad));
+  let top = ay + gap;
+  if (top + height > window.innerHeight - pad) {
+    const flipFrom = anchorTop ?? ay;
+    const above = flipFrom - height - gap;
+    top = above >= pad ? above : Math.max(pad, window.innerHeight - height - pad);
+  }
+  return { left, top };
+}
+
+const DELETE_CONFIRM_WIDTH = 200;
+
+function fitDeleteConfirmPos(
+  menuRect: DOMRect,
+  btnRect: DOMRect,
+  height: number
+): { top: number; left: number } {
+  const pad = 8;
+  const gap = 4;
+  let left = menuRect.right + gap;
+  if (left + DELETE_CONFIRM_WIDTH > window.innerWidth - pad) {
+    left = Math.max(pad, menuRect.left - DELETE_CONFIRM_WIDTH - gap);
+  }
+  // Line up with the Delete Task row; flip up if it would go off-screen.
+  let top = btnRect.top;
+  if (top + height > window.innerHeight - pad) {
+    const above = btnRect.bottom - height;
+    top = above >= pad ? above : Math.max(pad, window.innerHeight - height - pad);
+  }
+  top = Math.max(pad, Math.min(top, window.innerHeight - height - pad));
+  left = Math.max(pad, Math.min(left, window.innerWidth - DELETE_CONFIRM_WIDTH - pad));
+  return { top, left };
+}
+
 interface TaskContextMenuProps {
   x: number;
   y: number;
+  /** `end` aligns the menu's right edge to `x` (e.g. under a ⋯ button). */
+  align?: "start" | "end";
+  /** Top of the trigger; used when flipping the menu above near the viewport bottom. */
+  anchorTop?: number;
   task: TaskWithDetails;
   allTags: Tag[];
   lists?: MoveToListOption[];
@@ -33,6 +83,8 @@ interface TaskContextMenuProps {
 export function TaskContextMenu({
   x,
   y,
+  align = "start",
+  anchorTop,
   task,
   allTags,
   lists,
@@ -67,15 +119,18 @@ export function TaskContextMenu({
   const [saving, setSaving] = useState(false);
   /** Local highlight so the flag row updates without closing the menu. */
   const [currentPriority, setCurrentPriority] = useState<Priority>(task.priority);
+  const [pos, setPos] = useState(() => fitMenuPos(x, y, align, 280, anchorTop));
 
   const canMove = !!lists && !!onMoveToList;
-  const menuWidth = 200;
-  const left = Math.min(x, window.innerWidth - menuWidth - 8);
-  const top = Math.min(y, window.innerHeight - 280);
 
   useEffect(() => {
     setCurrentPriority(task.priority);
   }, [task.priority]);
+
+  useLayoutEffect(() => {
+    const h = menuRef.current?.offsetHeight ?? 280;
+    setPos(fitMenuPos(x, y, align, h, anchorTop));
+  }, [x, y, align, anchorTop, movingOpen, confirmingDelete]);
 
   function closeDeleteConfirm() {
     setConfirmingDelete(false);
@@ -96,19 +151,25 @@ export function TaskContextMenu({
     if (!btn || !menu) return;
     const menuRect = menu.getBoundingClientRect();
     const btnRect = btn.getBoundingClientRect();
-    const width = 200;
-    const height = 110;
-    let nextLeft = menuRect.right + 4;
-    if (nextLeft + width > window.innerWidth - 8) {
-      nextLeft = Math.max(8, menuRect.left - width - 4);
-    }
-    let nextTop = btnRect.top;
-    if (nextTop + height > window.innerHeight - 8) {
-      nextTop = Math.max(8, window.innerHeight - height - 8);
-    }
-    setDeleteConfirmPos({ top: nextTop, left: nextLeft });
+    setDeleteConfirmPos(
+      fitDeleteConfirmPos(menuRect, btnRect, 110)
+    );
     setConfirmingDelete(true);
   }
+
+  useLayoutEffect(() => {
+    if (!confirmingDelete || !deleteConfirmRef.current || !deleteBtnRef.current || !menuRef.current) {
+      return;
+    }
+    const h = deleteConfirmRef.current.offsetHeight || 110;
+    setDeleteConfirmPos(
+      fitDeleteConfirmPos(
+        menuRef.current.getBoundingClientRect(),
+        deleteBtnRef.current.getBoundingClientRect(),
+        h
+      )
+    );
+  }, [confirmingDelete]);
 
   useEffect(() => {
     function handleOutside(e: MouseEvent) {
@@ -232,8 +293,12 @@ export function TaskContextMenu({
         <div
           ref={menuRef}
           className="fixed z-50 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-xl overflow-hidden"
-          style={{ left, top, width: menuWidth }}
+          style={{ left: pos.left, top: pos.top, width: MENU_WIDTH }}
           role="menu"
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
         >
           <div className="px-3 pt-2.5 pb-2">
             <p className="text-[11px] font-medium uppercase tracking-wide text-[hsl(var(--muted-foreground))] mb-1.5">
@@ -367,6 +432,10 @@ export function TaskContextMenu({
             style={{ top: deleteConfirmPos.top, left: deleteConfirmPos.left }}
             role="dialog"
             aria-labelledby="delete-task-confirm-title"
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
           >
             <p id="delete-task-confirm-title" className="text-sm font-medium mb-3">
               Delete this task?
@@ -401,6 +470,10 @@ export function TaskContextMenu({
             ref={tagsPanelRef}
             className="fixed z-[60] w-[220px] rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-xl p-3 space-y-3"
             style={{ top: tagsPos.top, left: tagsPos.left }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
           >
             <TagPicker
               allTags={allTags}

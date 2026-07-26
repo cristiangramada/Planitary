@@ -336,6 +336,8 @@ export function TaskDatePicker({
 
   const panelWidth = 320;
   const panelHeightEstimate = 480;
+  const gap = 4;
+  const pad = 8;
   const [fittedStyle, setFittedStyle] = useState<
     { left: number; top: number } | undefined
   >(undefined);
@@ -344,16 +346,13 @@ export function TaskDatePicker({
     ? fittedStyle ?? {
         left:
           anchorAlign === "end"
-            ? Math.max(8, anchor.x - panelWidth)
-            : Math.max(8, Math.min(anchor.x, window.innerWidth - panelWidth - 8)),
-        top:
-          anchor.y + panelHeightEstimate > window.innerHeight - 8
-            ? Math.max(8, window.innerHeight - panelHeightEstimate - 8)
-            : Math.max(8, anchor.y),
+            ? Math.max(pad, anchor.x - panelWidth)
+            : Math.max(pad, Math.min(anchor.x, window.innerWidth - panelWidth - pad)),
+        top: Math.max(pad, anchor.y + gap),
       }
     : undefined;
 
-  // After paint, snap the panel fully into the viewport using its real height.
+  // After paint, snap the panel fully into the viewport without covering the trigger.
   useLayoutEffect(() => {
     if (!anchor || !panelRef.current) {
       setFittedStyle(undefined);
@@ -362,20 +361,56 @@ export function TaskDatePicker({
     const el = panelRef.current;
     const h = el.offsetHeight || panelHeightEstimate;
     const w = el.offsetWidth || panelWidth;
-    let nextLeft =
-      anchorAlign === "end"
-        ? anchor.x - w
-        : anchor.x;
-    let nextTop = anchor.y;
+    const trigger = ignoreCloseRef?.current?.getBoundingClientRect() ?? null;
+    const triggerBottom = trigger?.bottom ?? anchor.y;
+    const triggerTop = trigger?.top ?? anchor.y;
+    const triggerLeft = trigger?.left ?? anchor.x;
+    const triggerRight = trigger?.right ?? anchor.x;
 
-    // Prefer below the trigger; flip above if it would clip the bottom.
-    if (nextTop + h > window.innerHeight - 8) {
-      // `anchor.y` is the bottom of the trigger — place panel above it when possible.
-      const above = (ignoreCloseRef?.current?.getBoundingClientRect().top ?? anchor.y) - h;
-      nextTop = above >= 8 ? above : Math.max(8, window.innerHeight - h - 8);
+    let nextLeft =
+      anchorAlign === "end" ? anchor.x - w : anchor.x;
+    let nextTop = triggerBottom + gap;
+
+    const fitsBelow = nextTop + h <= window.innerHeight - pad;
+    const aboveTop = triggerTop - h - gap;
+    const fitsAbove = aboveTop >= pad;
+
+    if (!fitsBelow && fitsAbove) {
+      nextTop = aboveTop;
+    } else if (!fitsBelow && !fitsAbove) {
+      // Open beside the trigger so the button stays clickable.
+      const rightLeft = triggerRight + gap;
+      const leftLeft = triggerLeft - w - gap;
+      if (rightLeft + w <= window.innerWidth - pad) {
+        nextLeft = rightLeft;
+      } else if (leftLeft >= pad) {
+        nextLeft = leftLeft;
+      } else {
+        nextLeft = Math.max(pad, Math.min(nextLeft, window.innerWidth - w - pad));
+      }
+      nextTop = Math.max(pad, Math.min(triggerTop, window.innerHeight - h - pad));
     }
-    nextTop = Math.max(8, Math.min(nextTop, window.innerHeight - h - 8));
-    nextLeft = Math.max(8, Math.min(nextLeft, window.innerWidth - w - 8));
+
+    nextLeft = Math.max(pad, Math.min(nextLeft, window.innerWidth - w - pad));
+    nextTop = Math.max(pad, Math.min(nextTop, window.innerHeight - h - pad));
+
+    // Last guard: if we still overlap the trigger, push fully below or above.
+    if (trigger) {
+      const overlaps =
+        nextLeft < triggerRight &&
+        nextLeft + w > triggerLeft &&
+        nextTop < triggerBottom + gap &&
+        nextTop + h > triggerTop - gap;
+      if (overlaps) {
+        if (fitsAbove || triggerTop - pad >= h + gap) {
+          nextTop = triggerTop - h - gap;
+        } else {
+          nextTop = triggerBottom + gap;
+        }
+        nextTop = Math.max(pad, Math.min(nextTop, window.innerHeight - h - pad));
+      }
+    }
+
     setFittedStyle({ left: nextLeft, top: nextTop });
   }, [anchor, anchorAlign, ignoreCloseRef]);
 
