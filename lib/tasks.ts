@@ -310,6 +310,16 @@ export async function updateTaskTitleNotes(
   if (error) throw error;
 }
 
+/** Patches selected task fields without touching tags or subtasks. */
+export async function patchTaskFields(
+  supabase: SupabaseClient,
+  taskId: string,
+  fields: Partial<Pick<Task, "priority" | "due_date" | "due_time" | "title" | "notes">>
+): Promise<void> {
+  const { error } = await supabase.from("tasks").update(fields).eq("id", taskId);
+  if (error) throw error;
+}
+
 /** Replaces all subtasks for a task (delete + insert), preserving completion flags. */
 export async function replaceTaskSubtasks(
   supabase: SupabaseClient,

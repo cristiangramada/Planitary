@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { CheckSquare, AlignLeft, X } from "lucide-react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { createPortal } from "react-dom";
+import { CheckSquare, AlignLeft, X, Flag, CalendarDays } from "lucide-react";
 import { cn } from "@/utils/cn";
-import type { Subtask, TaskWithDetails } from "@/types";
+import type { Priority, Subtask, TaskWithDetails } from "@/types";
 import type { SubtaskFormItem } from "@/lib/tasks";
+import {
+  TaskDatePicker,
+  type DatePickerValue,
+  type RepeatOption,
+} from "./TaskDatePicker";
 
 export type DetailBodyMode = "notes" | "checklist";
 
@@ -13,6 +19,36 @@ interface TaskDetailPanelProps {
   onSaveTitleNotes: (taskId: string, title: string, notes: string | null) => Promise<void>;
   onReplaceSubtasks: (taskId: string, subtasks: SubtaskFormItem[]) => Promise<Subtask[]>;
   onToggleSubtask: (taskId: string, subtaskId: string, completed: boolean) => void;
+  onPatchFields: (
+    taskId: string,
+    fields: Partial<Pick<TaskWithDetails, "priority" | "due_date" | "due_time">>
+  ) => Promise<void>;
+}
+
+const PRIORITIES: { value: Priority; label: string; flagClass: string }[] = [
+  { value: "high", label: "High", flagClass: "text-red-500" },
+  { value: "medium", label: "Medium", flagClass: "text-amber-500" },
+  { value: "low", label: "Low", flagClass: "text-green-600 dark:text-green-500" },
+];
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const SHORT_MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+] as const;
+
+function formatDueLabel(date: string | null, time: string | null): string {
+  if (!date) return "Due Date";
+  const [y, m, d] = date.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  const base = `${WEEKDAYS[dt.getDay()]}, ${SHORT_MONTHS[dt.getMonth()]} ${d}`;
+  if (!time) return base;
+  const [hStr, mStr] = time.split(":");
+  const h = parseInt(hStr, 10);
+  const min = parseInt(mStr, 10);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return `${base} ${h12}:${String(min).padStart(2, "0")} ${ampm}`;
 }
 
 function notesToChecklist(notes: string | null): SubtaskFormItem[] {
@@ -35,17 +71,26 @@ function initialMode(task: TaskWithDetails): DetailBodyMode {
     : "notes";
 }
 
+function flagClassFor(priority: Priority): string {
+  return PRIORITIES.find((p) => p.value === priority)?.flagClass ?? "text-[hsl(var(--muted-foreground))]";
+}
+
 export function TaskDetailPanel({
   task,
   onSaveTitleNotes,
   onReplaceSubtasks,
   onToggleSubtask,
+  onPatchFields,
 }: TaskDetailPanelProps) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes ?? "");
   const [mode, setMode] = useState<DetailBodyMode>(() => initialMode(task));
   const [error, setError] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerAnchor, setPickerAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [repeat, setRepeat] = useState<RepeatOption>("never");
+  const [priorityMenu, setPriorityMenu] = useState<{ x: number; y: number } | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleNotesRef = useRef({ title: task.title, notes: task.notes ?? "" });
@@ -174,11 +219,77 @@ export function TaskDetailPanel({
     }
   }
 
+  function openDuePicker(e: ReactMouseEvent) {
+    setPickerAnchor({ x: e.clientX, y: e.clientY });
+    setPickerOpen(true);
+  }
+
+  async function handlePickerConfirm(value: DatePickerValue) {
+    setRepeat(value.repeat);
+    setPickerOpen(false);
+    setPickerAnchor(null);
+    try {
+      await onPatchFields(task.id, {
+        due_date: value.date,
+        due_time: value.date && value.time ? `${value.time}:00` : null,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't update due date.");
+    }
+  }
+
+  function openPriorityMenu(e: ReactMouseEvent) {
+    e.preventDefault();
+    setPriorityMenu({ x: e.clientX, y: e.clientY });
+  }
+
+  async function selectPriority(priority: Priority) {
+    setPriorityMenu(null);
+    if (priority === task.priority) return;
+    try {
+      await onPatchFields(task.id, { priority });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't update priority.");
+    }
+  }
+
   const toggleLabel = mode === "notes" ? "Checklist" : "Description";
+  const dueTimeDisplay = task.due_time ? task.due_time.slice(0, 5) : null;
 
   return (
     <div className="flex h-full flex-col bg-[hsl(var(--background))]">
-      <div className="flex items-center gap-2 pl-4 pr-5 pt-4 pb-1 shrink-0">
+      {/* Meta bar — due date + priority */}
+      <div className="flex items-center gap-2 pl-4 pr-5 pt-3 pb-2.5 shrink-0">
+        <button
+          type="button"
+          onClick={openDuePicker}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer",
+            task.due_date
+              ? "text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]"
+              : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]"
+          )}
+        >
+          <CalendarDays className="w-3.5 h-3.5 shrink-0" />
+          {formatDueLabel(task.due_date, dueTimeDisplay)}
+        </button>
+        <button
+          type="button"
+          onClick={openPriorityMenu}
+          aria-label={`Priority: ${task.priority}`}
+          title="Change priority"
+          className={cn(
+            "ml-auto p-1.5 rounded-md hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer",
+            flagClassFor(task.priority)
+          )}
+        >
+          <Flag className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="border-t border-[hsl(var(--border))] shrink-0" />
+
+      <div className="flex items-center gap-2 pl-4 pr-5 pt-3 pb-1 shrink-0">
         <input
           ref={titleRef}
           value={title}
@@ -238,7 +349,91 @@ export function TaskDetailPanel({
           />
         )}
       </div>
+
+      {pickerOpen && pickerAnchor && (
+        <TaskDatePicker
+          initialDate={task.due_date}
+          initialTime={dueTimeDisplay}
+          initialRepeat={repeat}
+          anchor={pickerAnchor}
+          onConfirm={handlePickerConfirm}
+          onClose={() => {
+            setPickerOpen(false);
+            setPickerAnchor(null);
+          }}
+        />
+      )}
+
+      {priorityMenu && (
+        <PriorityMenu
+          x={priorityMenu.x}
+          y={priorityMenu.y}
+          current={task.priority}
+          onSelect={(p) => void selectPriority(p)}
+          onClose={() => setPriorityMenu(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function PriorityMenu({
+  x,
+  y,
+  current,
+  onSelect,
+  onClose,
+}: {
+  x: number;
+  y: number;
+  current: Priority;
+  onSelect: (p: Priority) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const width = 148;
+  const left = Math.min(x, window.innerWidth - width - 8);
+  const top = Math.min(y, window.innerHeight - 140);
+
+  useEffect(() => {
+    function onOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("mousedown", onOutside);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onOutside);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      ref={ref}
+      role="menu"
+      className="fixed z-50 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-xl overflow-hidden"
+      style={{ left, top, width }}
+    >
+      {PRIORITIES.map((p) => (
+        <button
+          key={p.value}
+          type="button"
+          role="menuitem"
+          onClick={() => onSelect(p.value)}
+          className={cn(
+            "flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer",
+            current === p.value && "font-medium"
+          )}
+        >
+          <Flag className={cn("w-3.5 h-3.5 shrink-0", p.flagClass)} />
+          {p.label}
+        </button>
+      ))}
+    </div>,
+    document.body
   );
 }
 
@@ -332,12 +527,14 @@ function ChecklistBody({
             aria-hidden
             className="mt-0.5 flex items-center justify-center w-4 h-4 rounded border border-[hsl(var(--muted-foreground))] shrink-0 opacity-70"
           />
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="Press 'Enter' to add list item"
-            className="flex-1 min-w-0 bg-transparent text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] border-0 border-b border-[hsl(var(--border))] rounded-none px-0 py-0.5 focus:outline-none focus:border-[hsl(var(--muted-foreground))]"
-          />
+          <div className="flex-1 min-w-0 border-b border-[hsl(var(--border))] pb-2 focus-within:border-[hsl(var(--muted-foreground))]">
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Press 'Enter' to add list item"
+              className="w-full bg-transparent text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] border-0 rounded-none px-0 py-0 focus:outline-none"
+            />
+          </div>
         </div>
       </form>
     </div>

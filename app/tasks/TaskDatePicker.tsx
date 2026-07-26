@@ -37,6 +37,8 @@ export interface TaskDatePickerProps {
   initialRepeat?: RepeatOption;
   onConfirm: (value: DatePickerValue) => void;
   onClose: () => void;
+  /** When set, the panel opens near this point instead of the viewport center. */
+  anchor?: { x: number; y: number };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -392,6 +394,7 @@ export function TaskDatePicker({
   initialRepeat = "never",
   onConfirm,
   onClose,
+  anchor,
 }: TaskDatePickerProps) {
   // Derive starting month from initialDate, or today
   const startDate = initialDate ? parseISO(initialDate) : localToday();
@@ -405,6 +408,15 @@ export function TaskDatePicker({
   const [endDate, setEndDate] = useState<string | null>(null);
   const [endTime, setEndTime] = useState<string | null>(null);
   const [repeat, setRepeat] = useState<RepeatOption>(initialRepeat);
+
+  const panelWidth = 320;
+  const panelHeight = 520;
+  const anchoredStyle = anchor
+    ? {
+        left: Math.max(8, Math.min(anchor.x, window.innerWidth - panelWidth - 8)),
+        top: Math.max(8, Math.min(anchor.y, window.innerHeight - panelHeight - 8)),
+      }
+    : undefined;
 
   // ── Month navigation ──────────────────────────────────────────────────────
 
@@ -472,17 +484,24 @@ export function TaskDatePicker({
     <>
       {/* Scrim — sits above the form drawer (z-50) but below the picker (z-70) */}
       <div
-        className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-[1px]"
+        className={cn(
+          "fixed inset-0 z-[60]",
+          anchor ? "bg-transparent" : "bg-black/40 backdrop-blur-[1px]"
+        )}
         onClick={onClose}
         aria-hidden
       />
 
-      {/* Picker panel — centered */}
+      {/* Picker panel — centered by default, or anchored near the click */}
       <div
         role="dialog"
         aria-modal
         aria-label="Date and time picker"
-        className="fixed z-[70] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[320px] rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-2xl flex flex-col overflow-hidden"
+        className={cn(
+          "fixed z-[70] w-[320px] rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-2xl flex flex-col overflow-hidden",
+          !anchor && "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+        )}
+        style={anchoredStyle}
       >
         {/* ── Mode toggle + close ─────────────────────────────────────────── */}
         <div className="flex items-center gap-2 px-3 pt-3 pb-2">

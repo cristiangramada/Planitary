@@ -22,6 +22,7 @@ import {
   setSubtaskComplete,
   updateTaskTitleNotes,
   replaceTaskSubtasks,
+  patchTaskFields,
   TASK_PRIORITY_ORDER,
 } from "@/lib/tasks";
 import type { TaskWithDetails, Tag, TaskList, Subtask } from "@/types";
@@ -489,6 +490,20 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
       return saved;
     },
     [getUserId]
+  );
+
+  const handlePatchFields = useCallback(
+    async (
+      taskId: string,
+      fields: Partial<Pick<TaskWithDetails, "priority" | "due_date" | "due_time">>
+    ) => {
+      const supabase = createClient();
+      await patchTaskFields(supabase, taskId, fields);
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, ...fields } : t))
+      );
+    },
+    []
   );
 
   // Creating a task from within a selected List auto-assigns it to that List;
@@ -1028,6 +1043,7 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
               onSaveTitleNotes={handleSaveTitleNotes}
               onReplaceSubtasks={handleReplaceSubtasks}
               onToggleSubtask={handleToggleSubtask}
+              onPatchFields={handlePatchFields}
             />
           </div>
         ) : null}
@@ -1042,6 +1058,7 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
             onSaveTitleNotes={handleSaveTitleNotes}
             onReplaceSubtasks={handleReplaceSubtasks}
             onToggleSubtask={handleToggleSubtask}
+            onPatchFields={handlePatchFields}
           />
         </div>
       )}
