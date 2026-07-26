@@ -8,7 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { Plus, Inbox as InboxIcon, X, Menu } from "lucide-react";
+import { Plus, Inbox as InboxIcon, X, Menu, MoreHorizontal } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { ListContextMenu } from "./ListContextMenu";
 import { INBOX_COUNT_KEY, type ListTaskCounts } from "@/lib/task-lists";
@@ -490,23 +490,38 @@ export function ListsPanel({
                   </span>
                   <div className="relative w-6 h-6 shrink-0 mr-1 flex items-center justify-center">
                     {count > 0 && (
-                      <span className="text-xs leading-none text-[hsl(var(--muted-foreground))] group-hover:invisible pointer-events-none">
+                      <span
+                        className={cn(
+                          "text-xs leading-none text-[hsl(var(--muted-foreground))] pointer-events-none",
+                          menu?.list.id === list.id
+                            ? "invisible"
+                            : "group-hover:invisible"
+                        )}
+                      >
                         {count}
                       </span>
                     )}
                     <button
                       type="button"
                       data-no-drag
+                      title="List actions"
                       aria-label={`More actions for ${list.name}`}
+                      aria-haspopup="menu"
+                      aria-expanded={menu?.list.id === list.id}
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => {
                         e.stopPropagation();
                         const rect = e.currentTarget.getBoundingClientRect();
                         setMenu({ x: rect.right, y: rect.bottom, list });
                       }}
-                      className="hidden group-hover:flex absolute inset-0 items-center justify-center rounded text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
+                      className={cn(
+                        "absolute inset-0 flex items-center justify-center p-1 rounded-md text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-opacity cursor-pointer",
+                        menu?.list.id === list.id
+                          ? "opacity-100"
+                          : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                      )}
                     >
-                      ⋮
+                      <MoreHorizontal className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
