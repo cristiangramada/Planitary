@@ -348,6 +348,29 @@ export async function replaceTaskSubtasks(
   return (data as Subtask[]) ?? [];
 }
 
+/** Replaces all tags on a task (delete + resolve/create + insert). Returns the resolved tags. */
+export async function replaceTaskTags(
+  supabase: SupabaseClient,
+  taskId: string,
+  userId: string,
+  tags: TagFormItem[]
+): Promise<Tag[]> {
+  const tagIds = await resolveTagIds(supabase, userId, tags);
+
+  const { error: delErr } = await supabase.from("task_tags").delete().eq("task_id", taskId);
+  if (delErr) throw delErr;
+
+  if (tagIds.length > 0) {
+    const { error } = await supabase.from("task_tags").insert(
+      tagIds.map((tagId) => ({ task_id: taskId, tag_id: tagId }))
+    );
+    if (error) throw error;
+  }
+
+  const refreshed = await refetchTask(supabase, taskId);
+  return refreshed.tags;
+}
+
 /** Deletes a task (cascades subtasks and task_tags via DB constraints). */
 export async function deleteTask(
   supabase: SupabaseClient,

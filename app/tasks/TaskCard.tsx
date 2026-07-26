@@ -1,23 +1,30 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { Pencil, Trash2, Calendar, Clock } from "lucide-react";
+import { useState, useRef, useEffect, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { Calendar, Clock, MoreHorizontal } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { TagBadge } from "@/components/ui/TagBadge";
-import { AgendaItemContextMenu, type MoveToListOption } from "@/app/calendar/AgendaItemContextMenu";
+import type { MoveToListOption } from "@/app/calendar/AgendaItemContextMenu";
 import { relativeDate, formatDate, parseDateOnly } from "@/utils/date";
 import { formatTimeValue } from "@/components/ui/TimeDropdown";
-import type { Priority, TaskWithDetails } from "@/types";
+import type { Priority, Tag, TaskWithDetails } from "@/types";
+import type { TagFormItem } from "@/lib/tasks";
+import { TaskContextMenu } from "./TaskContextMenu";
 
 interface TaskCardProps {
   task: TaskWithDetails;
-  onEdit: (task: TaskWithDetails) => void;
   onDelete: (taskId: string) => void;
   onToggleComplete: (taskId: string, completed: boolean) => void;
-  /** Left-click opens the right-side detail panel. */
+  /** Inline title edit (also opens the detail panel). */
+  onRenameTitle?: (taskId: string, title: string) => Promise<void>;
+  onSetPriority?: (taskId: string, priority: Priority) => Promise<void>;
+  onSetDue?: (taskId: string, date: string | null, time: string | null) => Promise<void>;
+  onSetTags?: (taskId: string, tags: TagFormItem[]) => Promise<void>;
+  onDeleteTag?: (tagId: string) => Promise<void>;
+  allTags?: Tag[];
+  /** Left-click anywhere on the card (except the check circle) opens the detail panel. */
   onSelect?: (task: TaskWithDetails) => void;
   selected?: boolean;
-  /** Move-to-list options (Inbox + user's lists) for the context menu. Omit to hide the option. */
   lists?: MoveToListOption[];
   onMoveToList?: (taskId: string, listId: string | null) => void;
 }
@@ -36,38 +43,61 @@ const CHECK_DONE: Record<Priority, string> = {
   none: "border-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted-foreground))]",
 };
 
+function caretIndexFromPoint(x: number, y: number): number | null {
+  const doc = document as Document & {
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+  };
+  if (typeof doc.caretRangeFromPoint === "function") {
+    const range = doc.caretRangeFromPoint(x, y);
+    if (range?.startContainer.nodeType === Node.TEXT_NODE) {
+      return range.startOffset;
+    }
+  }
+  if (typeof doc.caretPositionFromPoint === "function") {
+    const pos = doc.caretPositionFromPoint(x, y);
+    if (pos?.offsetNode.nodeType === Node.TEXT_NODE) {
+      return pos.offset;
+    }
+  }
+  return null;
+}
+
 export function TaskCard({
   task,
-  onEdit,
   onDelete,
   onToggleComplete,
+  onRenameTitle,
+  onSetPriority,
+  onSetDue,
+  onSetTags,
+  onDeleteTag,
+  allTags = [],
   onSelect,
   selected = false,
   lists,
   onMoveToList,
 }: TaskCardProps) {
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const confirmRef = useRef<HTMLDivElement>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleValue, setTitleValue] = useState(task.title);
+  const [savingTitle, setSavingTitle] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const caretIndexRef = useRef<number | null>(null);
 
-  // Close confirmation on outside click or Escape
   useEffect(() => {
-    if (!confirmingDelete) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setConfirmingDelete(false);
+    if (!editingTitle || !titleInputRef.current) return;
+    const el = titleInputRef.current;
+    el.focus();
+    const len = el.value.length;
+    const idx = caretIndexRef.current;
+    caretIndexRef.current = null;
+    if (idx != null && idx >= 0 && idx <= len) {
+      el.setSelectionRange(idx, idx);
+    } else {
+      el.setSelectionRange(len, len);
     }
-    function onOutside(e: MouseEvent) {
-      if (confirmRef.current && !confirmRef.current.contains(e.target as Node)) {
-        setConfirmingDelete(false);
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    document.addEventListener("mousedown", onOutside);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.removeEventListener("mousedown", onOutside);
-    };
-  }, [confirmingDelete]);
+  }, [editingTitle]);
 
   const isCompleted = task.status === "completed";
   const hasDue = !!task.due_date;
@@ -77,28 +107,97 @@ export function TaskCard({
     hasDue &&
     parseDateOnly(task.due_date!) < new Date(new Date().toDateString());
 
+  function startTitleEdit(caretIndex: number | null = null) {
+    if (!onRenameTitle || editingTitle || savingTitle) return;
+    caretIndexRef.current = caretIndex;
+    setTitleValue(task.title);
+    setEditingTitle(true);
+  }
+
+  async function commitTitleEdit() {
+    if (!onRenameTitle || savingTitle) return;
+    const trimmed = titleValue.trim();
+    if (!trimmed) {
+      setTitleValue(task.title);
+      setEditingTitle(false);
+      return;
+    }
+    if (trimmed === task.title.trim()) {
+      setEditingTitle(false);
+      return;
+    }
+    setSavingTitle(true);
+    try {
+      await onRenameTitle(task.id, trimmed);
+      setEditingTitle(false);
+    } catch {
+      setTitleValue(task.title);
+      setEditingTitle(false);
+    } finally {
+      setSavingTitle(false);
+    }
+  }
+
+  function cancelTitleEdit() {
+    setTitleValue(task.title);
+    setEditingTitle(false);
+  }
+
+  function handleTitleKeyDown(e: ReactKeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void commitTitleEdit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancelTitleEdit();
+    }
+  }
+
   function handleContextMenu(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    setConfirmingDelete(false);
+    onSelect?.(task);
     setContextMenu({ x: e.clientX, y: e.clientY });
   }
 
+  function openMenuFromButton(e: React.MouseEvent<HTMLButtonElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (contextMenu) {
+      setContextMenu(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    setContextMenu({ x: rect.right, y: rect.bottom });
+  }
+
+  const canOpenMenu = !!(onSetPriority && onSetDue && onSetTags);
+
   return (
     <div
+      role={onSelect ? "button" : undefined}
+      tabIndex={onSelect ? 0 : undefined}
+      onClick={() => onSelect?.(task)}
+      onKeyDown={(e) => {
+        if (!onSelect || editingTitle) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(task);
+        }
+      }}
       onContextMenu={handleContextMenu}
       className={cn(
         "group rounded-xl border bg-[hsl(var(--card))] transition-colors",
+        onSelect ? "cursor-pointer" : "cursor-default",
         isCompleted
           ? "border-[hsl(var(--border))] opacity-70"
           : "border-[hsl(var(--border))] hover:border-[hsl(var(--primary)/0.4)]",
         selected && "border-[hsl(var(--primary)/0.55)] ring-1 ring-[hsl(var(--primary)/0.25)]"
       )}
     >
-      {/* Main row */}
       <div className="flex items-start gap-3 p-4">
-        {/* Checkbox — ring/fill follow priority */}
         <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation();
             onToggleComplete(task.id, !isCompleted);
@@ -128,33 +227,62 @@ export function TaskCard({
           </span>
         </button>
 
-        {/* Content — left-click opens the detail panel */}
-        <div
-          role={onSelect ? "button" : undefined}
-          tabIndex={onSelect ? 0 : undefined}
-          onClick={() => onSelect?.(task)}
-          onKeyDown={(e) => {
-            if (!onSelect) return;
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onSelect(task);
-            }
-          }}
-          className={cn(
-            "flex-1 min-w-0 select-none",
-            onSelect ? "cursor-pointer" : "cursor-default"
-          )}
-        >
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex-1 min-w-0">
+          {editingTitle ? (
+            <>
+              <label htmlFor={`task-title-edit-${task.id}`} className="sr-only">
+                Edit task title
+              </label>
+              <input
+                id={`task-title-edit-${task.id}`}
+                ref={titleInputRef}
+                type="text"
+                value={titleValue}
+                onChange={(e) => setTitleValue(e.target.value)}
+                onKeyDown={handleTitleKeyDown}
+                onBlur={() => void commitTitleEdit()}
+                onClick={(e) => e.stopPropagation()}
+                disabled={savingTitle}
+                className={cn(
+                  "w-full bg-transparent text-sm font-medium leading-snug text-[hsl(var(--foreground))] cursor-text focus:outline-none disabled:opacity-60",
+                  isCompleted && "line-through text-[hsl(var(--muted-foreground))]"
+                )}
+              />
+            </>
+          ) : (
             <span
+              role={onRenameTitle ? "button" : undefined}
+              tabIndex={onRenameTitle ? 0 : undefined}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect?.(task);
+                if (onRenameTitle) {
+                  startTitleEdit(caretIndexFromPoint(e.clientX, e.clientY));
+                }
+              }}
+              onKeyDown={(e) => {
+                if (!onRenameTitle) return;
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onSelect?.(task);
+                  startTitleEdit(null);
+                }
+              }}
+              aria-label={
+                onRenameTitle
+                  ? `Task title: ${task.title}. Press Enter to edit.`
+                  : undefined
+              }
               className={cn(
-                "text-sm font-medium leading-snug",
+                "text-sm font-medium leading-snug select-none",
+                onRenameTitle ? "cursor-text" : undefined,
                 isCompleted && "line-through text-[hsl(var(--muted-foreground))]"
               )}
             >
               {task.title}
             </span>
-          </div>
+          )}
 
           {isCompleted && task.completed_at && (
             <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
@@ -199,79 +327,43 @@ export function TaskCard({
           </div>
         </div>
 
-        {/* Actions */}
-        <div
-          ref={confirmRef}
-          className={cn(
-            "relative flex items-center gap-1 shrink-0 transition-opacity",
-            confirmingDelete ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-          )}
-        >
+        {canOpenMenu && (
           <button
-            onClick={(e) => {
+            type="button"
+            title="Task actions"
+            aria-label="Task actions"
+            aria-haspopup="menu"
+            aria-expanded={!!contextMenu}
+            onMouseDown={(e) => {
+              e.preventDefault();
               e.stopPropagation();
-              onEdit(task);
             }}
-            title="Edit task"
-            className="p-1.5 rounded-md text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setConfirmingDelete(true);
-            }}
-            title="Delete task"
+            onClick={openMenuFromButton}
             className={cn(
-              "p-1.5 rounded-md transition-colors cursor-pointer",
-              confirmingDelete
-                ? "bg-red-500/10 text-red-500"
-                : "text-[hsl(var(--muted-foreground))] hover:bg-red-500/10 hover:text-red-500"
+              "mt-0.5 shrink-0 p-1 rounded-md text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-opacity cursor-pointer",
+              contextMenu
+                ? "opacity-100"
+                : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
             )}
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <MoreHorizontal className="w-4 h-4" />
           </button>
-
-          {confirmingDelete && (
-            <div className="absolute right-0 top-full mt-2 z-20 w-56 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-xl p-3">
-              <p className="text-sm font-medium mb-3">
-                Delete this task?
-              </p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setConfirmingDelete(false)}
-                  className="flex-1 py-1.5 text-xs font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConfirmingDelete(false);
-                    onDelete(task.id);
-                  }}
-                  className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors cursor-pointer"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
-      {contextMenu && (
-        <AgendaItemContextMenu
+      {contextMenu && canOpenMenu && (
+        <TaskContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          kind="task"
-          onEdit={() => onEdit(task)}
-          onDelete={() => onDelete(task.id)}
-          onClose={() => setContextMenu(null)}
+          task={task}
+          allTags={allTags}
           lists={lists}
-          currentListId={task.list_id}
+          onClose={() => setContextMenu(null)}
+          onDelete={() => onDelete(task.id)}
+          onSetPriority={(priority) => onSetPriority!(task.id, priority)}
+          onSetDue={(date, time) => onSetDue!(task.id, date, time)}
+          onSetTags={(next) => onSetTags!(task.id, next)}
+          onDeleteTag={onDeleteTag}
           onMoveToList={
             onMoveToList ? (listId) => onMoveToList(task.id, listId) : undefined
           }

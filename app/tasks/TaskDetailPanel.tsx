@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
-import { createPortal } from "react-dom";
-import { CheckSquare, AlignLeft, X, Flag, CalendarDays } from "lucide-react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { CheckSquare, AlignLeft, X, CalendarDays } from "lucide-react";
 import { cn } from "@/utils/cn";
 import type { Priority, Subtask, TaskWithDetails } from "@/types";
 import type { SubtaskFormItem } from "@/lib/tasks";
@@ -11,6 +10,7 @@ import {
   type DatePickerValue,
   type RepeatOption,
 } from "./TaskDatePicker";
+import { PriorityFlag, PriorityMenu } from "./priority-ui";
 
 export type DetailBodyMode = "notes" | "checklist";
 
@@ -24,18 +24,6 @@ interface TaskDetailPanelProps {
     fields: Partial<Pick<TaskWithDetails, "priority" | "due_date" | "due_time">>
   ) => Promise<void>;
 }
-
-const PRIORITIES: {
-  value: Priority;
-  label: string;
-  flagClass: string;
-  filled: boolean;
-}[] = [
-  { value: "high", label: "High", flagClass: "text-red-500", filled: true },
-  { value: "medium", label: "Medium", flagClass: "text-amber-500", filled: true },
-  { value: "low", label: "Low", flagClass: "text-green-600 dark:text-green-500", filled: true },
-  { value: "none", label: "None", flagClass: "text-[hsl(var(--muted-foreground))]", filled: false },
-];
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const SHORT_MONTHS = [
@@ -75,29 +63,6 @@ function initialMode(task: TaskWithDetails): DetailBodyMode {
   return task.subtasks.length > 0 && !(task.notes && task.notes.trim())
     ? "checklist"
     : "notes";
-}
-
-function priorityMeta(priority: Priority) {
-  return (
-    PRIORITIES.find((p) => p.value === priority) ??
-    PRIORITIES.find((p) => p.value === "none")!
-  );
-}
-
-function PriorityFlag({
-  priority,
-  className,
-}: {
-  priority: Priority;
-  className?: string;
-}) {
-  const meta = priorityMeta(priority);
-  return (
-    <Flag
-      className={cn(className, meta.flagClass)}
-      fill={meta.filled ? "currentColor" : "none"}
-    />
-  );
 }
 
 export function TaskDetailPanel({
@@ -415,78 +380,6 @@ export function TaskDetailPanel({
         />
       )}
     </div>
-  );
-}
-
-function PriorityMenu({
-  x,
-  y,
-  current,
-  ignoreCloseRef,
-  onSelect,
-  onClose,
-}: {
-  /** Right edge of the flag button (viewport coords). */
-  x: number;
-  /** Bottom edge of the flag button (viewport coords). */
-  y: number;
-  current: Priority;
-  ignoreCloseRef: RefObject<HTMLElement | null>;
-  onSelect: (p: Priority) => void;
-  onClose: () => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const width = 148;
-  const menuHeight = 188;
-  // Right-align under the flag: menu's right edge matches button's right edge.
-  const left = Math.max(8, x - width);
-  const top =
-    y + menuHeight > window.innerHeight - 8
-      ? Math.max(8, window.innerHeight - menuHeight - 8)
-      : y;
-
-  useEffect(() => {
-    function onOutside(e: MouseEvent) {
-      const target = e.target as Node;
-      if (ref.current?.contains(target)) return;
-      if (ignoreCloseRef.current?.contains(target)) return;
-      onClose();
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("mousedown", onOutside);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onOutside);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [onClose, ignoreCloseRef]);
-
-  return createPortal(
-    <div
-      ref={ref}
-      role="menu"
-      className="fixed z-50 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-xl overflow-hidden"
-      style={{ left, top, width }}
-    >
-      {PRIORITIES.map((p) => (
-        <button
-          key={p.value}
-          type="button"
-          role="menuitem"
-          onClick={() => onSelect(p.value)}
-          className={cn(
-            "flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer",
-            current === p.value && "font-medium"
-          )}
-        >
-          <PriorityFlag priority={p.value} className="w-4 h-4 shrink-0" />
-          {p.label}
-        </button>
-      ))}
-    </div>,
-    document.body
   );
 }
 

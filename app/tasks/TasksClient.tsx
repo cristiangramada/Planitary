@@ -3,29 +3,29 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, SortAsc, CheckSquare, Tag as TagIcon, PanelLeft } from "lucide-react";
+import { SortAsc, CheckSquare, Tag as TagIcon, PanelLeft } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { TagBadge } from "@/components/ui/TagBadge";
 import { TaskCard } from "./TaskCard";
-import { TaskForm } from "./TaskForm";
+import { TaskQuickAdd } from "./TaskQuickAdd";
 import { TaskDetailPanel } from "./TaskDetailPanel";
 import { ListsPanel } from "./ListsPanel";
 import { cn } from "@/utils/cn";
 import { createClient } from "@/lib/supabase/client";
 import {
   createTask,
-  updateTask,
   deleteTask,
   deleteTag,
   setTaskComplete,
   setSubtaskComplete,
   updateTaskTitleNotes,
   replaceTaskSubtasks,
+  replaceTaskTags,
   patchTaskFields,
   TASK_PRIORITY_ORDER,
 } from "@/lib/tasks";
-import type { TaskWithDetails, Tag, TaskList, Subtask } from "@/types";
+import type { TaskWithDetails, Tag, TaskList, Subtask, Priority } from "@/types";
 import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
 import {
   createTaskList,
@@ -114,8 +114,6 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
   const [confirmPos, setConfirmPos] = useState<{ top: number; left: number } | null>(null);
   const [deletingTag, setDeletingTag] = useState(false);
   const confirmRef = useRef<HTMLDivElement>(null);
-  const [formOpen, setFormOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<TaskWithDetails | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -265,36 +263,8 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
           prev.some((t) => t.id === tag.id) ? prev : [...prev, tag]
         );
       });
-      setFormOpen(false);
-      setEditingTask(null);
     },
     [getUserId]
-  );
-
-  const handleUpdate = useCallback(
-    async (data: TaskFormData, subtasks: SubtaskFormItem[], tags: TagFormItem[]) => {
-      if (!editingTask) return;
-      const supabase = createClient();
-      const userId = await getUserId();
-      const updated = await updateTask(supabase, editingTask.id, userId, data, subtasks, tags);
-      setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-      updated.tags.forEach((tag) => {
-        setAllTags((prev) =>
-          prev.some((t) => t.id === tag.id) ? prev : [...prev, tag]
-        );
-      });
-      setFormOpen(false);
-      setEditingTask(null);
-    },
-    [editingTask, getUserId]
-  );
-
-  const handleSave = useCallback(
-    (data: TaskFormData, subtasks: SubtaskFormItem[], tags: TagFormItem[]) => {
-      if (editingTask) return handleUpdate(data, subtasks, tags);
-      return handleCreate(data, subtasks, tags);
-    },
-    [editingTask, handleCreate, handleUpdate]
   );
 
   const handleDelete = useCallback(async (taskId: string) => {
@@ -454,16 +424,6 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
     []
   );
 
-  function openCreate() {
-    setEditingTask(null);
-    setFormOpen(true);
-  }
-
-  function openEdit(task: TaskWithDetails) {
-    setEditingTask(task);
-    setFormOpen(true);
-  }
-
   function openDetail(task: TaskWithDetails) {
     setSelectedTaskId(task.id);
   }
@@ -504,6 +464,40 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
       );
     },
     []
+  );
+
+  const handleSetPriority = useCallback(
+    async (taskId: string, priority: Priority) => {
+      await handlePatchFields(taskId, { priority });
+    },
+    [handlePatchFields]
+  );
+
+  const handleSetDue = useCallback(
+    async (taskId: string, date: string | null, time: string | null) => {
+      await handlePatchFields(taskId, {
+        due_date: date,
+        due_time: date && time ? (time.length === 5 ? `${time}:00` : time) : null,
+      });
+    },
+    [handlePatchFields]
+  );
+
+  const handleSetTags = useCallback(
+    async (taskId: string, tags: TagFormItem[]) => {
+      const supabase = createClient();
+      const uid = await getUserId();
+      const saved = await replaceTaskTags(supabase, taskId, uid, tags);
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, tags: saved } : t))
+      );
+      saved.forEach((tag) => {
+        setAllTags((prev) =>
+          prev.some((t) => t.id === tag.id) ? prev : [...prev, tag]
+        );
+      });
+    },
+    [getUserId]
   );
 
   // Creating a task from within a selected List auto-assigns it to that List;
@@ -730,15 +724,6 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
                 </>
               )}
             </div>
-
-            {/* New task */}
-            <button
-              onClick={openCreate}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 transition-opacity cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              New task
-            </button>
           </div>
         </div>
 
@@ -871,6 +856,15 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
         {/* Scrollable task list */}
         <div className="flex-1 overflow-y-auto min-h-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 
+        <TaskQuickAdd
+          allTags={allTags}
+          defaultListId={formDefaultListId}
+          onCreate={async (data, tags) => {
+            await handleCreate(data, [], tags);
+          }}
+          onDeleteTag={handleDeleteTag}
+        />
+
         {/* Active tasks */}
         {filterBy !== "completed" && (
           <div className="space-y-2 mb-4">
@@ -915,15 +909,7 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
                       >
                         Clear tag filter
                       </button>
-                    ) : (
-                      <button
-                        onClick={openCreate}
-                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 transition-opacity cursor-pointer"
-                      >
-                        <Plus className="w-4 h-4" />
-                        New task
-                      </button>
-                    )
+                    ) : undefined
                   }
                 />
               </div>
@@ -970,17 +956,8 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
                   }
                   description={
                     scope.type === "all"
-                      ? "Add your first task to start tracking what you need to accomplish."
-                      : "Add a task to get started."
-                  }
-                  action={
-                    <button
-                      onClick={openCreate}
-                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 transition-opacity cursor-pointer"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add a task
-                    </button>
+                      ? "Use Add task above to start tracking what you need to accomplish."
+                      : "Use Add task above to get started."
                   }
                 />
               </div>
@@ -990,9 +967,17 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
               <TaskCard
                 key={task.id}
                 task={task}
-                onEdit={openEdit}
                 onDelete={handleDelete}
                 onToggleComplete={handleToggleComplete}
+                onRenameTitle={async (taskId, title) => {
+                  const current = tasks.find((t) => t.id === taskId);
+                  await handleSaveTitleNotes(taskId, title, current?.notes ?? null);
+                }}
+                onSetPriority={handleSetPriority}
+                onSetDue={handleSetDue}
+                onSetTags={handleSetTags}
+                onDeleteTag={handleDeleteTag}
+                allTags={allTags}
                 onSelect={openDetail}
                 selected={selectedTaskId === task.id}
                 lists={moveToListOptions}
@@ -1015,9 +1000,17 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
                 <TaskCard
                   key={task.id}
                   task={task}
-                  onEdit={openEdit}
                   onDelete={handleDelete}
                   onToggleComplete={handleToggleComplete}
+                  onRenameTitle={async (taskId, title) => {
+                    const current = tasks.find((t) => t.id === taskId);
+                    await handleSaveTitleNotes(taskId, title, current?.notes ?? null);
+                  }}
+                  onSetPriority={handleSetPriority}
+                  onSetDue={handleSetDue}
+                  onSetTags={handleSetTags}
+                  onDeleteTag={handleDeleteTag}
+                  allTags={allTags}
                   onSelect={openDetail}
                   selected={selectedTaskId === task.id}
                   lists={moveToListOptions}
@@ -1061,20 +1054,6 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
         </div>
       )}
       </div>{/* end Lists panel + main content row */}
-
-      {/* Task form drawer */}
-      <TaskForm
-        open={formOpen}
-        onClose={() => {
-          setFormOpen(false);
-          setEditingTask(null);
-        }}
-        onSave={handleSave}
-        onDeleteTag={handleDeleteTag}
-        editTask={editingTask}
-        allTags={allTags}
-        defaultListId={formDefaultListId}
-      />
     </AppShell>
   );
 }

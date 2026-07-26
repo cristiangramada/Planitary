@@ -16,6 +16,9 @@ import {
   deleteTask,
   deleteTag,
   setTaskComplete,
+  updateTaskTitleNotes,
+  patchTaskFields,
+  replaceTaskTags,
 } from "@/lib/tasks";
 import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
 import { createEvent, updateEvent, deleteEvent } from "@/lib/calendar";
@@ -32,7 +35,7 @@ import { parseDateOnly } from "@/utils/date";
 import { DashboardSection, DashboardSkeletonRows, DashboardEmptyState } from "./DashboardSection";
 import { JournalPreview } from "./JournalPreview";
 import { EventsPreview } from "./EventsPreview";
-import type { TaskWithDetails, Tag, CalendarEvent } from "@/types";
+import type { TaskWithDetails, Tag, CalendarEvent, Priority } from "@/types";
 
 interface DashboardClientProps {
   initialDate: string;
@@ -202,6 +205,103 @@ export function DashboardClient({
     [refetchAll, removeTask]
   );
 
+  const handleRenameTitle = useCallback(
+    async (taskId: string, title: string) => {
+      const current = data.todayTasks.data.find((t) => t.id === taskId);
+      const notes = current?.notes ?? null;
+      setData((d) => ({
+        ...d,
+        todayTasks: {
+          ...d.todayTasks,
+          data: d.todayTasks.data.map((t) => (t.id === taskId ? { ...t, title } : t)),
+        },
+      }));
+      try {
+        const supabase = createClient();
+        await updateTaskTitleNotes(supabase, taskId, title, notes);
+      } catch (err) {
+        setMutationError(err instanceof Error ? err.message : "Failed to rename task.");
+        refetchAll();
+        throw err;
+      }
+    },
+    [data.todayTasks.data, refetchAll]
+  );
+
+  const handleSetPriority = useCallback(
+    async (taskId: string, priority: Priority) => {
+      setData((d) => ({
+        ...d,
+        todayTasks: {
+          ...d.todayTasks,
+          data: d.todayTasks.data.map((t) => (t.id === taskId ? { ...t, priority } : t)),
+        },
+      }));
+      try {
+        const supabase = createClient();
+        await patchTaskFields(supabase, taskId, { priority });
+      } catch (err) {
+        setMutationError(err instanceof Error ? err.message : "Failed to update priority.");
+        refetchAll();
+        throw err;
+      }
+    },
+    [refetchAll]
+  );
+
+  const handleSetDue = useCallback(
+    async (taskId: string, date: string | null, time: string | null) => {
+      const due_time = date && time ? (time.length === 5 ? `${time}:00` : time) : null;
+      setData((d) => ({
+        ...d,
+        todayTasks: {
+          ...d.todayTasks,
+          data: d.todayTasks.data.map((t) =>
+            t.id === taskId ? { ...t, due_date: date, due_time } : t
+          ),
+        },
+      }));
+      try {
+        const supabase = createClient();
+        await patchTaskFields(supabase, taskId, { due_date: date, due_time });
+      } catch (err) {
+        setMutationError(err instanceof Error ? err.message : "Failed to update due date.");
+        refetchAll();
+        throw err;
+      }
+    },
+    [refetchAll]
+  );
+
+  const handleSetTags = useCallback(
+    async (taskId: string, tags: TagFormItem[]) => {
+      try {
+        const supabase = createClient();
+        const userId = await getUserId();
+        const saved = await replaceTaskTags(supabase, taskId, userId, tags);
+        setData((d) => ({
+          ...d,
+          todayTasks: {
+            ...d.todayTasks,
+            data: d.todayTasks.data.map((t) => (t.id === taskId ? { ...t, tags: saved } : t)),
+          },
+        }));
+        setAllTags((prev) => {
+          const next = [...prev];
+          saved.forEach((tag) => {
+            if (!next.some((t) => t.id === tag.id)) next.push(tag);
+          });
+          return next;
+        });
+      } catch (err) {
+        setMutationError(err instanceof Error ? err.message : "Failed to update tags.");
+        refetchAll();
+        throw err;
+      }
+    },
+    [getUserId, refetchAll]
+  );
+
   const handleDeleteTask = useCallback(
     async (taskId: string) => {
       removeTask(taskId);
@@ -315,10 +415,6 @@ export function DashboardClient({
     setEditingTask(null);
     setTaskFormOpen(true);
   }
-  function openEditTask(task: TaskWithDetails) {
-    setEditingTask(task);
-    setTaskFormOpen(true);
-  }
   function openNewEvent() {
     setEditingEvent(null);
     setEventFormOpen(true);
@@ -384,9 +480,14 @@ export function DashboardClient({
                     <TaskCard
                       key={task.id}
                       task={task}
-                      onEdit={openEditTask}
                       onDelete={handleDeleteTask}
                       onToggleComplete={handleToggleComplete}
+                      onRenameTitle={handleRenameTitle}
+                      onSetPriority={handleSetPriority}
+                      onSetDue={handleSetDue}
+                      onSetTags={handleSetTags}
+                      onDeleteTag={handleDeleteTag}
+                      allTags={allTags}
                     />
                   ))}
                 </div>

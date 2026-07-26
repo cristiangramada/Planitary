@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { ChevronLeft, ChevronRight, Clock, Repeat, X } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { PickerSelect } from "@/components/ui/PickerSelect";
@@ -32,8 +32,11 @@ export interface TaskDatePickerProps {
   initialRepeat?: RepeatOption;
   onConfirm: (value: DatePickerValue) => void;
   onClose: () => void;
-  /** Top-left of the panel in viewport coords (left-aligned under the trigger). */
+  /** Top edge of the panel sits flush under the trigger.
+   *  `x` is the left edge when align is "start", or the right edge when align is "end". */
   anchor?: { x: number; y: number };
+  /** Horizontal alignment of the panel relative to `anchor.x`. Defaults to "start". */
+  anchorAlign?: "start" | "end";
   /** When set, clicks on this element do not count as "outside" (lets the trigger toggle-close). */
   ignoreCloseRef?: RefObject<HTMLElement | null>;
 }
@@ -319,6 +322,7 @@ export function TaskDatePicker({
   onConfirm,
   onClose,
   anchor,
+  anchorAlign = "start",
   ignoreCloseRef,
 }: TaskDatePickerProps) {
   const startDate = initialDate ? parseISO(initialDate) : localToday();
@@ -331,18 +335,49 @@ export function TaskDatePicker({
   const [repeat, setRepeat] = useState<RepeatOption>(initialRepeat);
 
   const panelWidth = 320;
-  const panelHeight = 420;
-  // `anchor` is the panel's top-left: left edges align with the trigger;
-  // top sits flush under the trigger's bottom edge. Only nudge if clipped.
+  const panelHeightEstimate = 480;
+  const [fittedStyle, setFittedStyle] = useState<
+    { left: number; top: number } | undefined
+  >(undefined);
+
   const anchoredStyle = anchor
-    ? {
-        left: Math.max(8, Math.min(anchor.x, window.innerWidth - panelWidth - 8)),
+    ? fittedStyle ?? {
+        left:
+          anchorAlign === "end"
+            ? Math.max(8, anchor.x - panelWidth)
+            : Math.max(8, Math.min(anchor.x, window.innerWidth - panelWidth - 8)),
         top:
-          anchor.y + panelHeight > window.innerHeight - 8
-            ? Math.max(8, window.innerHeight - panelHeight - 8)
-            : anchor.y,
+          anchor.y + panelHeightEstimate > window.innerHeight - 8
+            ? Math.max(8, window.innerHeight - panelHeightEstimate - 8)
+            : Math.max(8, anchor.y),
       }
     : undefined;
+
+  // After paint, snap the panel fully into the viewport using its real height.
+  useLayoutEffect(() => {
+    if (!anchor || !panelRef.current) {
+      setFittedStyle(undefined);
+      return;
+    }
+    const el = panelRef.current;
+    const h = el.offsetHeight || panelHeightEstimate;
+    const w = el.offsetWidth || panelWidth;
+    let nextLeft =
+      anchorAlign === "end"
+        ? anchor.x - w
+        : anchor.x;
+    let nextTop = anchor.y;
+
+    // Prefer below the trigger; flip above if it would clip the bottom.
+    if (nextTop + h > window.innerHeight - 8) {
+      // `anchor.y` is the bottom of the trigger — place panel above it when possible.
+      const above = (ignoreCloseRef?.current?.getBoundingClientRect().top ?? anchor.y) - h;
+      nextTop = above >= 8 ? above : Math.max(8, window.innerHeight - h - 8);
+    }
+    nextTop = Math.max(8, Math.min(nextTop, window.innerHeight - h - 8));
+    nextLeft = Math.max(8, Math.min(nextLeft, window.innerWidth - w - 8));
+    setFittedStyle({ left: nextLeft, top: nextTop });
+  }, [anchor, anchorAlign, ignoreCloseRef]);
 
   // Anchored mode: leave the trigger hoverable/clickable (no blocking scrim).
   // Close on outside mousedown, but ignore the trigger so it can toggle-close.
@@ -353,6 +388,8 @@ export function TaskDatePicker({
       const target = e.target as Node;
       if (panelRef.current?.contains(target)) return;
       if (ignoreCloseRef?.current?.contains(target)) return;
+      // Time/repeat lists portal outside the panel.
+      if ((e.target as Element | null)?.closest?.("[data-picker-select-list]")) return;
       onClose();
     }
     function onKey(e: KeyboardEvent) {

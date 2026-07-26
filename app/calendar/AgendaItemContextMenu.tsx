@@ -17,7 +17,7 @@ interface AgendaItemContextMenuProps {
   x: number;
   y: number;
   kind: "task" | "event";
-  onEdit: () => void;
+  onEdit?: () => void;
   onDelete: () => void;
   onClose: () => void;
   /** Task-only: when provided, shows a "Move to list" section listing Inbox + these lists. */
@@ -102,18 +102,20 @@ export function AgendaItemContextMenu({
         </div>
       ) : (
         <>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              onEdit();
-              onClose();
-            }}
-            className="flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-left whitespace-nowrap hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
-          >
-            <Pencil className="w-4 h-4 text-[hsl(var(--muted-foreground))] shrink-0" />
-            Edit {noun}
-          </button>
+          {kind === "event" && onEdit && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onEdit();
+                onClose();
+              }}
+              className="flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-left whitespace-nowrap hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
+            >
+              <Pencil className="w-4 h-4 text-[hsl(var(--muted-foreground))] shrink-0" />
+              Edit {noun}
+            </button>
+          )}
 
           {canMove && (
             <div className="border-t border-[hsl(var(--border))]">
@@ -169,7 +171,7 @@ export function AgendaItemContextMenu({
             onClick={() => setConfirmingDelete(true)}
             className={cn(
               "flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-left whitespace-nowrap text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer",
-              canMove && "border-t border-[hsl(var(--border))]"
+              (canMove || kind === "event") && "border-t border-[hsl(var(--border))]"
             )}
           >
             <Trash2 className="w-4 h-4 shrink-0" />
