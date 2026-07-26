@@ -584,7 +584,7 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
 
   return (
     <AppShell flushTop>
-      <div className="h-full flex gap-6 max-w-5xl mx-auto pt-4">
+      <div className="h-full flex gap-6 w-full pt-4">
         {/* Desktop Lists panel — extends the Tasks page's own sub-navigation
             rather than adding a second global sidebar. */}
         <aside className="hidden lg:block w-[240px] shrink-0 pr-5 border-r border-[hsl(var(--border))] overflow-y-auto">
