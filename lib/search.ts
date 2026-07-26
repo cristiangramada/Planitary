@@ -19,7 +19,7 @@ import {
 
 export const SEARCH_PAGE_SIZE = 20;
 
-const VALID_PRIORITIES: readonly Priority[] = ["low", "medium", "high"];
+const VALID_PRIORITIES: readonly Priority[] = ["none", "low", "medium", "high"];
 const VALID_TASK_STATUSES: readonly TaskStatus[] = ["active", "completed"];
 
 interface SearchPlanitaryRow {

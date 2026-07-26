@@ -993,7 +993,6 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
                 onEdit={openEdit}
                 onDelete={handleDelete}
                 onToggleComplete={handleToggleComplete}
-                onToggleSubtask={handleToggleSubtask}
                 onSelect={openDetail}
                 selected={selectedTaskId === task.id}
                 lists={moveToListOptions}
@@ -1019,7 +1018,6 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
                   onEdit={openEdit}
                   onDelete={handleDelete}
                   onToggleComplete={handleToggleComplete}
-                  onToggleSubtask={handleToggleSubtask}
                   onSelect={openDetail}
                   selected={selectedTaskId === task.id}
                   lists={moveToListOptions}
@@ -1075,7 +1073,6 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
         onDeleteTag={handleDeleteTag}
         editTask={editingTask}
         allTags={allTags}
-        allLists={lists}
         defaultListId={formDefaultListId}
       />
     </AppShell>

@@ -5,8 +5,7 @@ import { createPortal } from "react-dom";
 import { X, Plus, Trash2, Tag as TagIcon, AlertCircle, CalendarDays } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { TagBadge } from "@/components/ui/TagBadge";
-import { PickerSelect, type PickerSelectOption } from "@/components/ui/PickerSelect";
-import type { TaskWithDetails, Tag, TaskList, Priority } from "@/types";
+import type { TaskWithDetails, Tag, Priority } from "@/types";
 import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
 import { PLANET_TAG_COLORS } from "@/lib/tasks";
 import {
@@ -14,9 +13,6 @@ import {
   type DatePickerValue,
   type RepeatOption,
 } from "./TaskDatePicker";
-
-/** Sentinel PickerSelect value for "no list" (Inbox), since it only supports string values. */
-const INBOX_VALUE = "__inbox__";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,17 +31,16 @@ interface TaskFormProps {
   editTask?: TaskWithDetails | null;
   /** Pre-fill due date when creating from calendar agenda. */
   defaultDueDate?: string | null;
-  /** Pre-select a List when creating from within that List's view. Ignored when editing. */
+  /** Assign new tasks to this List (e.g. when creating from a List view). Ignored when editing. */
   defaultListId?: string | null;
   allTags: Tag[];
-  /** All of the user's Lists, for the List selector. Defaults to none (Inbox only). */
-  allLists?: TaskList[];
 }
 
 const PRIORITIES: { value: Priority; label: string; color: string }[] = [
   { value: "high",   label: "High",   color: "text-red-500 border-red-400 bg-red-500/10" },
   { value: "medium", label: "Medium", color: "text-amber-500 border-amber-400 bg-amber-500/10" },
   { value: "low",    label: "Low",    color: "text-green-600 dark:text-green-500 border-green-400 bg-green-500/10" },
+  { value: "none",   label: "None",   color: "text-[hsl(var(--muted-foreground))] border-[hsl(var(--border))] bg-transparent" },
 ];
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
@@ -54,9 +49,9 @@ const SHORT_MONTHS = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ] as const;
 
-/** Format a YYYY-MM-DD + optional HH:MM into a human-readable schedule label. */
+/** Format a YYYY-MM-DD + optional HH:MM into a human-readable due date label. */
 function formatScheduleLabel(date: string | null, time: string | null): string {
-  if (!date) return "Schedule";
+  if (!date) return "Due Date";
   const [y, m, d] = date.split("-").map(Number);
   const dt = new Date(y, m - 1, d);
   const dayName = WEEKDAYS[dt.getDay()];
@@ -518,79 +513,6 @@ function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPickerProps)
 }
 
 // ---------------------------------------------------------------------------
-// Subtask list sub-component
-// ---------------------------------------------------------------------------
-
-interface SubtaskListProps {
-  items: SubtaskFormItem[];
-  onChange: (items: SubtaskFormItem[]) => void;
-}
-
-function SubtaskList({ items, onChange }: SubtaskListProps) {
-  const [newTitle, setNewTitle] = useState("");
-  const newRef = useRef<HTMLInputElement>(null);
-
-  function addSubtask() {
-    const title = newTitle.trim();
-    if (!title) return;
-    onChange([...items, { title, is_completed: false }]);
-    setNewTitle("");
-    newRef.current?.focus();
-  }
-
-  function updateTitle(index: number, title: string) {
-    const next = [...items];
-    next[index] = { ...next[index], title };
-    onChange(next);
-  }
-
-  function remove(index: number) {
-    onChange(items.filter((_, i) => i !== index));
-  }
-
-  return (
-    <div className="space-y-1.5">
-      {items.map((item, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--muted-foreground))] shrink-0 ml-1" />
-          <input
-            value={item.title}
-            onChange={(e) => updateTitle(i, e.target.value)}
-            className="flex-1 text-sm px-2 py-1.5 rounded-md border border-[hsl(var(--input))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none"
-            placeholder="Subtask title"
-          />
-          <button
-            type="button"
-            onClick={() => remove(i)}
-            className="p-1 rounded text-[hsl(var(--muted-foreground))] hover:text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      ))}
-
-      {/* Add new subtask */}
-      <div className="flex items-center gap-2">
-        <Plus className="w-3.5 h-3.5 text-[hsl(var(--muted-foreground))] shrink-0 ml-0.5" />
-        <input
-          ref={newRef}
-          value={newTitle}
-          onChange={(e) => setNewTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              addSubtask();
-            }
-          }}
-          placeholder="Add a subtask… (press Enter)"
-          className="flex-1 text-sm px-2 py-1.5 rounded-md border border-[hsl(var(--input))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none"
-        />
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Inner form body — receives initializers from props.
 // Keyed by editTask?.id so React remounts (and resets state) on task switch.
 // ---------------------------------------------------------------------------
@@ -605,7 +527,6 @@ function TaskFormBody({
   onDeleteTag,
   editTask,
   allTags,
-  allLists = [],
   isEdit,
   defaultDueDate,
   defaultListId,
@@ -614,13 +535,7 @@ function TaskFormBody({
   // No useEffect needed — the `key` prop on the outer wrapper resets this
   // component whenever the editing task changes.
   const [title, setTitle] = useState(editTask?.title ?? "");
-  const [notes, setNotes] = useState(editTask?.notes ?? "");
   const [priority, setPriority] = useState<Priority>(editTask?.priority ?? "medium");
-  // A deleted current List falls back to Inbox rather than crashing.
-  const [listId, setListId] = useState<string | null>(() => {
-    const initial = editTask ? editTask.list_id : (defaultListId ?? null);
-    return initial && allLists.some((l) => l.id === initial) ? initial : null;
-  });
   const [dueDate, setDueDate] = useState<string | null>(
     editTask?.due_date ?? defaultDueDate ?? null
   );
@@ -631,9 +546,6 @@ function TaskFormBody({
   // Repeat is UI-only for now (not yet persisted to DB)
   const [repeat, setRepeat] = useState<RepeatOption>("never");
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [subtasks, setSubtasks] = useState<SubtaskFormItem[]>(
-    editTask?.subtasks.map((s) => ({ id: s.id, title: s.title, is_completed: s.is_completed })) ?? []
-  );
   const [selectedTags, setSelectedTags] = useState<TagFormItem[]>(
     editTask?.tags.map((t) => ({ id: t.id, name: t.name, color: t.color })) ?? []
   );
@@ -661,17 +573,25 @@ function TaskFormBody({
     if (!title.trim()) return;
     setError(null);
     setSaving(true);
+    // Notes/subtasks live in the detail panel; preserve them on edit.
+    // New tasks inherit the current List view via defaultListId.
+    const preservedSubtasks: SubtaskFormItem[] =
+      editTask?.subtasks.map((s) => ({
+        id: s.id,
+        title: s.title,
+        is_completed: s.is_completed,
+      })) ?? [];
     try {
       await onSave(
         {
           title: title.trim(),
-          notes: notes.trim() || null,
+          notes: editTask?.notes ?? null,
           priority,
           due_date: dueDate,
           due_time: dueDate && dueTime ? dueTime + ":00" : null,
-          list_id: listId,
+          list_id: editTask ? editTask.list_id : (defaultListId ?? null),
         },
-        subtasks.filter((s) => s.title.trim()),
+        preservedSubtasks,
         selectedTags
       );
     } catch (err) {
@@ -680,8 +600,6 @@ function TaskFormBody({
       setSaving(false);
     }
   }
-
-  if (!open) return null;
 
   return (
     <>
@@ -728,20 +646,6 @@ function TaskFormBody({
             />
           </div>
 
-          {/* Notes */}
-          <div>
-            <label className="block text-xs font-medium mb-1.5 text-[hsl(var(--muted-foreground))] uppercase tracking-wide">
-              Notes
-            </label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add any details or context…"
-              rows={3}
-              className="w-full px-3 py-2.5 text-sm rounded-lg border border-[hsl(var(--input))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none transition resize-none"
-            />
-          </div>
-
           {/* Priority */}
           <div>
             <label className="block text-xs font-medium mb-1.5 text-[hsl(var(--muted-foreground))] uppercase tracking-wide">
@@ -766,31 +670,10 @@ function TaskFormBody({
             </div>
           </div>
 
-          {/* List */}
-          <div>
-            <label
-              id="task-list-label"
-              className="block text-xs font-medium mb-1.5 text-[hsl(var(--muted-foreground))] uppercase tracking-wide"
-            >
-              List
-            </label>
-            <PickerSelect
-              value={listId ?? INBOX_VALUE}
-              onChange={(v) => setListId(v === INBOX_VALUE ? null : v)}
-              minWidth={180}
-              options={[
-                { value: INBOX_VALUE, label: "Inbox" } satisfies PickerSelectOption<string>,
-                ...allLists.map(
-                  (list): PickerSelectOption<string> => ({ value: list.id, label: list.name })
-                ),
-              ]}
-            />
-          </div>
-
-          {/* Schedule (date + time picker trigger) */}
+          {/* Due Date (date + time picker trigger) */}
           <div>
             <label className="block text-xs font-medium mb-1.5 text-[hsl(var(--muted-foreground))] uppercase tracking-wide">
-              Schedule
+              Due Date
             </label>
             <div
               className={cn(
@@ -816,7 +699,7 @@ function TaskFormBody({
               {dueDate && (
                 <button
                   type="button"
-                  aria-label="Clear schedule"
+                  aria-label="Clear due date"
                   onClick={() => {
                     setDueDate(null);
                     setDueTime(null);
@@ -852,14 +735,6 @@ function TaskFormBody({
               onChange={setSelectedTags}
               onDeleteTag={onDeleteTag}
             />
-          </div>
-
-          {/* Subtasks */}
-          <div>
-            <label className="block text-xs font-medium mb-1.5 text-[hsl(var(--muted-foreground))] uppercase tracking-wide">
-              Subtasks
-            </label>
-            <SubtaskList items={subtasks} onChange={setSubtasks} />
           </div>
 
           {error && (

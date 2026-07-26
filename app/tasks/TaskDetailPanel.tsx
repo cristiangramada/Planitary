@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { CheckSquare, AlignLeft, X, Flag, CalendarDays } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -25,10 +25,16 @@ interface TaskDetailPanelProps {
   ) => Promise<void>;
 }
 
-const PRIORITIES: { value: Priority; label: string; flagClass: string }[] = [
-  { value: "high", label: "High", flagClass: "text-red-500" },
-  { value: "medium", label: "Medium", flagClass: "text-amber-500" },
-  { value: "low", label: "Low", flagClass: "text-green-600 dark:text-green-500" },
+const PRIORITIES: {
+  value: Priority;
+  label: string;
+  flagClass: string;
+  filled: boolean;
+}[] = [
+  { value: "high", label: "High", flagClass: "text-red-500", filled: true },
+  { value: "medium", label: "Medium", flagClass: "text-amber-500", filled: true },
+  { value: "low", label: "Low", flagClass: "text-green-600 dark:text-green-500", filled: true },
+  { value: "none", label: "None", flagClass: "text-[hsl(var(--muted-foreground))]", filled: false },
 ];
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
@@ -71,8 +77,27 @@ function initialMode(task: TaskWithDetails): DetailBodyMode {
     : "notes";
 }
 
-function flagClassFor(priority: Priority): string {
-  return PRIORITIES.find((p) => p.value === priority)?.flagClass ?? "text-[hsl(var(--muted-foreground))]";
+function priorityMeta(priority: Priority) {
+  return (
+    PRIORITIES.find((p) => p.value === priority) ??
+    PRIORITIES.find((p) => p.value === "none")!
+  );
+}
+
+function PriorityFlag({
+  priority,
+  className,
+}: {
+  priority: Priority;
+  className?: string;
+}) {
+  const meta = priorityMeta(priority);
+  return (
+    <Flag
+      className={cn(className, meta.flagClass)}
+      fill={meta.filled ? "currentColor" : "none"}
+    />
+  );
 }
 
 export function TaskDetailPanel({
@@ -92,6 +117,8 @@ export function TaskDetailPanel({
   const [repeat, setRepeat] = useState<RepeatOption>("never");
   const [priorityMenu, setPriorityMenu] = useState<{ x: number; y: number } | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
+  const dueBtnRef = useRef<HTMLButtonElement>(null);
+  const flagBtnRef = useRef<HTMLButtonElement>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleNotesRef = useRef({ title: task.title, notes: task.notes ?? "" });
 
@@ -219,8 +246,15 @@ export function TaskDetailPanel({
     }
   }
 
-  function openDuePicker(e: ReactMouseEvent) {
-    setPickerAnchor({ x: e.clientX, y: e.clientY });
+  function toggleDuePicker(e: ReactMouseEvent<HTMLButtonElement>) {
+    if (pickerOpen) {
+      setPickerOpen(false);
+      setPickerAnchor(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    // Top-left of the picker: left edge with the button, top flush under it.
+    setPickerAnchor({ x: rect.left, y: rect.bottom });
     setPickerOpen(true);
   }
 
@@ -238,9 +272,15 @@ export function TaskDetailPanel({
     }
   }
 
-  function openPriorityMenu(e: ReactMouseEvent) {
+  function togglePriorityMenu(e: ReactMouseEvent<HTMLButtonElement>) {
     e.preventDefault();
-    setPriorityMenu({ x: e.clientX, y: e.clientY });
+    if (priorityMenu) {
+      setPriorityMenu(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    // x = right edge of the flag button; menu right-aligns to it, flush underneath.
+    setPriorityMenu({ x: rect.right, y: rect.bottom });
   }
 
   async function selectPriority(priority: Priority) {
@@ -258,13 +298,14 @@ export function TaskDetailPanel({
 
   return (
     <div className="flex h-full flex-col bg-[hsl(var(--background))]">
-      {/* Meta bar — due date + priority */}
-      <div className="flex items-center gap-2 pl-4 pr-5 pt-3 pb-2.5 shrink-0">
+      {/* Meta bar — due date + priority (flag shares a column with the mode toggle below) */}
+      <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] items-center gap-2 pl-4 pr-5 pt-3 pb-2.5 shrink-0">
         <button
+          ref={dueBtnRef}
           type="button"
-          onClick={openDuePicker}
+          onClick={toggleDuePicker}
           className={cn(
-            "inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer",
+            "justify-self-start inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer",
             task.due_date
               ? "text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]"
               : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]"
@@ -274,22 +315,20 @@ export function TaskDetailPanel({
           {formatDueLabel(task.due_date, dueTimeDisplay)}
         </button>
         <button
+          ref={flagBtnRef}
           type="button"
-          onClick={openPriorityMenu}
+          onClick={togglePriorityMenu}
           aria-label={`Priority: ${task.priority}`}
           title="Change priority"
-          className={cn(
-            "ml-auto p-1.5 rounded-md hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer",
-            flagClassFor(task.priority)
-          )}
+          className="justify-self-center p-1.5 rounded-md hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
         >
-          <Flag className="w-4 h-4" />
+          <PriorityFlag priority={task.priority} className="w-5 h-5" />
         </button>
       </div>
 
       <div className="border-t border-[hsl(var(--border))] shrink-0" />
 
-      <div className="flex items-center gap-2 pl-4 pr-5 pt-3 pb-1 shrink-0">
+      <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] items-center gap-2 pl-4 pr-5 pt-3 pb-1 shrink-0">
         <input
           ref={titleRef}
           value={title}
@@ -300,7 +339,7 @@ export function TaskDetailPanel({
           }}
           onBlur={() => void flushTitleNotes(title, notes)}
           aria-label="Task title"
-          className="flex-1 min-w-0 text-xl font-semibold bg-transparent text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none"
+          className="min-w-0 w-full text-xl font-semibold bg-transparent text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none"
           placeholder="Task title"
         />
         <button
@@ -309,12 +348,12 @@ export function TaskDetailPanel({
           disabled={switching}
           title={toggleLabel}
           aria-label={`Switch to ${toggleLabel}`}
-          className="shrink-0 p-1.5 rounded-md text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+          className="justify-self-center p-1.5 rounded-md text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {mode === "notes" ? (
-            <CheckSquare className="w-4 h-4" />
+            <CheckSquare className="w-5 h-5" />
           ) : (
-            <AlignLeft className="w-4 h-4" />
+            <AlignLeft className="w-5 h-5" />
           )}
         </button>
       </div>
@@ -356,6 +395,7 @@ export function TaskDetailPanel({
           initialTime={dueTimeDisplay}
           initialRepeat={repeat}
           anchor={pickerAnchor}
+          ignoreCloseRef={dueBtnRef}
           onConfirm={handlePickerConfirm}
           onClose={() => {
             setPickerOpen(false);
@@ -369,6 +409,7 @@ export function TaskDetailPanel({
           x={priorityMenu.x}
           y={priorityMenu.y}
           current={task.priority}
+          ignoreCloseRef={flagBtnRef}
           onSelect={(p) => void selectPriority(p)}
           onClose={() => setPriorityMenu(null)}
         />
@@ -381,23 +422,35 @@ function PriorityMenu({
   x,
   y,
   current,
+  ignoreCloseRef,
   onSelect,
   onClose,
 }: {
+  /** Right edge of the flag button (viewport coords). */
   x: number;
+  /** Bottom edge of the flag button (viewport coords). */
   y: number;
   current: Priority;
+  ignoreCloseRef: RefObject<HTMLElement | null>;
   onSelect: (p: Priority) => void;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const width = 148;
-  const left = Math.min(x, window.innerWidth - width - 8);
-  const top = Math.min(y, window.innerHeight - 140);
+  const menuHeight = 188;
+  // Right-align under the flag: menu's right edge matches button's right edge.
+  const left = Math.max(8, x - width);
+  const top =
+    y + menuHeight > window.innerHeight - 8
+      ? Math.max(8, window.innerHeight - menuHeight - 8)
+      : y;
 
   useEffect(() => {
     function onOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      const target = e.target as Node;
+      if (ref.current?.contains(target)) return;
+      if (ignoreCloseRef.current?.contains(target)) return;
+      onClose();
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -408,7 +461,7 @@ function PriorityMenu({
       document.removeEventListener("mousedown", onOutside);
       window.removeEventListener("keydown", onKey);
     };
-  }, [onClose]);
+  }, [onClose, ignoreCloseRef]);
 
   return createPortal(
     <div
@@ -428,7 +481,7 @@ function PriorityMenu({
             current === p.value && "font-medium"
           )}
         >
-          <Flag className={cn("w-3.5 h-3.5 shrink-0", p.flagClass)} />
+          <PriorityFlag priority={p.value} className="w-4 h-4 shrink-0" />
           {p.label}
         </button>
       ))}

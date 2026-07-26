@@ -24,6 +24,7 @@ const PRIORITY_COLOR: Record<string, string> = {
   high:   "bg-red-500/15 border-l-2 border-red-500 text-red-700 dark:text-red-300",
   medium: "bg-amber-500/15 border-l-2 border-amber-500 text-amber-700 dark:text-amber-300",
   low:    "bg-green-500/15 border-l-2 border-green-500 text-green-700 dark:text-green-400",
+  none:   "bg-[hsl(var(--muted)/0.5)] border-l-2 border-[hsl(var(--muted-foreground))] text-[hsl(var(--muted-foreground))]",
 };
 
 interface DayViewProps {

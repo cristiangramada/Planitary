@@ -6,6 +6,7 @@ export const TASK_PRIORITY_ORDER: Record<Priority, number> = {
   high: 0,
   medium: 1,
   low: 2,
+  none: 3,
 };
 
 // ---------------------------------------------------------------------------

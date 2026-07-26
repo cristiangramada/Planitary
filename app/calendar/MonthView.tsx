@@ -15,6 +15,7 @@ const PRIORITY_DOT: Record<string, string> = {
   high:   "bg-red-500",
   medium: "bg-amber-500",
   low:    "bg-green-500",
+  none:   "bg-[hsl(var(--muted-foreground))]",
 };
 
 /** Approximate chip row height (content + gap) for overflow math. */

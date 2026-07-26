@@ -14,7 +14,7 @@ export interface Task {
   user_id: string;
   title: string;
   notes: string | null;
-  priority: "low" | "medium" | "high";
+  priority: "none" | "low" | "medium" | "high";
   status: "active" | "completed";
   due_date: string | null;   // ISO date string (YYYY-MM-DD)
   due_time: string | null;   // HH:MM:SS

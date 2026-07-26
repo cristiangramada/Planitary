@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { ChevronLeft, ChevronRight, Clock, Repeat, X } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { PickerSelect } from "@/components/ui/PickerSelect";
@@ -15,18 +15,13 @@ export type RepeatOption =
   | "daily"
   | "weekly"
   | "monthly"
-  | "yearly"
-  | "custom";
+  | "yearly";
 
 export interface DatePickerValue {
   /** ISO date string YYYY-MM-DD, or null for no date */
   date: string | null;
   /** HH:MM string, or null for no time */
   time: string | null;
-  /** Duration mode end date — not yet persisted, reserved for future use */
-  endDate: string | null;
-  /** Duration mode end time — not yet persisted, reserved for future use */
-  endTime: string | null;
   /** Repeat preference — stored in UI state only until DB column is added */
   repeat: RepeatOption;
 }
@@ -37,8 +32,10 @@ export interface TaskDatePickerProps {
   initialRepeat?: RepeatOption;
   onConfirm: (value: DatePickerValue) => void;
   onClose: () => void;
-  /** When set, the panel opens near this point instead of the viewport center. */
+  /** Top-left of the panel in viewport coords (left-aligned under the trigger). */
   anchor?: { x: number; y: number };
+  /** When set, clicks on this element do not count as "outside" (lets the trigger toggle-close). */
+  ignoreCloseRef?: RefObject<HTMLElement | null>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -59,7 +56,6 @@ const REPEAT_OPTIONS: { value: RepeatOption; label: string }[] = [
   { value: "weekly",  label: "Weekly" },
   { value: "monthly", label: "Monthly" },
   { value: "yearly",  label: "Yearly" },
-  { value: "custom",  label: "Custom…" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -77,19 +73,6 @@ function localToday(): Date {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   return d;
-}
-
-function addDays(d: Date, n: number): Date {
-  const r = new Date(d);
-  r.setDate(r.getDate() + n);
-  return r;
-}
-
-/** Next Saturday from today (returns today if today is Saturday). */
-function thisWeekend(): Date {
-  const d = localToday();
-  const dow = d.getDay(); // 0 = Sun, 6 = Sat
-  return addDays(d, dow === 6 ? 0 : 6 - dow);
 }
 
 /** Returns an array of (day | null) for the month grid, padded to full weeks. */
@@ -166,17 +149,15 @@ interface CalendarGridProps {
   year: number;
   month: number;
   selectedDate: string | null;
-  endDate: string | null;
   onSelect: (iso: string) => void;
 }
 
-function CalendarGrid({ year, month, selectedDate, endDate, onSelect }: CalendarGridProps) {
+function CalendarGrid({ year, month, selectedDate, onSelect }: CalendarGridProps) {
   const todayISO = toISO(localToday());
   const grid = buildMonthGrid(year, month);
 
   return (
     <div className="px-3 pb-2">
-      {/* Day-of-week header */}
       <div className="grid grid-cols-7 mb-0.5">
         {WEEK_DAYS.map((d) => (
           <div
@@ -188,7 +169,6 @@ function CalendarGrid({ year, month, selectedDate, endDate, onSelect }: Calendar
         ))}
       </div>
 
-      {/* Day cells */}
       <div className="grid grid-cols-7 gap-y-0.5">
         {grid.map((day, i) => {
           if (!day) return <div key={i} className="aspect-square" />;
@@ -196,14 +176,6 @@ function CalendarGrid({ year, month, selectedDate, endDate, onSelect }: Calendar
           const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
           const isToday = iso === todayISO;
           const isSelected = iso === selectedDate;
-          const isEnd = endDate && iso === endDate;
-
-          // Highlight range between start and end in duration mode
-          const inRange =
-            endDate &&
-            selectedDate &&
-            iso > selectedDate &&
-            iso < endDate;
 
           return (
             <button
@@ -211,13 +183,11 @@ function CalendarGrid({ year, month, selectedDate, endDate, onSelect }: Calendar
               type="button"
               onClick={() => onSelect(iso)}
               aria-label={iso}
-              aria-pressed={isSelected || !!isEnd}
+              aria-pressed={isSelected}
               className={cn(
                 "aspect-square text-[13px] flex items-center justify-center rounded-full transition-colors font-medium",
-                isSelected || isEnd
+                isSelected
                   ? "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-semibold"
-                  : inRange
-                  ? "bg-[hsl(var(--primary)/0.15)] text-[hsl(var(--primary))]"
                   : isToday
                   ? "border border-[hsl(var(--primary))] text-[hsl(var(--primary))]"
                   : "text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]"
@@ -231,50 +201,6 @@ function CalendarGrid({ year, month, selectedDate, endDate, onSelect }: Calendar
     </div>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// QuickDateButtons
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface QuickDateButtonsProps {
-  selectedDate: string | null;
-  onSelect: (iso: string) => void;
-}
-
-function QuickDateButtons({ selectedDate, onSelect }: QuickDateButtonsProps) {
-  const t = localToday();
-  const options = [
-    { label: "Today",        iso: toISO(t) },
-    { label: "Tomorrow",     iso: toISO(addDays(t, 1)) },
-    { label: "This Weekend", iso: toISO(thisWeekend()) },
-    { label: "Next Week",    iso: toISO(addDays(t, 7)) },
-  ];
-
-  return (
-    <div className="grid grid-cols-2 gap-1.5 px-3 pb-2">
-      {options.map(({ label, iso }) => (
-        <button
-          key={label}
-          type="button"
-          onClick={() => onSelect(iso)}
-          className={cn(
-            "px-2.5 py-2 text-xs font-medium rounded-lg border transition-all text-left",
-            selectedDate === iso
-              ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.12)] text-[hsl(var(--primary))]"
-              : "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--muted-foreground)/0.5)] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]"
-          )}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TimeSelector — 30-minute-increment dropdown (12:00 AM → 11:30 PM)
-// ─────────────────────────────────────────────────────────────────────────────
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TimeSelector
@@ -386,8 +312,6 @@ function SchedulerFooter({ onClear, onOk }: SchedulerFooterProps) {
 // TaskDatePicker — main exported component
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Mode = "date" | "duration";
-
 export function TaskDatePicker({
   initialDate,
   initialTime,
@@ -395,30 +319,52 @@ export function TaskDatePicker({
   onConfirm,
   onClose,
   anchor,
+  ignoreCloseRef,
 }: TaskDatePickerProps) {
-  // Derive starting month from initialDate, or today
   const startDate = initialDate ? parseISO(initialDate) : localToday();
+  const panelRef = useRef<HTMLDivElement>(null);
 
-  const [mode, setMode] = useState<Mode>("date");
   const [calYear, setCalYear] = useState(startDate.getFullYear());
   const [calMonth, setCalMonth] = useState(startDate.getMonth());
   const [selectedDate, setSelectedDate] = useState<string | null>(initialDate ?? null);
   const [selectedTime, setSelectedTime] = useState<string | null>(initialTime ?? null);
-  // Duration-mode end values — not yet persisted to DB
-  const [endDate, setEndDate] = useState<string | null>(null);
-  const [endTime, setEndTime] = useState<string | null>(null);
   const [repeat, setRepeat] = useState<RepeatOption>(initialRepeat);
 
   const panelWidth = 320;
-  const panelHeight = 520;
+  const panelHeight = 420;
+  // `anchor` is the panel's top-left: left edges align with the trigger;
+  // top sits flush under the trigger's bottom edge. Only nudge if clipped.
   const anchoredStyle = anchor
     ? {
         left: Math.max(8, Math.min(anchor.x, window.innerWidth - panelWidth - 8)),
-        top: Math.max(8, Math.min(anchor.y, window.innerHeight - panelHeight - 8)),
+        top:
+          anchor.y + panelHeight > window.innerHeight - 8
+            ? Math.max(8, window.innerHeight - panelHeight - 8)
+            : anchor.y,
       }
     : undefined;
 
-  // ── Month navigation ──────────────────────────────────────────────────────
+  // Anchored mode: leave the trigger hoverable/clickable (no blocking scrim).
+  // Close on outside mousedown, but ignore the trigger so it can toggle-close.
+  useEffect(() => {
+    if (!anchor) return;
+
+    function onOutside(e: MouseEvent) {
+      const target = e.target as Node;
+      if (panelRef.current?.contains(target)) return;
+      if (ignoreCloseRef?.current?.contains(target)) return;
+      onClose();
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("mousedown", onOutside);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onOutside);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [anchor, ignoreCloseRef, onClose]);
 
   function prevMonth() {
     if (calMonth === 0) { setCalYear((y) => y - 1); setCalMonth(11); }
@@ -437,63 +383,39 @@ export function TaskDatePicker({
     setSelectedDate(toISO(t));
   }
 
-  // ── Date selection ────────────────────────────────────────────────────────
-
   function selectDate(iso: string) {
-    // Navigate the calendar to the chosen month
     const d = parseISO(iso);
     setCalYear(d.getFullYear());
     setCalMonth(d.getMonth());
     setSelectedDate(iso);
-    // In duration mode, reset end when start changes
-    if (mode === "duration") setEndDate(null);
   }
-
-  function handleCalendarSelect(iso: string) {
-    if (mode === "duration" && selectedDate && !endDate && iso >= selectedDate) {
-      // Second click sets the end date
-      setEndDate(iso);
-    } else {
-      selectDate(iso);
-    }
-  }
-
-  // ── Actions ───────────────────────────────────────────────────────────────
 
   function handleClear() {
-    onConfirm({
-      date: null, time: null,
-      endDate: null, endTime: null,
-      repeat: "never",
-    });
+    onConfirm({ date: null, time: null, repeat: "never" });
   }
 
   function handleOk() {
     onConfirm({
       date: selectedDate,
       time: selectedTime,
-      endDate: mode === "duration" ? endDate : null,
-      endTime: mode === "duration" ? endTime : null,
       repeat,
     });
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
   return (
     <>
-      {/* Scrim — sits above the form drawer (z-50) but below the picker (z-70) */}
-      <div
-        className={cn(
-          "fixed inset-0 z-[60]",
-          anchor ? "bg-transparent" : "bg-black/40 backdrop-blur-[1px]"
-        )}
-        onClick={onClose}
-        aria-hidden
-      />
+      {/* Centered (modal) mode keeps a blocking scrim. Anchored mode does not —
+          the trigger stays interactive so it can hover and toggle-close. */}
+      {!anchor && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-[1px]"
+          onClick={onClose}
+          aria-hidden
+        />
+      )}
 
-      {/* Picker panel — centered by default, or anchored near the click */}
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal
         aria-label="Date and time picker"
@@ -503,44 +425,7 @@ export function TaskDatePicker({
         )}
         style={anchoredStyle}
       >
-        {/* ── Mode toggle + close ─────────────────────────────────────────── */}
-        <div className="flex items-center gap-2 px-3 pt-3 pb-2">
-          <div className="flex flex-1 p-0.5 rounded-xl bg-[hsl(var(--muted))]">
-            {(["date", "duration"] as Mode[]).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => {
-                  setMode(m);
-                  if (m === "date") { setEndDate(null); setEndTime(null); }
-                }}
-                className={cn(
-                  "flex-1 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all",
-                  mode === m
-                    ? "bg-[hsl(var(--background))] text-[hsl(var(--foreground))] shadow-sm"
-                    : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
-                )}
-              >
-                {m === "date" ? "Date" : "Duration"}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close date picker"
-            className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors shrink-0"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* ── Scrollable body ─────────────────────────────────────────────── */}
-        <div className="overflow-y-auto">
-          {/* Quick date buttons */}
-          <QuickDateButtons selectedDate={selectedDate} onSelect={selectDate} />
-
-          {/* Calendar */}
+        <div className="overflow-y-auto pt-2">
           <CalendarHeader
             year={calYear}
             month={calMonth}
@@ -552,51 +437,9 @@ export function TaskDatePicker({
             year={calYear}
             month={calMonth}
             selectedDate={selectedDate}
-            endDate={mode === "duration" ? endDate : null}
-            onSelect={handleCalendarSelect}
+            onSelect={selectDate}
           />
 
-          {/* Duration end section */}
-          {mode === "duration" && (
-            <div className="mx-3 mb-1 rounded-xl bg-[hsl(var(--muted)/0.5)] border border-[hsl(var(--border))] overflow-hidden">
-              <div className="px-3 pt-2.5 pb-1">
-                <p className="text-[10px] font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-2">
-                  End date
-                </p>
-                <input
-                  type="date"
-                  value={endDate ?? ""}
-                  min={selectedDate ?? undefined}
-                  onChange={(e) => setEndDate(e.target.value || null)}
-                  className="w-full text-sm px-2.5 py-1.5 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none transition"
-                />
-                {!selectedDate && (
-                  <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-1.5">
-                    Select a start date first.
-                  </p>
-                )}
-                {selectedDate && !endDate && (
-                  <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-1.5">
-                    Click a date on the calendar, or enter it above.
-                  </p>
-                )}
-              </div>
-              <div className="border-t border-[hsl(var(--border))]">
-                <TimeSelector
-                  label="End time"
-                  value={endTime}
-                  onChange={endDate ? setEndTime : () => {}}
-                />
-                {!endDate && (
-                  <p className="px-3 pb-2 text-[11px] text-[hsl(var(--muted-foreground))]">
-                    Set an end date to enable end time.
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ── Scheduling rows ──────────────────────────────────────────── */}
           <div className="border-t border-[hsl(var(--border))] mt-1">
             <TimeSelector value={selectedTime} onChange={setSelectedTime} />
             <div className="border-t border-[hsl(var(--border))]">
@@ -605,7 +448,6 @@ export function TaskDatePicker({
           </div>
         </div>
 
-        {/* ── Footer ──────────────────────────────────────────────────────── */}
         <SchedulerFooter onClear={handleClear} onOk={handleOk} />
       </div>
     </>

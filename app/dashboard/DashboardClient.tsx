@@ -16,7 +16,6 @@ import {
   deleteTask,
   deleteTag,
   setTaskComplete,
-  setSubtaskComplete,
 } from "@/lib/tasks";
 import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
 import { createEvent, updateEvent, deleteEvent } from "@/lib/calendar";
@@ -201,32 +200,6 @@ export function DashboardClient({
       }
     },
     [refetchAll, removeTask]
-  );
-
-  const handleToggleSubtask = useCallback(
-    async (taskId: string, subtaskId: string, completed: boolean) => {
-      setData((d) => {
-        function patch(list: TaskWithDetails[]) {
-          return list.map((t) =>
-            t.id === taskId
-              ? { ...t, subtasks: t.subtasks.map((s) => (s.id === subtaskId ? { ...s, is_completed: completed } : s)) }
-              : t
-          );
-        }
-        return {
-          ...d,
-          todayTasks: { ...d.todayTasks, data: patch(d.todayTasks.data) },
-        };
-      });
-      try {
-        const supabase = createClient();
-        await setSubtaskComplete(supabase, subtaskId, completed);
-      } catch (err) {
-        setMutationError(err instanceof Error ? err.message : "Failed to update subtask.");
-        refetchAll();
-      }
-    },
-    [refetchAll]
   );
 
   const handleDeleteTask = useCallback(
@@ -414,7 +387,6 @@ export function DashboardClient({
                       onEdit={openEditTask}
                       onDelete={handleDeleteTask}
                       onToggleComplete={handleToggleComplete}
-                      onToggleSubtask={handleToggleSubtask}
                     />
                   ))}
                 </div>

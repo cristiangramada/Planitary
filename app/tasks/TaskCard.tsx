@@ -1,28 +1,19 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import {
-  Pencil,
-  Trash2,
-  ChevronDown,
-  ChevronRight,
-  Calendar,
-  Clock,
-} from "lucide-react";
+import { Pencil, Trash2, Calendar, Clock } from "lucide-react";
 import { cn } from "@/utils/cn";
-import { PriorityBadge } from "@/components/ui/PriorityBadge";
 import { TagBadge } from "@/components/ui/TagBadge";
 import { AgendaItemContextMenu, type MoveToListOption } from "@/app/calendar/AgendaItemContextMenu";
 import { relativeDate, formatDate, parseDateOnly } from "@/utils/date";
 import { formatTimeValue } from "@/components/ui/TimeDropdown";
-import type { TaskWithDetails } from "@/types";
+import type { Priority, TaskWithDetails } from "@/types";
 
 interface TaskCardProps {
   task: TaskWithDetails;
   onEdit: (task: TaskWithDetails) => void;
   onDelete: (taskId: string) => void;
   onToggleComplete: (taskId: string, completed: boolean) => void;
-  onToggleSubtask: (taskId: string, subtaskId: string, completed: boolean) => void;
   /** Left-click opens the right-side detail panel. */
   onSelect?: (task: TaskWithDetails) => void;
   selected?: boolean;
@@ -31,18 +22,30 @@ interface TaskCardProps {
   onMoveToList?: (taskId: string, listId: string | null) => void;
 }
 
+const CHECK_IDLE: Record<Priority, string> = {
+  high: "border-red-500 hover:border-red-600",
+  medium: "border-amber-500 hover:border-amber-600",
+  low: "border-green-600 dark:border-green-500 hover:border-green-700 dark:hover:border-green-400",
+  none: "border-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--foreground))]",
+};
+
+const CHECK_DONE: Record<Priority, string> = {
+  high: "border-red-500 bg-red-500",
+  medium: "border-amber-500 bg-amber-500",
+  low: "border-green-600 dark:border-green-500 bg-green-600 dark:bg-green-500",
+  none: "border-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted-foreground))]",
+};
+
 export function TaskCard({
   task,
   onEdit,
   onDelete,
   onToggleComplete,
-  onToggleSubtask,
   onSelect,
   selected = false,
   lists,
   onMoveToList,
 }: TaskCardProps) {
-  const [subtasksExpanded, setSubtasksExpanded] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const confirmRef = useRef<HTMLDivElement>(null);
@@ -67,8 +70,6 @@ export function TaskCard({
   }, [confirmingDelete]);
 
   const isCompleted = task.status === "completed";
-  const completedSubtasks = task.subtasks.filter((s) => s.is_completed).length;
-  const hasSubtasks = task.subtasks.length > 0;
   const hasDue = !!task.due_date;
   const dueDateStr = hasDue ? formatDate(task.due_date!) : null;
   const isOverdue =
@@ -96,7 +97,7 @@ export function TaskCard({
     >
       {/* Main row */}
       <div className="flex items-start gap-3 p-4">
-        {/* Checkbox */}
+        {/* Checkbox — ring/fill follow priority */}
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -108,14 +109,12 @@ export function TaskCard({
           <span
             className={cn(
               "flex items-center justify-center w-5 h-5 rounded-full border-2 transition-colors",
-              isCompleted
-                ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary))]"
-                : "border-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary))]"
+              isCompleted ? CHECK_DONE[task.priority] : CHECK_IDLE[task.priority]
             )}
           >
             {isCompleted && (
               <svg
-                className="w-2.5 h-2.5 text-[hsl(var(--primary-foreground))]"
+                className="w-2.5 h-2.5 text-white"
                 viewBox="0 0 12 10"
                 fill="none"
                 stroke="currentColor"
@@ -146,9 +145,7 @@ export function TaskCard({
             onSelect ? "cursor-pointer" : "cursor-default"
           )}
         >
-          {/* Title row */}
           <div className="flex items-center gap-2 flex-wrap">
-            {!isCompleted && <PriorityBadge priority={task.priority} />}
             <span
               className={cn(
                 "text-sm font-medium leading-snug",
@@ -159,30 +156,19 @@ export function TaskCard({
             </span>
           </div>
 
-          {/* Notes preview */}
-          {task.notes && !isCompleted && (
-            <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1 line-clamp-1">
-              {task.notes}
-            </p>
-          )}
-
-          {/* Completed timestamp */}
           {isCompleted && task.completed_at && (
             <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
               Completed {relativeDate(task.completed_at)}
             </p>
           )}
 
-          {/* Meta row */}
           <div className="flex items-center gap-3 mt-2 flex-wrap">
-            {/* List label */}
             {task.list && (
               <span className="text-xs text-[hsl(var(--muted-foreground))]">
                 {task.list.name}
               </span>
             )}
 
-            {/* Due date */}
             {hasDue && (
               <span
                 className={cn(
@@ -203,25 +189,6 @@ export function TaskCard({
               </span>
             )}
 
-            {/* Subtask count */}
-            {hasSubtasks && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSubtasksExpanded((v) => !v);
-                }}
-                className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
-              >
-                {subtasksExpanded ? (
-                  <ChevronDown className="w-3 h-3" />
-                ) : (
-                  <ChevronRight className="w-3 h-3" />
-                )}
-                {completedSubtasks}/{task.subtasks.length} subtasks
-              </button>
-            )}
-
-            {/* Tags */}
             {task.tags.length > 0 && (
               <div className="flex items-center gap-1 flex-wrap">
                 {task.tags.map((tag) => (
@@ -266,7 +233,6 @@ export function TaskCard({
             <Trash2 className="w-3.5 h-3.5" />
           </button>
 
-          {/* Delete confirmation popover */}
           {confirmingDelete && (
             <div className="absolute right-0 top-full mt-2 z-20 w-56 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-xl p-3">
               <p className="text-sm font-medium mb-3">
@@ -295,54 +261,6 @@ export function TaskCard({
           )}
         </div>
       </div>
-
-      {/* Subtask list (expanded) */}
-      {hasSubtasks && subtasksExpanded && (
-        <div className="border-t border-[hsl(var(--border))] px-4 py-2 space-y-1">
-          {task.subtasks.map((subtask) => (
-            <button
-              key={subtask.id}
-              onClick={() =>
-                onToggleSubtask(task.id, subtask.id, !subtask.is_completed)
-              }
-              className="flex items-center gap-2.5 w-full text-left py-1.5 group/sub cursor-pointer select-none"
-            >
-              <span
-                className={cn(
-                  "flex items-center justify-center w-4 h-4 rounded border transition-colors shrink-0",
-                  subtask.is_completed
-                    ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary))]"
-                    : "border-[hsl(var(--muted-foreground))] group-hover/sub:border-[hsl(var(--primary))]"
-                )}
-              >
-                {subtask.is_completed && (
-                  <svg
-                    className="w-2 h-2 text-[hsl(var(--primary-foreground))]"
-                    viewBox="0 0 10 8"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="1 4 3.5 6.5 9 1" />
-                  </svg>
-                )}
-              </span>
-              <span
-                className={cn(
-                  "text-xs leading-snug",
-                  subtask.is_completed
-                    ? "line-through text-[hsl(var(--muted-foreground))]"
-                    : "text-[hsl(var(--foreground))]"
-                )}
-              >
-                {subtask.title}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
 
       {contextMenu && (
         <AgendaItemContextMenu
