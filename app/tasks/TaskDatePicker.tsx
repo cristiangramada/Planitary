@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Clock, Bell, Repeat, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, Repeat, X } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { PickerSelect } from "@/components/ui/PickerSelect";
 import { TIME_SLOTS, snapToSlot } from "@/components/ui/TimeDropdown";
@@ -9,15 +9,6 @@ import { TIME_SLOTS, snapToSlot } from "@/components/ui/TimeDropdown";
 // ─────────────────────────────────────────────────────────────────────────────
 // Public types (exported so TaskForm can use them)
 // ─────────────────────────────────────────────────────────────────────────────
-
-export type ReminderOption =
-  | "none"
-  | "at_due"
-  | "5min"
-  | "15min"
-  | "30min"
-  | "1hr"
-  | "1day";
 
 export type RepeatOption =
   | "never"
@@ -36,8 +27,6 @@ export interface DatePickerValue {
   endDate: string | null;
   /** Duration mode end time — not yet persisted, reserved for future use */
   endTime: string | null;
-  /** Reminder preference — stored in UI state only until DB column is added */
-  reminder: ReminderOption;
   /** Repeat preference — stored in UI state only until DB column is added */
   repeat: RepeatOption;
 }
@@ -45,7 +34,6 @@ export interface DatePickerValue {
 export interface TaskDatePickerProps {
   initialDate?: string | null;
   initialTime?: string | null;
-  initialReminder?: ReminderOption;
   initialRepeat?: RepeatOption;
   onConfirm: (value: DatePickerValue) => void;
   onClose: () => void;
@@ -62,16 +50,6 @@ const MONTH_NAMES = [
   "May", "June", "July", "August",
   "September", "October", "November", "December",
 ] as const;
-
-const REMINDER_OPTIONS: { value: ReminderOption; label: string }[] = [
-  { value: "none",   label: "None" },
-  { value: "at_due", label: "At due time" },
-  { value: "5min",   label: "5 minutes before" },
-  { value: "15min",  label: "15 minutes before" },
-  { value: "30min",  label: "30 minutes before" },
-  { value: "1hr",    label: "1 hour before" },
-  { value: "1day",   label: "1 day before" },
-];
 
 const REPEAT_OPTIONS: { value: RepeatOption; label: string }[] = [
   { value: "never",   label: "Never" },
@@ -347,32 +325,6 @@ function TimeSelector({ value, onChange, label = "Time" }: TimeSelectorProps) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ReminderSelector
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface ReminderSelectorProps {
-  value: ReminderOption;
-  onChange: (v: ReminderOption) => void;
-}
-
-function ReminderSelector({ value, onChange }: ReminderSelectorProps) {
-  return (
-    <div className="flex items-center justify-between px-3 py-2.5">
-      <span className="flex items-center gap-2 text-sm font-medium">
-        <Bell className="w-4 h-4 text-[hsl(var(--muted-foreground))] shrink-0" />
-        Reminder
-      </span>
-      <PickerSelect
-        value={value}
-        options={REMINDER_OPTIONS}
-        onChange={onChange}
-        minWidth={160}
-      />
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // RepeatSelector
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -437,7 +389,6 @@ type Mode = "date" | "duration";
 export function TaskDatePicker({
   initialDate,
   initialTime,
-  initialReminder = "none",
   initialRepeat = "never",
   onConfirm,
   onClose,
@@ -453,7 +404,6 @@ export function TaskDatePicker({
   // Duration-mode end values — not yet persisted to DB
   const [endDate, setEndDate] = useState<string | null>(null);
   const [endTime, setEndTime] = useState<string | null>(null);
-  const [reminder, setReminder] = useState<ReminderOption>(initialReminder);
   const [repeat, setRepeat] = useState<RepeatOption>(initialRepeat);
 
   // ── Month navigation ──────────────────────────────────────────────────────
@@ -502,7 +452,7 @@ export function TaskDatePicker({
     onConfirm({
       date: null, time: null,
       endDate: null, endTime: null,
-      reminder: "none", repeat: "never",
+      repeat: "never",
     });
   }
 
@@ -512,7 +462,6 @@ export function TaskDatePicker({
       time: selectedTime,
       endDate: mode === "duration" ? endDate : null,
       endTime: mode === "duration" ? endTime : null,
-      reminder,
       repeat,
     });
   }
@@ -631,9 +580,6 @@ export function TaskDatePicker({
           {/* ── Scheduling rows ──────────────────────────────────────────── */}
           <div className="border-t border-[hsl(var(--border))] mt-1">
             <TimeSelector value={selectedTime} onChange={setSelectedTime} />
-            <div className="border-t border-[hsl(var(--border))]">
-              <ReminderSelector value={reminder} onChange={setReminder} />
-            </div>
             <div className="border-t border-[hsl(var(--border))]">
               <RepeatSelector value={repeat} onChange={setRepeat} />
             </div>

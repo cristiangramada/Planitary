@@ -12,7 +12,6 @@ import { PLANET_TAG_COLORS } from "@/lib/tasks";
 import {
   TaskDatePicker,
   type DatePickerValue,
-  type ReminderOption,
   type RepeatOption,
 } from "./TaskDatePicker";
 
