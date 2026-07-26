@@ -296,6 +296,47 @@ export async function updateTask(
   return refetchTask(supabase, taskId);
 }
 
+/** Updates only title and notes — leaves priority, schedule, tags, and subtasks alone. */
+export async function updateTaskTitleNotes(
+  supabase: SupabaseClient,
+  taskId: string,
+  title: string,
+  notes: string | null
+): Promise<void> {
+  const { error } = await supabase
+    .from("tasks")
+    .update({ title, notes })
+    .eq("id", taskId);
+  if (error) throw error;
+}
+
+/** Replaces all subtasks for a task (delete + insert), preserving completion flags. */
+export async function replaceTaskSubtasks(
+  supabase: SupabaseClient,
+  taskId: string,
+  userId: string,
+  subtasks: SubtaskFormItem[]
+): Promise<Subtask[]> {
+  const { error: delErr } = await supabase.from("subtasks").delete().eq("task_id", taskId);
+  if (delErr) throw delErr;
+
+  if (subtasks.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("subtasks")
+    .insert(
+      subtasks.map((s) => ({
+        task_id: taskId,
+        user_id: userId,
+        title: s.title,
+        is_completed: s.is_completed,
+      }))
+    )
+    .select("*");
+  if (error) throw error;
+  return (data as Subtask[]) ?? [];
+}
+
 /** Deletes a task (cascades subtasks and task_tags via DB constraints). */
 export async function deleteTask(
   supabase: SupabaseClient,

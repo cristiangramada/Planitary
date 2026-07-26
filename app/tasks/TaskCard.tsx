@@ -23,6 +23,9 @@ interface TaskCardProps {
   onDelete: (taskId: string) => void;
   onToggleComplete: (taskId: string, completed: boolean) => void;
   onToggleSubtask: (taskId: string, subtaskId: string, completed: boolean) => void;
+  /** Left-click opens the right-side detail panel. */
+  onSelect?: (task: TaskWithDetails) => void;
+  selected?: boolean;
   /** Move-to-list options (Inbox + user's lists) for the context menu. Omit to hide the option. */
   lists?: MoveToListOption[];
   onMoveToList?: (taskId: string, listId: string | null) => void;
@@ -34,6 +37,8 @@ export function TaskCard({
   onDelete,
   onToggleComplete,
   onToggleSubtask,
+  onSelect,
+  selected = false,
   lists,
   onMoveToList,
 }: TaskCardProps) {
@@ -85,14 +90,18 @@ export function TaskCard({
         "group rounded-xl border bg-[hsl(var(--card))] transition-colors",
         isCompleted
           ? "border-[hsl(var(--border))] opacity-70"
-          : "border-[hsl(var(--border))] hover:border-[hsl(var(--primary)/0.4)]"
+          : "border-[hsl(var(--border))] hover:border-[hsl(var(--primary)/0.4)]",
+        selected && "border-[hsl(var(--primary)/0.55)] ring-1 ring-[hsl(var(--primary)/0.25)]"
       )}
     >
       {/* Main row */}
       <div className="flex items-start gap-3 p-4">
         {/* Checkbox */}
         <button
-          onClick={() => onToggleComplete(task.id, !isCompleted)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleComplete(task.id, !isCompleted);
+          }}
           aria-label={isCompleted ? "Reopen task" : "Complete task"}
           className="mt-0.5 shrink-0 cursor-pointer"
         >
@@ -120,8 +129,23 @@ export function TaskCard({
           </span>
         </button>
 
-        {/* Content */}
-        <div className="flex-1 min-w-0 select-none cursor-default">
+        {/* Content — left-click opens the detail panel */}
+        <div
+          role={onSelect ? "button" : undefined}
+          tabIndex={onSelect ? 0 : undefined}
+          onClick={() => onSelect?.(task)}
+          onKeyDown={(e) => {
+            if (!onSelect) return;
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onSelect(task);
+            }
+          }}
+          className={cn(
+            "flex-1 min-w-0 select-none",
+            onSelect ? "cursor-pointer" : "cursor-default"
+          )}
+        >
           {/* Title row */}
           <div className="flex items-center gap-2 flex-wrap">
             {!isCompleted && <PriorityBadge priority={task.priority} />}
@@ -182,7 +206,10 @@ export function TaskCard({
             {/* Subtask count */}
             {hasSubtasks && (
               <button
-                onClick={() => setSubtasksExpanded((v) => !v)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSubtasksExpanded((v) => !v);
+                }}
                 className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
               >
                 {subtasksExpanded ? (
@@ -214,14 +241,20 @@ export function TaskCard({
           )}
         >
           <button
-            onClick={() => onEdit(task)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(task);
+            }}
             title="Edit task"
             className="p-1.5 rounded-md text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
           >
             <Pencil className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={() => setConfirmingDelete(true)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setConfirmingDelete(true);
+            }}
             title="Delete task"
             className={cn(
               "p-1.5 rounded-md transition-colors cursor-pointer",

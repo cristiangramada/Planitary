@@ -628,8 +628,7 @@ function TaskFormBody({
     if (!editTask?.due_time) return null;
     return editTask.due_time.slice(0, 5);
   });
-  // Reminder and repeat are UI-only for now (not yet persisted to DB)
-  const [reminder, setReminder] = useState<ReminderOption>("none");
+  // Repeat is UI-only for now (not yet persisted to DB)
   const [repeat, setRepeat] = useState<RepeatOption>("never");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [subtasks, setSubtasks] = useState<SubtaskFormItem[]>(
@@ -644,7 +643,6 @@ function TaskFormBody({
   function handlePickerConfirm(value: DatePickerValue) {
     setDueDate(value.date);
     setDueTime(value.time);
-    setReminder(value.reminder);
     setRepeat(value.repeat);
     setPickerOpen(false);
   }
@@ -822,7 +820,6 @@ function TaskFormBody({
                   onClick={() => {
                     setDueDate(null);
                     setDueTime(null);
-                    setReminder("none");
                     setRepeat("never");
                   }}
                   className="p-0.5 rounded-full shrink-0 hover:bg-[hsl(var(--primary)/0.2)] transition-colors cursor-pointer"
@@ -838,7 +835,6 @@ function TaskFormBody({
             <TaskDatePicker
               initialDate={dueDate}
               initialTime={dueTime}
-              initialReminder={reminder}
               initialRepeat={repeat}
               onConfirm={handlePickerConfirm}
               onClose={() => setPickerOpen(false)}

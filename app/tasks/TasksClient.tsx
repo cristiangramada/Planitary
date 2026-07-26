@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { TagBadge } from "@/components/ui/TagBadge";
 import { TaskCard } from "./TaskCard";
 import { TaskForm } from "./TaskForm";
+import { TaskDetailPanel } from "./TaskDetailPanel";
 import { ListsPanel } from "./ListsPanel";
 import { cn } from "@/utils/cn";
 import { createClient } from "@/lib/supabase/client";
@@ -19,9 +20,11 @@ import {
   deleteTag,
   setTaskComplete,
   setSubtaskComplete,
+  updateTaskTitleNotes,
+  replaceTaskSubtasks,
   TASK_PRIORITY_ORDER,
 } from "@/lib/tasks";
-import type { TaskWithDetails, Tag, TaskList } from "@/types";
+import type { TaskWithDetails, Tag, TaskList, Subtask } from "@/types";
 import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
 import {
   createTaskList,
@@ -112,6 +115,7 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
   const confirmRef = useRef<HTMLDivElement>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskWithDetails | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mobileListsOpen, setMobileListsOpen] = useState(false);
@@ -132,6 +136,7 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
       const qs = buildTasksScopeParams(next).toString();
       router.push(qs ? `/tasks?${qs}` : "/tasks", { scroll: false });
       setMobileListsOpen(false);
+      setSelectedTaskId(null);
     },
     [router]
   );
@@ -174,11 +179,10 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
   useEffect(() => {
     const taskId = searchParams.get("task");
     if (!taskId) return;
-    /* eslint-disable react-hooks/set-state-in-effect -- open the deep-linked task's editor once, from a URL navigation */
+    /* eslint-disable react-hooks/set-state-in-effect -- open the deep-linked task's detail panel once, from a URL navigation */
     const task = tasks.find((t) => t.id === taskId);
     if (task) {
-      setEditingTask(task);
-      setFormOpen(true);
+      setSelectedTaskId(task.id);
     }
     /* eslint-enable react-hooks/set-state-in-effect */
     router.replace("/tasks", { scroll: false });
@@ -219,6 +223,10 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
   const selectedList = scope.type === "list" ? lists.find((l) => l.id === scope.id) ?? null : null;
   const scopeTitle =
     scope.type === "inbox" ? "Inbox" : scope.type === "list" ? (selectedList?.name ?? "List") : "My Tasks";
+
+  const selectedTask = selectedTaskId
+    ? tasks.find((t) => t.id === selectedTaskId) ?? null
+    : null;
 
   const selectedTag = selectedTagId
     ? allTags.find((t) => t.id === selectedTagId) ?? null
@@ -293,6 +301,7 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
       const supabase = createClient();
       await deleteTask(supabase, taskId);
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      setSelectedTaskId((prev) => (prev === taskId ? null : prev));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete task.");
     }
@@ -453,6 +462,34 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
     setEditingTask(task);
     setFormOpen(true);
   }
+
+  function openDetail(task: TaskWithDetails) {
+    setSelectedTaskId(task.id);
+  }
+
+  const handleSaveTitleNotes = useCallback(
+    async (taskId: string, title: string, notes: string | null) => {
+      const supabase = createClient();
+      await updateTaskTitleNotes(supabase, taskId, title, notes);
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, title, notes } : t))
+      );
+    },
+    []
+  );
+
+  const handleReplaceSubtasks = useCallback(
+    async (taskId: string, subtasks: SubtaskFormItem[]): Promise<Subtask[]> => {
+      const supabase = createClient();
+      const uid = await getUserId();
+      const saved = await replaceTaskSubtasks(supabase, taskId, uid, subtasks);
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, subtasks: saved } : t))
+      );
+      return saved;
+    },
+    [getUserId]
+  );
 
   // Creating a task from within a selected List auto-assigns it to that List;
   // Inbox and smart views default to Inbox (null), matching current behavior.
@@ -623,7 +660,7 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
           </>
         )}
 
-      <div className="flex-1 min-w-0 flex flex-col max-w-3xl">
+      <div className="w-full max-w-3xl shrink-0 min-w-0 flex flex-col">
         {/* Page header */}
         <div className="flex items-center justify-between mb-5 shrink-0">
           <div>
@@ -942,6 +979,8 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
                 onDelete={handleDelete}
                 onToggleComplete={handleToggleComplete}
                 onToggleSubtask={handleToggleSubtask}
+                onSelect={openDetail}
+                selected={selectedTaskId === task.id}
                 lists={moveToListOptions}
                 onMoveToList={handleMoveTask}
               />
@@ -966,6 +1005,8 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
                   onDelete={handleDelete}
                   onToggleComplete={handleToggleComplete}
                   onToggleSubtask={handleToggleSubtask}
+                  onSelect={openDetail}
+                  selected={selectedTaskId === task.id}
                   lists={moveToListOptions}
                   onMoveToList={handleMoveTask}
                 />
@@ -976,6 +1017,34 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
 
         </div>{/* end scrollable list */}
       </div>{/* end main content column */}
+
+      {/* Desktop right detail column — fills remaining width to the right edge */}
+      <aside className="hidden md:flex flex-1 min-w-0 border-l border-[hsl(var(--border))] -my-4 -mr-6 self-stretch min-h-0">
+        {selectedTask ? (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <TaskDetailPanel
+              key={selectedTask.id}
+              task={selectedTask}
+              onSaveTitleNotes={handleSaveTitleNotes}
+              onReplaceSubtasks={handleReplaceSubtasks}
+              onToggleSubtask={handleToggleSubtask}
+            />
+          </div>
+        ) : null}
+      </aside>
+
+      {/* Mobile detail panel */}
+      {selectedTask && (
+        <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-[hsl(var(--background))] border-l border-[hsl(var(--border))] shadow-2xl md:hidden">
+          <TaskDetailPanel
+            key={selectedTask.id}
+            task={selectedTask}
+            onSaveTitleNotes={handleSaveTitleNotes}
+            onReplaceSubtasks={handleReplaceSubtasks}
+            onToggleSubtask={handleToggleSubtask}
+          />
+        </div>
+      )}
       </div>{/* end Lists panel + main content row */}
 
       {/* Task form drawer */}
