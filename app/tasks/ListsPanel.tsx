@@ -359,24 +359,40 @@ export function ListsPanel({
 
       <div className="mb-5">
         <nav className="space-y-0.5">
-          <button
-            type="button"
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() => onSelectScope({ type: "inbox" })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelectScope({ type: "inbox" });
+              }
+            }}
             className={cn(
-              "flex w-full items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-left transition-colors cursor-pointer text-[hsl(var(--foreground))]",
+              "flex items-center rounded-lg transition-colors cursor-default text-[hsl(var(--foreground))]",
               activeScopeKey === "inbox"
-                ? "bg-[hsl(var(--muted))] font-medium"
+                ? "bg-[hsl(var(--muted))]"
                 : "hover:bg-[hsl(var(--muted)/0.6)]"
             )}
           >
-            <InboxIcon className="w-4 h-4 shrink-0" />
-            Inbox
-            {(counts[INBOX_COUNT_KEY] ?? 0) > 0 && (
-              <span className="ml-auto text-xs text-[hsl(var(--muted-foreground))]">
-                {counts[INBOX_COUNT_KEY]}
-              </span>
-            )}
-          </button>
+            <span
+              aria-hidden
+              className="flex items-center justify-center pl-2 py-2.5 shrink-0 pointer-events-none"
+            >
+              <InboxIcon className="w-4 h-4" strokeWidth={2.25} />
+            </span>
+            <span className="flex flex-1 min-w-0 items-center pl-2 pr-2 py-2.5 text-sm text-left">
+              <span className="truncate leading-snug">Inbox</span>
+            </span>
+            <div className="relative w-6 h-6 shrink-0 mr-1 flex items-center justify-center">
+              {(counts[INBOX_COUNT_KEY] ?? 0) > 0 && (
+                <span className="text-xs leading-none text-[hsl(var(--muted-foreground))] pointer-events-none">
+                  {counts[INBOX_COUNT_KEY]}
+                </span>
+              )}
+            </div>
+          </div>
         </nav>
       </div>
 
@@ -471,17 +487,17 @@ export function ListsPanel({
                     setMenu({ x: e.clientX, y: e.clientY, list });
                   }}
                   className={cn(
-                    "group flex items-center rounded-lg transition-colors",
+                    "group flex items-center rounded-lg transition-colors text-[hsl(var(--foreground))]",
                     draggingId ? "cursor-move" : "cursor-default",
                     isActive
-                      ? "bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]"
-                      : "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted)/0.6)] hover:text-[hsl(var(--foreground))]",
+                      ? "bg-[hsl(var(--muted))]"
+                      : "hover:bg-[hsl(var(--muted)/0.6)]",
                     isDragging && "opacity-40"
                   )}
                 >
                   <span
                     aria-hidden
-                    className="flex items-center justify-center pl-2 py-2.5 text-[hsl(var(--muted-foreground))] shrink-0 pointer-events-none"
+                    className="flex items-center justify-center pl-2 py-2.5 shrink-0 pointer-events-none"
                   >
                     <Menu className="w-[1.125rem] h-3.5 scale-x-125" strokeWidth={2.25} />
                   </span>
@@ -515,7 +531,7 @@ export function ListsPanel({
                         setMenu({ x: rect.right, y: rect.bottom, list });
                       }}
                       className={cn(
-                        "absolute inset-0 flex items-center justify-center p-1 rounded-md text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-opacity cursor-pointer",
+                        "absolute inset-0 flex items-center justify-center p-1 rounded-md hover:bg-[hsl(var(--muted))] transition-opacity cursor-pointer",
                         menu?.list.id === list.id
                           ? "opacity-100"
                           : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
