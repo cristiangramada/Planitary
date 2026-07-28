@@ -37,30 +37,6 @@ function fitMenuPos(
   return { left, top };
 }
 
-const DELETE_CONFIRM_WIDTH = 200;
-
-function fitDeleteConfirmPos(
-  menuRect: DOMRect,
-  btnRect: DOMRect,
-  height: number
-): { top: number; left: number } {
-  const pad = 8;
-  const gap = 4;
-  let left = menuRect.right + gap;
-  if (left + DELETE_CONFIRM_WIDTH > window.innerWidth - pad) {
-    left = Math.max(pad, menuRect.left - DELETE_CONFIRM_WIDTH - gap);
-  }
-  // Line up with the Delete Task row; flip up if it would go off-screen.
-  let top = btnRect.top;
-  if (top + height > window.innerHeight - pad) {
-    const above = btnRect.bottom - height;
-    top = above >= pad ? above : Math.max(pad, window.innerHeight - height - pad);
-  }
-  top = Math.max(pad, Math.min(top, window.innerHeight - height - pad));
-  left = Math.max(pad, Math.min(left, window.innerWidth - DELETE_CONFIRM_WIDTH - pad));
-  return { top, left };
-}
-
 interface TaskContextMenuProps {
   x: number;
   y: number;
@@ -98,15 +74,9 @@ export function TaskContextMenu({
 }: TaskContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const tagsPanelRef = useRef<HTMLDivElement>(null);
-  const deleteConfirmRef = useRef<HTMLDivElement>(null);
   const tagsBtnRef = useRef<HTMLButtonElement>(null);
   const dueBtnRef = useRef<HTMLButtonElement>(null);
-  const deleteBtnRef = useRef<HTMLButtonElement>(null);
 
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [deleteConfirmPos, setDeleteConfirmPos] = useState<{ top: number; left: number } | null>(
-    null
-  );
   const [movingOpen, setMovingOpen] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(false);
   const [dueOpen, setDueOpen] = useState(false);
@@ -130,66 +100,25 @@ export function TaskContextMenu({
   useLayoutEffect(() => {
     const h = menuRef.current?.offsetHeight ?? 280;
     setPos(fitMenuPos(x, y, align, h, anchorTop));
-  }, [x, y, align, anchorTop, movingOpen, confirmingDelete]);
-
-  function closeDeleteConfirm() {
-    setConfirmingDelete(false);
-    setDeleteConfirmPos(null);
-  }
-
-  function openDeleteConfirm() {
-    if (confirmingDelete) {
-      closeDeleteConfirm();
-      return;
-    }
-    setTagsOpen(false);
-    setTagsPos(null);
-    setDueOpen(false);
-    setDueAnchor(null);
-    const btn = deleteBtnRef.current;
-    const menu = menuRef.current;
-    if (!btn || !menu) return;
-    const menuRect = menu.getBoundingClientRect();
-    const btnRect = btn.getBoundingClientRect();
-    setDeleteConfirmPos(
-      fitDeleteConfirmPos(menuRect, btnRect, 110)
-    );
-    setConfirmingDelete(true);
-  }
-
-  useLayoutEffect(() => {
-    if (!confirmingDelete || !deleteConfirmRef.current || !deleteBtnRef.current || !menuRef.current) {
-      return;
-    }
-    const h = deleteConfirmRef.current.offsetHeight || 110;
-    setDeleteConfirmPos(
-      fitDeleteConfirmPos(
-        menuRef.current.getBoundingClientRect(),
-        deleteBtnRef.current.getBoundingClientRect(),
-        h
-      )
-    );
-  }, [confirmingDelete]);
+  }, [x, y, align, anchorTop, movingOpen]);
 
   useEffect(() => {
     function handleOutside(e: MouseEvent) {
       const target = e.target as Node;
       if (menuRef.current?.contains(target)) return;
       if (tagsPanelRef.current?.contains(target)) return;
-      if (deleteConfirmRef.current?.contains(target)) return;
       // Date picker portals its own panel; ignore clicks inside its dialog.
       const dueDialog = document.querySelector('[aria-label="Date and time picker"]');
       if (dueDialog?.contains(target)) return;
       // Time/repeat dropdowns portal outside the date picker panel.
       if ((e.target as Element | null)?.closest?.("[data-picker-select-list]")) return;
+      // Tag picker color/create dropdown portals outside the tags panel.
+      if ((e.target as Element | null)?.closest?.("[data-tag-picker-dropdown]")) return;
+      if ((e.target as Element | null)?.closest?.("[data-tag-picker-confirm]")) return;
       onClose();
     }
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        if (confirmingDelete) {
-          closeDeleteConfirm();
-          return;
-        }
         if (dueOpen) {
           setDueOpen(false);
           setDueAnchor(null);
@@ -209,7 +138,7 @@ export function TaskContextMenu({
       document.removeEventListener("mousedown", handleOutside);
       window.removeEventListener("keydown", handleKey);
     };
-  }, [onClose, dueOpen, tagsOpen, confirmingDelete]);
+  }, [onClose, dueOpen, tagsOpen]);
 
   async function selectPriority(priority: Priority) {
     if (priority === currentPriority) return;
@@ -228,7 +157,6 @@ export function TaskContextMenu({
       setTagsPos(null);
       return;
     }
-    closeDeleteConfirm();
     setDueOpen(false);
     setDueAnchor(null);
     const btn = tagsBtnRef.current;
@@ -251,7 +179,6 @@ export function TaskContextMenu({
       setDueAnchor(null);
       return;
     }
-    closeDeleteConfirm();
     setTagsOpen(false);
     setTagsPos(null);
     const btn = dueBtnRef.current;
@@ -406,15 +333,13 @@ export function TaskContextMenu({
           )}
 
           <button
-            ref={deleteBtnRef}
             type="button"
             role="menuitem"
-            aria-expanded={confirmingDelete}
-            onClick={openDeleteConfirm}
-            className={cn(
-              "flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-left whitespace-nowrap text-red-500 border-t border-[hsl(var(--border))] hover:bg-red-500/10 transition-colors cursor-pointer",
-              confirmingDelete && "bg-red-500/10"
-            )}
+            onClick={() => {
+              onDelete();
+              onClose();
+            }}
+            className="flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-left whitespace-nowrap text-red-500 border-t border-[hsl(var(--border))] hover:bg-red-500/10 transition-colors cursor-pointer"
           >
             <Trash2 className="w-4 h-4 shrink-0" />
             Delete Task
@@ -422,46 +347,6 @@ export function TaskContextMenu({
         </div>,
         document.body
       )}
-
-      {confirmingDelete &&
-        deleteConfirmPos &&
-        createPortal(
-          <div
-            ref={deleteConfirmRef}
-            className="fixed z-[60] w-[200px] rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-xl p-3"
-            style={{ top: deleteConfirmPos.top, left: deleteConfirmPos.left }}
-            role="dialog"
-            aria-labelledby="delete-task-confirm-title"
-            onContextMenu={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          >
-            <p id="delete-task-confirm-title" className="text-sm font-medium mb-3">
-              Delete this task?
-            </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={closeDeleteConfirm}
-                className="flex-1 py-1.5 text-xs font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  onDelete();
-                  onClose();
-                }}
-                className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors cursor-pointer"
-              >
-                Delete
-              </button>
-            </div>
-          </div>,
-          document.body
-        )}
 
       {tagsOpen &&
         tagsPos &&

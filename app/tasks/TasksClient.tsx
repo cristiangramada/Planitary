@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
-import { SortAsc, CheckSquare, Tag as TagIcon, PanelLeft } from "lucide-react";
+import { SortAsc, CheckSquare, Tag as TagIcon, PanelLeft, Undo2 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { TagBadge } from "@/components/ui/TagBadge";
@@ -118,6 +118,12 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mobileListsOpen, setMobileListsOpen] = useState(false);
+  const [deletedToast, setDeletedToast] = useState<{ taskId: string } | null>(null);
+  const pendingDeleteRef = useRef<{
+    task: TaskWithDetails;
+    index: number;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
 
   // ---------------------------------------------------------------------------
   // Lists / scope — the selected smart view or custom List, driven by the URL
@@ -267,15 +273,72 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
     [getUserId]
   );
 
-  const handleDelete = useCallback(async (taskId: string) => {
+  const commitPendingDelete = useCallback(async () => {
+    const pending = pendingDeleteRef.current;
+    if (!pending) return;
+    pendingDeleteRef.current = null;
+    clearTimeout(pending.timer);
+    setDeletedToast((prev) => (prev?.taskId === pending.task.id ? null : prev));
     try {
       const supabase = createClient();
-      await deleteTask(supabase, taskId);
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
-      setSelectedTaskId((prev) => (prev === taskId ? null : prev));
+      await deleteTask(supabase, pending.task.id);
     } catch (err) {
+      // Restore if the permanent delete fails.
+      setTasks((prev) =>
+        prev.some((t) => t.id === pending.task.id) ? prev : [...prev, pending.task]
+      );
       setError(err instanceof Error ? err.message : "Failed to delete task.");
     }
+  }, []);
+
+  const handleDelete = useCallback(
+    (taskId: string) => {
+      const index = tasks.findIndex((t) => t.id === taskId);
+      const task = index >= 0 ? tasks[index] : undefined;
+      if (!task) return;
+
+      // Commit any previous pending delete before starting a new one.
+      if (pendingDeleteRef.current) {
+        void commitPendingDelete();
+      }
+
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      setSelectedTaskId((prev) => (prev === taskId ? null : prev));
+      setDeletedToast({ taskId });
+
+      const timer = setTimeout(() => {
+        void commitPendingDelete();
+      }, 6000);
+
+      pendingDeleteRef.current = { task, index, timer };
+    },
+    [tasks, commitPendingDelete]
+  );
+
+  const handleUndoDelete = useCallback(() => {
+    const pending = pendingDeleteRef.current;
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    pendingDeleteRef.current = null;
+    setDeletedToast(null);
+    setTasks((prev) => {
+      if (prev.some((t) => t.id === pending.task.id)) return prev;
+      const next = [...prev];
+      next.splice(Math.min(pending.index, next.length), 0, pending.task);
+      return next;
+    });
+  }, []);
+
+  // Flush pending delete on unmount so it isn't lost.
+  useEffect(() => {
+    return () => {
+      const pending = pendingDeleteRef.current;
+      if (!pending) return;
+      clearTimeout(pending.timer);
+      pendingDeleteRef.current = null;
+      const supabase = createClient();
+      void deleteTask(supabase, pending.task.id);
+    };
   }, []);
 
   const handleDeleteTag = useCallback(async (tagId: string) => {
@@ -1054,6 +1117,30 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
         </div>
       )}
       </div>{/* end Lists panel + main content row */}
+
+      {deletedToast &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            role="status"
+            aria-live="polite"
+            className="fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 flex items-center gap-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 py-3 shadow-2xl"
+          >
+            <span className="text-sm font-medium text-[hsl(var(--foreground))]">
+              Task deleted
+            </span>
+            <button
+              type="button"
+              title="Undo"
+              aria-label="Undo delete"
+              onClick={handleUndoDelete}
+              className="p-1.5 rounded-md text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
+            >
+              <Undo2 className="w-4 h-4" />
+            </button>
+          </div>,
+          document.body
+        )}
     </AppShell>
   );
 }

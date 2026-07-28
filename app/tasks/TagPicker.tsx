@@ -268,7 +268,7 @@ export function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPicke
       <div className="relative">
         <div
           ref={inputWrapRef}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[hsl(var(--input))] bg-[hsl(var(--background))] focus-within:ring-2 focus-within:ring-[hsl(var(--primary))] transition"
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[hsl(var(--input))] bg-[hsl(var(--background))] transition"
         >
           <TagIcon className="w-3.5 h-3.5 text-[hsl(var(--muted-foreground))] shrink-0" />
           <input
@@ -295,14 +295,15 @@ export function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPicke
           createPortal(
             <div
               ref={dropdownRef}
+              data-tag-picker-dropdown
               style={{
                 position: "fixed",
                 top: dropdownPos.top,
                 left: dropdownPos.left,
-                width: dropdownPos.width,
+                width: Math.max(dropdownPos.width, 220),
                 zIndex: 9998,
               }}
-              className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-lg overflow-hidden"
+              className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-lg"
             >
               {filtered.map((tag) => {
                 const key = tagKey(tag);
@@ -315,6 +316,7 @@ export function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPicke
                       type="button"
                       onMouseDown={(e) => {
                         e.preventDefault();
+                        e.stopPropagation();
                         addTag({ id: tag.id, name: tag.name, color: tag.color });
                       }}
                       className="flex items-center gap-2 flex-1 min-w-0 px-2 py-1.5 text-xs text-left cursor-pointer"
@@ -358,8 +360,8 @@ export function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPicke
                 );
               })}
               {canCreate && (
-                <div className={cn("pt-1.5 pb-1 px-3", filtered.length > 0 && "mt-0")}>
-                  <div className="flex items-center justify-between gap-1">
+                <div className={cn("pt-2 pb-2 px-3", filtered.length > 0 && "border-t border-[hsl(var(--border))]")}>
+                  <div className="flex flex-wrap items-center gap-2 py-0.5">
                     {PLANET_TAG_COLORS.map(({ planet, color }) => (
                       <button
                         key={planet}
@@ -369,6 +371,7 @@ export function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPicke
                         aria-pressed={newTagColor === color}
                         onMouseDown={(e) => {
                           e.preventDefault();
+                          e.stopPropagation();
                           setNewTagColor(color);
                         }}
                         className={cn(
@@ -385,6 +388,7 @@ export function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPicke
                     type="button"
                     onMouseDown={(e) => {
                       e.preventDefault();
+                      e.stopPropagation();
                       createNewTag();
                     }}
                     className="flex items-center gap-2 w-full mt-3 py-1 text-xs text-[hsl(var(--primary))] hover:opacity-80 transition-opacity text-left cursor-pointer"
@@ -415,6 +419,7 @@ export function TagPicker({ allTags, selected, onChange, onDeleteTag }: TagPicke
               zIndex: 9999,
             }}
             className="w-56 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-xl p-3"
+            data-tag-picker-confirm
           >
             <p id="delete-tag-title" className="text-sm font-medium mb-1">
               Delete tag &ldquo;{confirmingTag.name}&rdquo;?
