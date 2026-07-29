@@ -30,7 +30,7 @@ const PRIORITIES: { value: Priority; label: string; color: string }[] = [
   { value: "high",   label: "High",   color: "text-red-500 border-red-400 bg-red-500/10" },
   { value: "medium", label: "Medium", color: "text-amber-500 border-amber-400 bg-amber-500/10" },
   { value: "low",    label: "Low",    color: "text-green-600 dark:text-green-500 border-green-400 bg-green-500/10" },
-  { value: "none",   label: "None",   color: "text-[hsl(var(--muted-foreground))] border-[hsl(var(--border))] bg-transparent" },
+  { value: "none",   label: "None",   color: "text-[hsl(var(--primary))] border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.1)]" },
 ];
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
