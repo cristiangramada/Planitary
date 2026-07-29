@@ -869,19 +869,19 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
           <div
             role="status"
             aria-live="polite"
-            className="fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 flex items-center gap-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 py-3 shadow-2xl"
+            className="fixed inset-x-0 bottom-10 z-[100] flex justify-center pointer-events-none"
           >
-            <span className="text-sm font-medium text-[hsl(var(--foreground))]">
-              Task deleted
-            </span>
             <button
               type="button"
               title="Undo"
               aria-label="Undo delete"
               onClick={handleUndoDelete}
-              className="p-1.5 rounded-md text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
+              className="pointer-events-auto flex items-center gap-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 py-3 shadow-2xl cursor-pointer animate-[toast-slide-up_0.22s_ease-out]"
             >
-              <Undo2 className="w-4 h-4" />
+              <span className="text-sm font-medium text-[hsl(var(--foreground))]">
+                Task deleted
+              </span>
+              <Undo2 className="w-4 h-4 text-[hsl(var(--muted-foreground))]" />
             </button>
           </div>,
           document.body
