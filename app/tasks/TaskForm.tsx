@@ -3,14 +3,13 @@
 import { useState, useEffect } from "react";
 import { X, AlertCircle, CalendarDays } from "lucide-react";
 import { cn } from "@/utils/cn";
-import type { TaskWithDetails, Tag, Priority } from "@/types";
-import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
+import type { TaskWithDetails, Priority } from "@/types";
+import type { TaskFormData, SubtaskFormItem } from "@/lib/tasks";
 import {
   TaskDatePicker,
   type DatePickerValue,
   type RepeatOption,
 } from "./TaskDatePicker";
-import { TagPicker } from "./TagPicker";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -19,19 +18,12 @@ import { TagPicker } from "./TagPicker";
 interface TaskFormProps {
   open: boolean;
   onClose: () => void;
-  onSave: (
-    data: TaskFormData,
-    subtasks: SubtaskFormItem[],
-    tags: TagFormItem[]
-  ) => Promise<void>;
-  /** Permanently delete a tag from the user's library (cascades off all tasks). */
-  onDeleteTag?: (tagId: string) => Promise<void>;
+  onSave: (data: TaskFormData, subtasks: SubtaskFormItem[]) => Promise<void>;
   editTask?: TaskWithDetails | null;
   /** Pre-fill due date when creating from calendar agenda. */
   defaultDueDate?: string | null;
   /** Assign new tasks to this List (e.g. when creating from a List view). Ignored when editing. */
   defaultListId?: string | null;
-  allTags: Tag[];
 }
 
 const PRIORITIES: { value: Priority; label: string; color: string }[] = [
@@ -77,9 +69,7 @@ interface TaskFormBodyProps extends TaskFormProps {
 function TaskFormBody({
   onClose,
   onSave,
-  onDeleteTag,
   editTask,
-  allTags,
   isEdit,
   defaultDueDate,
   defaultListId,
@@ -99,9 +89,6 @@ function TaskFormBody({
   // Repeat is UI-only for now (not yet persisted to DB)
   const [repeat, setRepeat] = useState<RepeatOption>("never");
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [selectedTags, setSelectedTags] = useState<TagFormItem[]>(
-    editTask?.tags.map((t) => ({ id: t.id, name: t.name, color: t.color })) ?? []
-  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -144,8 +131,7 @@ function TaskFormBody({
           due_time: dueDate && dueTime ? dueTime + ":00" : null,
           list_id: editTask ? editTask.list_id : (defaultListId ?? null),
         },
-        preservedSubtasks,
-        selectedTags
+        preservedSubtasks
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save task.");
@@ -276,19 +262,6 @@ function TaskFormBody({
               onClose={() => setPickerOpen(false)}
             />
           )}
-
-          {/* Tags */}
-          <div>
-            <label className="block text-xs font-medium mb-1.5 text-[hsl(var(--muted-foreground))] uppercase tracking-wide">
-              Tags
-            </label>
-            <TagPicker
-              allTags={allTags}
-              selected={selectedTags}
-              onChange={setSelectedTags}
-              onDeleteTag={onDeleteTag}
-            />
-          </div>
 
           {error && (
             <div className="flex items-start gap-2 text-sm text-red-500 bg-red-500/10 px-3 py-2.5 rounded-lg">

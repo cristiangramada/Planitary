@@ -66,26 +66,13 @@ export interface JournalEntry {
   updated_at: string;
 }
 
-export interface Tag {
-  id: string;
-  user_id: string;
-  name: string;
-  color: string | null;
-}
-
-export interface TaskTag {
-  task_id: string;
-  tag_id: string;
-}
-
 // ---------------------------------------------------------------------------
 // Composite / view types
 // ---------------------------------------------------------------------------
 
-/** Task row joined with its subtasks and tags */
+/** Task row joined with its subtasks */
 export interface TaskWithDetails extends Task {
   subtasks: Subtask[];
-  tags: Tag[];
   /** Populated from the joined `task_lists` row; null when `list_id` is null. */
   list: Pick<TaskList, "id" | "name" | "color" | "icon"> | null;
 }

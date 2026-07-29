@@ -102,7 +102,7 @@ A future AI-assisted Search feature can reuse `lib/ai/config.ts`, `lib/ai/provid
 
 ## Search
 
-`/search` searches Tasks, Journal entries, and Calendar events (and task Tags) using PostgreSQL full-text search and `pg_trgm` typo tolerance — **no AI, no embeddings, no OpenRouter call**. It's built so a future AI layer can produce the same structured filters and call the same RPC without any rework of the page.
+`/search` searches Tasks, Journal entries, and Calendar events using PostgreSQL full-text search and `pg_trgm` typo tolerance — **no AI, no embeddings, no OpenRouter call**. It's built so a future AI layer can produce the same structured filters and call the same RPC without any rework of the page.
 
 ### Database
 
@@ -112,14 +112,13 @@ A future AI-assisted Search feature can reuse `lib/ai/config.ts`, `lib/ai/provid
   - `tasks.search_vector` — `title` weight **A**, `notes` weight **B**.
   - `calendar_events.search_vector` — `title` weight **A**, `details` weight **B**. (The schema has no `location` column, so there's no weight-C field.)
   - `journal_entries.search_vector` — `content` weight **A** (single-field document).
-  - Task tags aren't baked into the tasks vector (tag names live in a joined table); instead the RPC checks a tag match via a `LEFT JOIN LATERAL` against `task_tags`/`tags` and folds it into the same ranking.
 - **Indexes:**
   - GIN on each `search_vector` (full-text search).
-  - GIN trigram (`gin_trgm_ops`) on `tasks.title`, `calendar_events.title`, `journal_entries.content`, and `tags.name` — trigram indexes are added **only** on fields that benefit from typo/partial matching, not on every text column.
+  - GIN trigram (`gin_trgm_ops`) on `tasks.title`, `calendar_events.title`, and `journal_entries.content` — trigram indexes are added **only** on fields that benefit from typo/partial matching, not on every text column.
 - **RPC:** `public.search_planitary(p_query, p_entity_types, p_start_date, p_end_date, p_task_status, p_priorities, p_sort_mode, p_limit, p_offset)`, `security invoker` (runs as the calling authenticated user, so table RLS applies normally) **and** every subquery additionally filters by `auth.uid()` explicitly — the client can never pass a user id. No dynamic SQL/`EXECUTE` is used anywhere, so there's no SQL-injection surface.
 - **Query parsing:** `websearch_to_tsquery('english', query)` — tolerant of stray punctuation, supports `"quoted phrases"` and `-excluded words` without erroring.
 - **Typo tolerance:** `pg_trgm`'s indexable **word-similarity** operator (`<%`, threshold `0.25`, set via the `pg_trgm.word_similarity_threshold` GUC inside the function) — not a bare `similarity()`/`word_similarity()` comparison, which isn't indexable and forces a sequential scan. Word-similarity (rather than whole-string `similarity()`) is what lets a short typo'd query (e.g. `calender`) still match a much longer title (e.g. "Calendar redesign polish"). Trigram matching only activates for queries of 3+ characters, so 1–2 character queries fall back to prefix/full-text matching.
-- **Ranking** (combined additively, all in this one function — see its header comment for the full breakdown): exact title match (+100) → title prefix match (+50) → full-text rank via `ts_rank_cd` (title weight A / body weight B, up to +40) → trigram word-similarity (up to +20) → matching tag, tasks only (+15) → recency tie-breaker (up to +0.5). Completed tasks are never hidden unless the status filter excludes them.
+- **Ranking** (combined additively, all in this one function — see its header comment for the full breakdown): exact title match (+100) → title prefix match (+50) → full-text rank via `ts_rank_cd` (title weight A / body weight B, up to +40) → trigram word-similarity (up to +20) → matching List name, tasks only (+8) → recency tie-breaker (up to +0.5). Completed tasks are never hidden unless the status filter excludes them.
 - **Excerpts/highlighting:** `ts_headline()` wraps matched terms in a fixed, controlled `<mark>...</mark>` marker. The client (`app/search/highlightText.tsx`) never uses `dangerouslySetInnerHTML` — it splits the plain-text string on the literal `<mark>`/`</mark>` substrings and renders each segment as a React text node, so arbitrary content is always escaped by React regardless of what it contains.
 - **Validated locally:** the migration was applied and exercised against a throwaway Postgres 16 container (stubbing Supabase's `auth` schema) during development — ranking order, cross-user isolation, typo tolerance, phrase queries, all filters, pagination, and reversed-date normalization were checked directly, and `EXPLAIN`/`EXPLAIN ANALYZE` at 5,000+ rows/table confirmed the planner uses `BitmapOr` over the full-text **and** trigram GIN indexes (not a sequential scan). This isn't a substitute for running it against a real Supabase project — see the manual checklist below.
 
@@ -131,7 +130,7 @@ A future AI-assisted Search feature can reuse `lib/ai/config.ts`, `lib/ai/provid
 | RPC caller, row normalization, URL ⇄ state helpers | `lib/search.ts` |
 | Page shell, URL sync, debouncing, pagination, stale-request handling | `app/search/SearchClient.tsx` |
 | Date range / task status / priority / sort controls | `app/search/SearchFiltersPanel.tsx` |
-| One result row (type icon, highlighted title/excerpt, metadata, tags) | `app/search/SearchResultRow.tsx` |
+| One result row (type icon, highlighted title/excerpt, metadata) | `app/search/SearchResultRow.tsx` |
 | Safe `<mark>`-marker highlighting (no raw HTML rendering) | `app/search/highlightText.tsx` |
 | Recent searches (`localStorage` only, no Supabase table) | `app/search/useRecentSearches.ts` |
 | Debounce (no existing utility/dependency — minimal custom hook) | `app/search/useDebouncedValue.ts` |
@@ -166,6 +165,7 @@ No second Task/Event/Journal-entry detail UI was created — all three reuse the
 - [ ] Apply `supabase/migrations/0004_search.sql` (SQL editor or `supabase db push`).
 - [ ] Confirm `pg_trgm` shows as enabled under Database → Extensions.
 - [ ] Confirm `search_planitary` appears under Database → Functions with `security invoker` and is only executable by the `authenticated` role (not `anon`/`public`).
+- [ ] Apply `supabase/migrations/0009_remove_tags.sql` (removes Tags — see the Lists section's Database notes below) to get the current, tag-free `search_planitary()` signature.
 
 ### Manual testing checklist
 
@@ -179,7 +179,7 @@ No second Task/Event/Journal-entry detail UI was created — all three reuse the
 - [ ] Typing quickly doesn't flash intermediate result sets or show a stale response.
 - [ ] **Load more** appends another page without resetting scroll or duplicating rows.
 - [ ] Clicking a Task/Journal/Calendar result navigates to and opens/highlights the correct item.
-- [ ] Signing in as a second user never surfaces the first user's tasks/journal/calendar/tags.
+- [ ] Signing in as a second user never surfaces the first user's tasks/journal/calendar.
 - [ ] Empty query shows the "Search Planitary…" prompt (or recent searches); a query with no matches shows the "No results found" state with suggestions.
 - [ ] Dark mode and light mode both render correctly; layout holds on a narrow (mobile-width) viewport.
 
@@ -251,7 +251,7 @@ Desktop (`lg+`): two columns — **Today's tasks** and **Today's events** stacke
 
 ### Database
 
-- **Migrations:** `supabase/migrations/0006_task_lists.sql` and `0007_search_list_support.sql` (run in order; do not modify `0001`–`0005`).
+- **Migrations:** `supabase/migrations/0006_task_lists.sql` and `0007_search_list_support.sql` (run in order; do not modify `0001`–`0005`). `0009_remove_tags.sql` later recreates `search_planitary()` again to drop the tag join.
 - **Schema:** `public.task_lists (id, user_id, name, color, icon, position, created_at, updated_at)`; `public.tasks` gains a nullable `list_id uuid references public.task_lists(id) on delete set null`.
 - **Inbox is not a database row.** A task with `list_id = null` is the "Inbox" system view — same convention as the existing smart views (All/Active/Overdue/Completed), which also aren't stored rows.
 - **Deleting a List never deletes its Tasks.** `on delete set null` moves them to Inbox automatically; the app also mirrors this locally so the UI doesn't need a refetch.
@@ -260,7 +260,7 @@ Desktop (`lg+`): two columns — **Today's tasks** and **Today's events** stacke
 - **Indexes:** `task_lists(user_id)`, `task_lists(user_id, position)`, `tasks(list_id)`, plus the unique `(user_id, lower(name))` index above.
 - **RLS:** `task_lists` has the same four-policy pattern (`select/insert/update/delete own`, `auth.uid() = user_id`) as every other user-owned table. `tasks` RLS is unchanged.
 - **Colors:** a fixed 8-key palette (`red/orange/yellow/green/blue/purple/pink/gray`, see `lib/task-lists.ts:LIST_COLOR_SWATCH`) — the stored value is the color *key*, not a hex/CSS value, so the palette can be restyled without a migration. Color is optional.
-- **Search:** `search_planitary()` (from `0004_search.sql`) is recreated in `0007` to also return `list_name` for task rows and let a matching List name weakly boost relevance (+8) — well below an exact/prefix title match (+100/+50) or a tag match (+15), so it can never outrank a real title match.
+- **Search:** `search_planitary()` (from `0004_search.sql`) is recreated in `0007` to also return `list_name` for task rows and let a matching List name weakly boost relevance (+8) — well below an exact/prefix title match (+100/+50), so it can never outrank a real title match. It's recreated again in `0009_remove_tags.sql` to drop the tag join/columns entirely.
 
 ### Application layer
 
@@ -302,6 +302,7 @@ The Lists panel is a persistent ~240px column on desktop (`lg+`), and a left sli
 ### Manual Supabase steps
 
 - [ ] Apply `supabase/migrations/0006_task_lists.sql`, then `0007_search_list_support.sql` (SQL editor or `supabase db push`), in that order.
+- [ ] Apply `supabase/migrations/0009_remove_tags.sql`. **This permanently deletes the `tags` and `task_tags` tables and all existing tag data/associations** — Tags were removed from V1; Tasks themselves (and their subtasks, priorities, due dates, and List assignments) are unaffected. Confirm `tags`/`task_tags` no longer appear under Database → Tables afterward.
 - [ ] Confirm `task_lists` has RLS enabled with 4 policies (Database → Tables → task_lists → RLS).
 - [ ] Confirm the unique index `task_lists_user_id_name_lower_idx` exists (Database → Indexes).
 - [ ] As User A, create a List, then as User B confirm `select * from task_lists` (via the app, not the SQL editor's superuser context) never returns User A's List.
@@ -321,7 +322,7 @@ The Lists panel is a persistent ~240px column on desktop (`lg+`), and a left sli
 - [ ] Refresh on `/tasks?list=<id>` and confirm the same List stays selected; use Back/Forward after switching Lists.
 - [ ] Visit `/tasks?list=<a deleted or nonexistent id>` and confirm it falls back to All Tasks without an error.
 - [ ] Confirm existing (pre-Lists) Tasks appear in Inbox.
-- [ ] Confirm the existing sort options, tag filter, and Completed section all still work identically within a selected List.
+- [ ] Confirm the existing sort options and Completed section all still work identically within a selected List.
 - [ ] Search for a List's name and confirm a Task in that List can appear in results with the List name shown, without outranking an exact title match elsewhere.
 - [ ] Confirm the Dashboard's Today's tasks section is unaffected (still shows tasks due today regardless of List).
 - [ ] Mobile: open the Lists drawer from the Tasks header, select/create/rename/delete a List, and confirm no horizontal overflow.

@@ -3,12 +3,10 @@
 import { useState, useRef, useEffect, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Calendar, Clock, MoreHorizontal } from "lucide-react";
 import { cn } from "@/utils/cn";
-import { TagBadge } from "@/components/ui/TagBadge";
 import type { MoveToListOption } from "@/app/calendar/AgendaItemContextMenu";
 import { relativeDate, formatDate, parseDateOnly } from "@/utils/date";
 import { formatTimeValue } from "@/components/ui/TimeDropdown";
-import type { Priority, Tag, TaskWithDetails } from "@/types";
-import type { TagFormItem } from "@/lib/tasks";
+import type { Priority, TaskWithDetails } from "@/types";
 import { TaskContextMenu } from "./TaskContextMenu";
 
 interface TaskCardProps {
@@ -19,9 +17,6 @@ interface TaskCardProps {
   onRenameTitle?: (taskId: string, title: string) => Promise<void>;
   onSetPriority?: (taskId: string, priority: Priority) => Promise<void>;
   onSetDue?: (taskId: string, date: string | null, time: string | null) => Promise<void>;
-  onSetTags?: (taskId: string, tags: TagFormItem[]) => Promise<void>;
-  onDeleteTag?: (tagId: string) => Promise<void>;
-  allTags?: Tag[];
   /** Left-click anywhere on the card (except the check circle) opens the detail panel. */
   onSelect?: (task: TaskWithDetails) => void;
   selected?: boolean;
@@ -70,9 +65,6 @@ export function TaskCard({
   onRenameTitle,
   onSetPriority,
   onSetDue,
-  onSetTags,
-  onDeleteTag,
-  allTags = [],
   onSelect,
   selected = false,
   lists,
@@ -223,11 +215,10 @@ export function TaskCard({
     });
   }
 
-  const canOpenMenu = !!(onSetPriority && onSetDue && onSetTags);
+  const canOpenMenu = !!(onSetPriority && onSetDue);
   const hasMeta =
     !!task.list ||
     hasDue ||
-    task.tags.length > 0 ||
     (isCompleted && !!task.completed_at);
 
   return (
@@ -389,7 +380,7 @@ export function TaskCard({
             </p>
           )}
 
-          {(!!task.list || hasDue || task.tags.length > 0) && (
+          {(!!task.list || hasDue) && (
             <div className="flex items-center gap-3 mt-2 flex-wrap">
               {task.list && (
                 <span className="text-xs text-[hsl(var(--muted-foreground))]">
@@ -415,14 +406,6 @@ export function TaskCard({
                     </span>
                   )}
                 </span>
-              )}
-
-              {task.tags.length > 0 && (
-                <div className="flex items-center gap-1 flex-wrap">
-                  {task.tags.map((tag) => (
-                    <TagBadge key={tag.id} tag={tag} />
-                  ))}
-                </div>
               )}
             </div>
           )}
@@ -460,14 +443,11 @@ export function TaskCard({
           align={contextMenu.align}
           anchorTop={contextMenu.anchorTop}
           task={task}
-          allTags={allTags}
           lists={lists}
           onClose={() => setContextMenu(null)}
           onDelete={() => onDelete(task.id)}
           onSetPriority={(priority) => onSetPriority!(task.id, priority)}
           onSetDue={(date, time) => onSetDue!(task.id, date, time)}
-          onSetTags={(next) => onSetTags!(task.id, next)}
-          onDeleteTag={onDeleteTag}
           onMoveToList={
             onMoveToList ? (listId) => onMoveToList(task.id, listId) : undefined
           }

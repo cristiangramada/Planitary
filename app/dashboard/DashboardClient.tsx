@@ -14,13 +14,11 @@ import {
   createTask,
   updateTask,
   deleteTask,
-  deleteTag,
   setTaskComplete,
   updateTaskTitleNotes,
   patchTaskFields,
-  replaceTaskTags,
 } from "@/lib/tasks";
-import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
+import type { TaskFormData, SubtaskFormItem } from "@/lib/tasks";
 import { createEvent, updateEvent, deleteEvent } from "@/lib/calendar";
 import type { EventFormData } from "@/lib/calendar";
 import { createJournalEntry, updateJournalEntry, deleteJournalEntry } from "@/lib/journal";
@@ -35,13 +33,12 @@ import { parseDateOnly } from "@/utils/date";
 import { DashboardSection, DashboardSkeletonRows, DashboardEmptyState } from "./DashboardSection";
 import { JournalPreview } from "./JournalPreview";
 import { EventsPreview } from "./EventsPreview";
-import type { TaskWithDetails, Tag, CalendarEvent, Priority } from "@/types";
+import type { TaskWithDetails, CalendarEvent, Priority } from "@/types";
 
 interface DashboardClientProps {
   initialDate: string;
   initialHour: number;
   initialData: DashboardData;
-  allTags: Tag[];
   displayName: string | null;
 }
 
@@ -63,14 +60,12 @@ export function DashboardClient({
   initialDate,
   initialHour,
   initialData,
-  allTags: initialAllTags,
   displayName,
 }: DashboardClientProps) {
   const clientToday = useClientLocalToday(initialDate);
   const clientHour = useClientLocalHour(initialHour);
 
   const [data, setData] = useState<DashboardData>(initialData);
-  const [allTags, setAllTags] = useState<Tag[]>(initialAllTags);
   const [refreshing, setRefreshing] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
 
@@ -147,49 +142,22 @@ export function DashboardClient({
   }, []);
 
   const handleTaskSave = useCallback(
-    async (formData: TaskFormData, subtasks: SubtaskFormItem[], tags: TagFormItem[]) => {
+    async (formData: TaskFormData, subtasks: SubtaskFormItem[]) => {
       const supabase = createClient();
       if (editingTask) {
         const userId = await getUserId();
-        const updated = await updateTask(supabase, editingTask.id, userId, formData, subtasks, tags);
+        const updated = await updateTask(supabase, editingTask.id, userId, formData, subtasks);
         placeTask(updated);
-        setAllTags((prev) => {
-          const next = [...prev];
-          updated.tags.forEach((tag) => {
-            if (!next.some((t) => t.id === tag.id)) next.push(tag);
-          });
-          return next;
-        });
       } else {
         const userId = await getUserId();
-        const created = await createTask(supabase, userId, formData, subtasks, tags);
+        const created = await createTask(supabase, userId, formData, subtasks);
         placeTask(created);
-        setAllTags((prev) => {
-          const next = [...prev];
-          created.tags.forEach((tag) => {
-            if (!next.some((t) => t.id === tag.id)) next.push(tag);
-          });
-          return next;
-        });
       }
       setTaskFormOpen(false);
       setEditingTask(null);
     },
     [editingTask, getUserId, placeTask]
   );
-
-  const handleDeleteTag = useCallback(async (tagId: string) => {
-    const supabase = createClient();
-    await deleteTag(supabase, tagId);
-    setAllTags((prev) => prev.filter((t) => t.id !== tagId));
-    setData((d) => ({
-      ...d,
-      todayTasks: {
-        ...d.todayTasks,
-        data: d.todayTasks.data.map((t) => ({ ...t, tags: t.tags.filter((tg) => tg.id !== tagId) })),
-      },
-    }));
-  }, []);
 
   const handleToggleComplete = useCallback(
     async (taskId: string, completed: boolean) => {
@@ -271,35 +239,6 @@ export function DashboardClient({
       }
     },
     [refetchAll]
-  );
-
-  const handleSetTags = useCallback(
-    async (taskId: string, tags: TagFormItem[]) => {
-      try {
-        const supabase = createClient();
-        const userId = await getUserId();
-        const saved = await replaceTaskTags(supabase, taskId, userId, tags);
-        setData((d) => ({
-          ...d,
-          todayTasks: {
-            ...d.todayTasks,
-            data: d.todayTasks.data.map((t) => (t.id === taskId ? { ...t, tags: saved } : t)),
-          },
-        }));
-        setAllTags((prev) => {
-          const next = [...prev];
-          saved.forEach((tag) => {
-            if (!next.some((t) => t.id === tag.id)) next.push(tag);
-          });
-          return next;
-        });
-      } catch (err) {
-        setMutationError(err instanceof Error ? err.message : "Failed to update tags.");
-        refetchAll();
-        throw err;
-      }
-    },
-    [getUserId, refetchAll]
   );
 
   const handleDeleteTask = useCallback(
@@ -485,9 +424,6 @@ export function DashboardClient({
                       onRenameTitle={handleRenameTitle}
                       onSetPriority={handleSetPriority}
                       onSetDue={handleSetDue}
-                      onSetTags={handleSetTags}
-                      onDeleteTag={handleDeleteTag}
-                      allTags={allTags}
                     />
                   ))}
                 </div>
@@ -530,10 +466,8 @@ export function DashboardClient({
           setEditingTask(null);
         }}
         onSave={handleTaskSave}
-        onDeleteTag={handleDeleteTag}
         editTask={editingTask}
         defaultDueDate={clientToday}
-        allTags={allTags}
       />
       <EventForm
         open={eventFormOpen}

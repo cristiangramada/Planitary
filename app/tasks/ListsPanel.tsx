@@ -396,156 +396,158 @@ export function ListsPanel({
         </nav>
       </div>
 
-      {/* Lists */}
-      <div className="flex-1 min-h-0 flex flex-col">
-        <div className="group flex items-center mb-1.5">
-          <p className="flex-1 min-w-0 px-2 text-xs font-medium text-[hsl(var(--muted-foreground))]">
-            Lists
-          </p>
-          <div className="w-6 h-6 shrink-0 mr-1 flex items-center justify-center">
-            <button
-              ref={addButtonRef}
-              type="button"
-              aria-label="Add list"
-              aria-expanded={addOpen}
-              onClick={openAddPopover}
-              className={cn(
-                "flex items-center justify-center w-6 h-6 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer",
-                addOpen
-                  ? "opacity-100 text-[hsl(var(--foreground))]"
-                  : "opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
-              )}
-            >
-              <Plus className="w-4 h-4" strokeWidth={2.25} />
-            </button>
-          </div>
-        </div>
-
-        <div
-          className={cn(
-            "flex-1 min-h-0 overflow-y-auto space-y-0.5",
-            draggingId && "select-none cursor-move [&_*]:!cursor-move"
-          )}
-        >
-          {lists.length === 0 && !addOpen && (
-            <div className="px-2 py-3 text-xs text-[hsl(var(--muted-foreground))]">
-              Create a list to organize related tasks.
+      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-5">
+        {/* Lists */}
+        <div className="flex flex-col min-h-0">
+          <div className="group flex items-center mb-1.5">
+            <p className="flex-1 min-w-0 px-2 text-xs font-medium text-[hsl(var(--muted-foreground))]">
+              Lists
+            </p>
+            <div className="w-6 h-6 shrink-0 mr-1 flex items-center justify-center">
+              <button
+                ref={addButtonRef}
+                type="button"
+                aria-label="Add list"
+                aria-expanded={addOpen}
+                onClick={openAddPopover}
+                className={cn(
+                  "flex items-center justify-center w-6 h-6 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer",
+                  addOpen
+                    ? "opacity-100 text-[hsl(var(--foreground))]"
+                    : "opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
+                )}
+              >
+                <Plus className="w-4 h-4" strokeWidth={2.25} />
+              </button>
             </div>
-          )}
+          </div>
 
-          {lists.map((list, index) => {
-            const isActive = activeScopeKey === `list:${list.id}`;
-            const count = counts[list.id] ?? 0;
-            const isRenaming = renamingId === list.id;
-            const isDragging = draggingId === list.id;
+          <div
+            className={cn(
+              "space-y-0.5",
+              draggingId && "select-none cursor-move [&_*]:!cursor-move"
+            )}
+          >
+            {lists.length === 0 && !addOpen && (
+              <div className="px-2 py-3 text-xs text-[hsl(var(--muted-foreground))]">
+                Create a list to organize related tasks.
+              </div>
+            )}
 
-            if (isRenaming) {
+            {lists.map((list, index) => {
+              const isActive = activeScopeKey === `list:${list.id}`;
+              const count = counts[list.id] ?? 0;
+              const isRenaming = renamingId === list.id;
+              const isDragging = draggingId === list.id;
+
+              if (isRenaming) {
+                return (
+                  <div key={list.id} className="px-2 py-0.5">
+                    <input
+                      ref={renameInputRef}
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void commitRename(list);
+                        } else if (e.key === "Escape") {
+                          e.preventDefault();
+                          setRenamingId(null);
+                          setRenameError(null);
+                        }
+                      }}
+                      onBlur={() => void commitRename(list)}
+                      aria-label={`Rename list ${list.name}`}
+                      maxLength={50}
+                      disabled={renaming}
+                      className="w-full px-2 py-1 text-sm rounded-md border border-[hsl(var(--primary))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none disabled:opacity-60"
+                    />
+                    {renameError && (
+                      <p className="text-xs text-red-500 mt-1 px-0.5">{renameError}</p>
+                    )}
+                  </div>
+                );
+              }
+
               return (
-                <div key={list.id} className="px-2 py-0.5">
-                  <input
-                    ref={renameInputRef}
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        void commitRename(list);
-                      } else if (e.key === "Escape") {
-                        e.preventDefault();
-                        setRenamingId(null);
-                        setRenameError(null);
-                      }
+                <div key={list.id}>
+                  {showDropLineAt(index) && dropLine}
+                  <div
+                    ref={(el) => {
+                      if (el) rowElsRef.current.set(list.id, el);
+                      else rowElsRef.current.delete(list.id);
                     }}
-                    onBlur={() => void commitRename(list)}
-                    aria-label={`Rename list ${list.name}`}
-                    maxLength={50}
-                    disabled={renaming}
-                    className="w-full px-2 py-1 text-sm rounded-md border border-[hsl(var(--primary))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none disabled:opacity-60"
-                  />
-                  {renameError && (
-                    <p className="text-xs text-red-500 mt-1 px-0.5">{renameError}</p>
-                  )}
-                </div>
-              );
-            }
-
-            return (
-              <div key={list.id}>
-                {showDropLineAt(index) && dropLine}
-                <div
-                  ref={(el) => {
-                    if (el) rowElsRef.current.set(list.id, el);
-                    else rowElsRef.current.delete(list.id);
-                  }}
-                  onPointerDown={(e) => handleRowPointerDown(e, list.id)}
-                  onClick={() => {
-                    if (didDragRef.current) return;
-                    onSelectScope({ type: "list", id: list.id });
-                  }}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setMenu({ x: e.clientX, y: e.clientY, list });
-                  }}
-                  className={cn(
-                    "group flex items-center rounded-lg transition-colors text-[hsl(var(--foreground))]",
-                    draggingId ? "cursor-move" : "cursor-default",
-                    isActive
-                      ? "bg-[hsl(var(--muted))]"
-                      : "hover:bg-[hsl(var(--muted)/0.6)]",
-                    isDragging && "opacity-40"
-                  )}
-                >
-                  <span
-                    aria-hidden
-                    className="flex items-center justify-center pl-2 py-2.5 shrink-0 pointer-events-none"
+                    onPointerDown={(e) => handleRowPointerDown(e, list.id)}
+                    onClick={() => {
+                      if (didDragRef.current) return;
+                      onSelectScope({ type: "list", id: list.id });
+                    }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setMenu({ x: e.clientX, y: e.clientY, list });
+                    }}
+                    className={cn(
+                      "group flex items-center rounded-lg transition-colors text-[hsl(var(--foreground))]",
+                      draggingId ? "cursor-move" : "cursor-default",
+                      isActive
+                        ? "bg-[hsl(var(--muted))]"
+                        : "hover:bg-[hsl(var(--muted)/0.6)]",
+                      isDragging && "opacity-40"
+                    )}
                   >
-                    <Menu className="w-[1.125rem] h-3.5 scale-x-125" strokeWidth={2.25} />
-                  </span>
-                  <span className="flex flex-1 min-w-0 items-center pl-2 pr-2 py-2.5 text-sm text-left">
-                    <span className="truncate leading-snug">{list.name}</span>
-                  </span>
-                  <div className="relative w-6 h-6 shrink-0 mr-1 flex items-center justify-center">
-                    {count > 0 && (
-                      <span
+                    <span
+                      aria-hidden
+                      className="flex items-center justify-center pl-2 py-2.5 shrink-0 pointer-events-none"
+                    >
+                      <Menu className="w-[1.125rem] h-3.5 scale-x-125" strokeWidth={2.25} />
+                    </span>
+                    <span className="flex flex-1 min-w-0 items-center pl-2 pr-2 py-2.5 text-sm text-left">
+                      <span className="truncate leading-snug">{list.name}</span>
+                    </span>
+                    <div className="relative w-6 h-6 shrink-0 mr-1 flex items-center justify-center">
+                      {count > 0 && (
+                        <span
+                          className={cn(
+                            "text-xs leading-none text-[hsl(var(--muted-foreground))] pointer-events-none",
+                            menu?.list.id === list.id
+                              ? "invisible"
+                              : "group-hover:invisible"
+                          )}
+                        >
+                          {count}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        data-no-drag
+                        title="List actions"
+                        aria-label={`More actions for ${list.name}`}
+                        aria-haspopup="menu"
+                        aria-expanded={menu?.list.id === list.id}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setMenu({ x: rect.right, y: rect.bottom, list });
+                        }}
                         className={cn(
-                          "text-xs leading-none text-[hsl(var(--muted-foreground))] pointer-events-none",
+                          "absolute inset-0 flex items-center justify-center p-1 rounded-md hover:bg-[hsl(var(--muted))] transition-opacity cursor-pointer",
                           menu?.list.id === list.id
-                            ? "invisible"
-                            : "group-hover:invisible"
+                            ? "opacity-100"
+                            : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                         )}
                       >
-                        {count}
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      data-no-drag
-                      title="List actions"
-                      aria-label={`More actions for ${list.name}`}
-                      aria-haspopup="menu"
-                      aria-expanded={menu?.list.id === list.id}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setMenu({ x: rect.right, y: rect.bottom, list });
-                      }}
-                      className={cn(
-                        "absolute inset-0 flex items-center justify-center p-1 rounded-md hover:bg-[hsl(var(--muted))] transition-opacity cursor-pointer",
-                        menu?.list.id === list.id
-                          ? "opacity-100"
-                          : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-                      )}
-                    >
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
+                        <MoreHorizontal className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
 
-          {showDropLineAt(lists.length) && dropLine}
+            {showDropLineAt(lists.length) && dropLine}
+          </div>
         </div>
       </div>
 

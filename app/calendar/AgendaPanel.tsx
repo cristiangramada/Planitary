@@ -283,14 +283,6 @@ function TaskAgendaItem({
               {formatTimeValue(task.due_time)}
             </span>
           )}
-          {task.tags.slice(0, 2).map((tag) => (
-            <span
-              key={tag.id}
-              className="text-[11px] px-1.5 py-0.5 rounded-full bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]"
-            >
-              {tag.name}
-            </span>
-          ))}
         </div>
       </div>
     </div>

@@ -1,78 +1,41 @@
 "use client";
 
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { createPortal } from "react-dom";
-import { Plus, Tag as TagIcon, CalendarDays } from "lucide-react";
+import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { Plus, CalendarDays } from "lucide-react";
 import { cn } from "@/utils/cn";
-import type { Priority, Tag } from "@/types";
-import type { TaskFormData, TagFormItem } from "@/lib/tasks";
+import type { Priority } from "@/types";
+import type { TaskFormData } from "@/lib/tasks";
 import {
   TaskDatePicker,
   type DatePickerValue,
   type RepeatOption,
 } from "./TaskDatePicker";
-import { TagPicker } from "./TagPicker";
 import { PriorityFlag, PriorityMenu } from "./priority-ui";
 
 interface TaskQuickAddProps {
-  allTags: Tag[];
   defaultListId: string | null;
-  onCreate: (data: TaskFormData, tags: TagFormItem[]) => Promise<void>;
-  onDeleteTag?: (tagId: string) => Promise<void>;
+  onCreate: (data: TaskFormData) => Promise<void>;
 }
 
-export function TaskQuickAdd({
-  allTags,
-  defaultListId,
-  onCreate,
-  onDeleteTag,
-}: TaskQuickAddProps) {
+export function TaskQuickAdd({ defaultListId, onCreate }: TaskQuickAddProps) {
   const [title, setTitle] = useState("");
   const [focused, setFocused] = useState(false);
   const [priority, setPriority] = useState<Priority>("none");
   const [dueDate, setDueDate] = useState<string | null>(null);
   const [dueTime, setDueTime] = useState<string | null>(null);
   const [repeat, setRepeat] = useState<RepeatOption>("never");
-  const [tags, setTags] = useState<TagFormItem[]>([]);
   const [saving, setSaving] = useState(false);
 
   const [dueOpen, setDueOpen] = useState(false);
   const [dueAnchor, setDueAnchor] = useState<{ x: number; y: number } | null>(null);
-  const [tagsOpen, setTagsOpen] = useState(false);
-  const [tagsPos, setTagsPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const [priorityMenu, setPriorityMenu] = useState<{ x: number; y: number } | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const tagsBtnRef = useRef<HTMLButtonElement>(null);
   const dueBtnRef = useRef<HTMLButtonElement>(null);
   const flagBtnRef = useRef<HTMLButtonElement>(null);
-  const tagsPanelRef = useRef<HTMLDivElement>(null);
 
   const showActions =
-    focused || dueOpen || tagsOpen || !!priorityMenu || title.length > 0 || tags.length > 0 || !!dueDate || priority !== "none";
-
-  useEffect(() => {
-    if (!tagsOpen) return;
-    function onOutside(e: MouseEvent) {
-      const target = e.target as Node;
-      if (tagsPanelRef.current?.contains(target)) return;
-      if (tagsBtnRef.current?.contains(target)) return;
-      setTagsOpen(false);
-      setTagsPos(null);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setTagsOpen(false);
-        setTagsPos(null);
-      }
-    }
-    document.addEventListener("mousedown", onOutside);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onOutside);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [tagsOpen]);
+    focused || dueOpen || !!priorityMenu || title.length > 0 || !!dueDate || priority !== "none";
 
   function resetDraft() {
     setTitle("");
@@ -80,11 +43,8 @@ export function TaskQuickAdd({
     setDueDate(null);
     setDueTime(null);
     setRepeat("never");
-    setTags([]);
     setDueOpen(false);
     setDueAnchor(null);
-    setTagsOpen(false);
-    setTagsPos(null);
     setPriorityMenu(null);
   }
 
@@ -93,17 +53,14 @@ export function TaskQuickAdd({
     if (!trimmed || saving) return;
     setSaving(true);
     try {
-      await onCreate(
-        {
-          title: trimmed,
-          notes: null,
-          priority,
-          due_date: dueDate,
-          due_time: dueDate && dueTime ? `${dueTime}:00` : null,
-          list_id: defaultListId,
-        },
-        tags
-      );
+      await onCreate({
+        title: trimmed,
+        notes: null,
+        priority,
+        due_date: dueDate,
+        due_time: dueDate && dueTime ? `${dueTime}:00` : null,
+        list_id: defaultListId,
+      });
       resetDraft();
       inputRef.current?.focus();
     } finally {
@@ -118,28 +75,10 @@ export function TaskQuickAdd({
       setDueAnchor(null);
       return;
     }
-    setTagsOpen(false);
     setPriorityMenu(null);
     const rect = e.currentTarget.getBoundingClientRect();
     setDueAnchor({ x: rect.right, y: rect.bottom });
     setDueOpen(true);
-  }
-
-  function toggleTags(e: ReactMouseEvent<HTMLButtonElement>) {
-    e.preventDefault();
-    if (tagsOpen) {
-      setTagsOpen(false);
-      setTagsPos(null);
-      return;
-    }
-    setDueOpen(false);
-    setDueAnchor(null);
-    setPriorityMenu(null);
-    const rect = e.currentTarget.getBoundingClientRect();
-    const width = 208;
-    const left = Math.max(8, rect.right - width);
-    setTagsPos({ top: rect.bottom + 4, left, width });
-    setTagsOpen(true);
   }
 
   function togglePriority(e: ReactMouseEvent<HTMLButtonElement>) {
@@ -150,8 +89,6 @@ export function TaskQuickAdd({
     }
     setDueOpen(false);
     setDueAnchor(null);
-    setTagsOpen(false);
-    setTagsPos(null);
     const rect = e.currentTarget.getBoundingClientRect();
     setPriorityMenu({ x: rect.right, y: rect.bottom });
   }
@@ -190,7 +127,7 @@ export function TaskQuickAdd({
           autoComplete="off"
           className={cn(
             "w-full pl-4 py-3 text-sm rounded-xl border bg-[hsl(var(--card))] text-[hsl(var(--foreground))] focus:outline-none transition disabled:opacity-60",
-            focused || dueOpen || tagsOpen || !!priorityMenu
+            focused || dueOpen || !!priorityMenu
               ? "border-[hsl(var(--primary))]"
               : "border-[hsl(var(--input))]",
             showActions ? "pr-[7.25rem]" : "pr-4"
@@ -218,23 +155,6 @@ export function TaskQuickAdd({
               className="p-1.5 rounded-md hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
             >
               <PriorityFlag priority={priority} className="w-4 h-4" />
-            </button>
-            <button
-              ref={tagsBtnRef}
-              type="button"
-              title="Tags"
-              aria-label="Tags"
-              aria-pressed={tagsOpen || tags.length > 0}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={toggleTags}
-              className={cn(
-                "p-1.5 rounded-md transition-colors cursor-pointer",
-                tagsOpen || tags.length > 0
-                  ? "text-[hsl(var(--foreground))] bg-[hsl(var(--muted))]"
-                  : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]"
-              )}
-            >
-              <TagIcon className="w-4 h-4" />
             </button>
             <button
               ref={dueBtnRef}
@@ -287,24 +207,6 @@ export function TaskQuickAdd({
           onClose={() => setPriorityMenu(null)}
         />
       )}
-
-      {tagsOpen &&
-        tagsPos &&
-        createPortal(
-          <div
-            ref={tagsPanelRef}
-            className="fixed z-50 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-xl p-3"
-            style={{ top: tagsPos.top, left: tagsPos.left, width: tagsPos.width }}
-          >
-            <TagPicker
-              allTags={allTags}
-              selected={tags}
-              onChange={setTags}
-              onDeleteTag={onDeleteTag}
-            />
-          </div>,
-          document.body
-        )}
     </form>
   );
 }

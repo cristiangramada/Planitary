@@ -33,7 +33,6 @@ interface SearchPlanitaryRow {
   due_time: string | null;
   priority: string | null;
   status: string | null;
-  tags: string[] | null;
   list_name: string | null;
   relevance_score: number;
   matched_fields: string[] | null;
@@ -87,7 +86,7 @@ export async function runSearch(
   return { results: page.map(normalizeRow), hasMore };
 }
 
-const MATCHED_FIELDS: readonly SearchMatchedField[] = ["title", "notes", "content", "details", "tags", "list"];
+const MATCHED_FIELDS: readonly SearchMatchedField[] = ["title", "notes", "content", "details", "list"];
 
 /** Exported for testing — maps one raw RPC row into a strict `SearchResult`. */
 export function normalizeRow(row: SearchPlanitaryRow): SearchResult {
@@ -106,7 +105,6 @@ export function normalizeRow(row: SearchPlanitaryRow): SearchResult {
     status: (VALID_TASK_STATUSES as readonly string[]).includes(row.status ?? "")
       ? (row.status as TaskStatus)
       : null,
-    tags: row.tags ?? [],
     listName: row.list_name,
     relevanceScore: row.relevance_score,
     matchedFields: (row.matched_fields ?? []).filter((f): f is SearchMatchedField =>

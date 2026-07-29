@@ -3,10 +3,9 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
-import { SortAsc, CheckSquare, Tag as TagIcon, PanelLeft, Undo2 } from "lucide-react";
+import { SortAsc, CheckSquare, PanelLeft, Undo2 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { TagBadge } from "@/components/ui/TagBadge";
 import { TaskCard } from "./TaskCard";
 import { TaskQuickAdd } from "./TaskQuickAdd";
 import { TaskDetailPanel } from "./TaskDetailPanel";
@@ -16,17 +15,15 @@ import { createClient } from "@/lib/supabase/client";
 import {
   createTask,
   deleteTask,
-  deleteTag,
   setTaskComplete,
   setSubtaskComplete,
   updateTaskTitleNotes,
   replaceTaskSubtasks,
-  replaceTaskTags,
   patchTaskFields,
   TASK_PRIORITY_ORDER,
 } from "@/lib/tasks";
-import type { TaskWithDetails, Tag, TaskList, Subtask, Priority } from "@/types";
-import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
+import type { TaskWithDetails, TaskList, Subtask, Priority } from "@/types";
+import type { TaskFormData, SubtaskFormItem } from "@/lib/tasks";
 import {
   createTaskList,
   renameTaskList,
@@ -94,26 +91,19 @@ function sortTasks(tasks: TaskWithDetails[], sortBy: SortKey): TaskWithDetails[]
 
 interface TasksClientProps {
   initialTasks: TaskWithDetails[];
-  initialTags: Tag[];
   initialLists: TaskList[];
   userId: string;
 }
 
-export function TasksClient({ initialTasks, initialTags, initialLists, userId }: TasksClientProps) {
+export function TasksClient({ initialTasks, initialLists, userId }: TasksClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [tasks, setTasks] = useState<TaskWithDetails[]>(initialTasks);
-  const [allTags, setAllTags] = useState<Tag[]>(initialTags);
   const [lists, setLists] = useState<TaskList[]>(initialLists);
   // Default matches SSR; restored preference applied after mount to avoid hydration mismatch.
   const [sortBy, setSortBy] = useState<SortKey>("priority");
   const [sortReady, setSortReady] = useState(false);
   const [filterBy, setFilterBy] = useState<FilterKey>("active");
-  const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
-  const [confirmingTag, setConfirmingTag] = useState<Tag | null>(null);
-  const [confirmPos, setConfirmPos] = useState<{ top: number; left: number } | null>(null);
-  const [deletingTag, setDeletingTag] = useState(false);
-  const confirmRef = useRef<HTMLDivElement>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -197,14 +187,9 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
   // Derived state
   // ---------------------------------------------------------------------------
 
-  const sortedTags = useMemo(
-    () => [...allTags].sort((a, b) => a.name.localeCompare(b.name)),
-    [allTags]
-  );
-
   // Tasks within the selected smart view / List — applied before the
-  // existing tag filter, sort, and status tabs, all of which are preserved
-  // unchanged and simply operate on this narrower set.
+  // existing sort and status tabs, which are preserved unchanged and simply
+  // operate on this narrower set.
   const scopedTasks = useMemo(() => {
     if (scope.type === "list") return tasks.filter((t) => t.list_id === scope.id);
     if (scope.type === "inbox") return tasks.filter((t) => t.list_id === null);
@@ -213,17 +198,14 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
 
   const { activeTasks, overdueTasks, completedTasks } = useMemo(() => {
     const today = localTodayStr();
-    const scoped = selectedTagId
-      ? scopedTasks.filter((t) => t.tags.some((tag) => tag.id === selectedTagId))
-      : scopedTasks;
-    const sorted = sortTasks(scoped, sortBy);
+    const sorted = sortTasks(scopedTasks, sortBy);
     const active = sorted.filter((t) => t.status === "active");
     return {
       activeTasks: active,
       overdueTasks: active.filter((t) => !!t.due_date && t.due_date < today),
       completedTasks: sorted.filter((t) => t.status === "completed"),
     };
-  }, [scopedTasks, sortBy, selectedTagId]);
+  }, [scopedTasks, sortBy]);
 
   const selectedList = scope.type === "list" ? lists.find((l) => l.id === scope.id) ?? null : null;
   const scopeTitle =
@@ -231,10 +213,6 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
 
   const selectedTask = selectedTaskId
     ? tasks.find((t) => t.id === selectedTaskId) ?? null
-    : null;
-
-  const selectedTag = selectedTagId
-    ? allTags.find((t) => t.id === selectedTagId) ?? null
     : null;
 
   const visibleActive =
@@ -258,17 +236,11 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
   }, []);
 
   const handleCreate = useCallback(
-    async (data: TaskFormData, subtasks: SubtaskFormItem[], tags: TagFormItem[]) => {
+    async (data: TaskFormData, subtasks: SubtaskFormItem[]) => {
       const supabase = createClient();
       const userId = await getUserId();
-      const newTask = await createTask(supabase, userId, data, subtasks, tags);
+      const newTask = await createTask(supabase, userId, data, subtasks);
       setTasks((prev) => [newTask, ...prev]);
-      // Sync any newly created tags into allTags
-      newTask.tags.forEach((tag) => {
-        setAllTags((prev) =>
-          prev.some((t) => t.id === tag.id) ? prev : [...prev, tag]
-        );
-      });
     },
     [getUserId]
   );
@@ -340,75 +312,6 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
       void deleteTask(supabase, pending.task.id);
     };
   }, []);
-
-  const handleDeleteTag = useCallback(async (tagId: string) => {
-    const supabase = createClient();
-    await deleteTag(supabase, tagId);
-    setAllTags((prev) => prev.filter((t) => t.id !== tagId));
-    setTasks((prev) =>
-      prev.map((task) => ({
-        ...task,
-        tags: task.tags.filter((t) => t.id !== tagId),
-      }))
-    );
-    setSelectedTagId((prev) => (prev === tagId ? null : prev));
-  }, []);
-
-  const closeTagConfirm = useCallback(() => {
-    setConfirmingTag(null);
-    setConfirmPos(null);
-  }, []);
-
-  const openTagDeleteConfirm = useCallback((tag: Tag, e: React.MouseEvent) => {
-    e.preventDefault();
-    const width = 224;
-    const height = 110;
-    let top = e.clientY + 8;
-    if (top + height > window.innerHeight - 8) {
-      top = Math.max(8, e.clientY - height - 8);
-    }
-    let left = e.clientX;
-    left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
-    setConfirmPos({ top, left });
-    setConfirmingTag(tag);
-  }, []);
-
-  const confirmDeleteTagFromList = useCallback(async () => {
-    if (!confirmingTag || deletingTag) return;
-    setDeletingTag(true);
-    try {
-      await handleDeleteTag(confirmingTag.id);
-      closeTagConfirm();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete tag.");
-      closeTagConfirm();
-    } finally {
-      setDeletingTag(false);
-    }
-  }, [confirmingTag, deletingTag, handleDeleteTag, closeTagConfirm]);
-
-  // Close tag delete confirm on outside click, Escape, or scroll
-  useEffect(() => {
-    if (!confirmingTag) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") closeTagConfirm();
-    }
-    function onOutside(e: MouseEvent) {
-      if (confirmRef.current?.contains(e.target as Node)) return;
-      closeTagConfirm();
-    }
-    function onScroll() {
-      closeTagConfirm();
-    }
-    window.addEventListener("keydown", onKey);
-    document.addEventListener("mousedown", onOutside);
-    window.addEventListener("scroll", onScroll, { capture: true });
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.removeEventListener("mousedown", onOutside);
-      window.removeEventListener("scroll", onScroll, { capture: true });
-    };
-  }, [confirmingTag, closeTagConfirm]);
 
   const handleToggleComplete = useCallback(
     async (taskId: string, shouldComplete: boolean) => {
@@ -546,23 +449,6 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
     [handlePatchFields]
   );
 
-  const handleSetTags = useCallback(
-    async (taskId: string, tags: TagFormItem[]) => {
-      const supabase = createClient();
-      const uid = await getUserId();
-      const saved = await replaceTaskTags(supabase, taskId, uid, tags);
-      setTasks((prev) =>
-        prev.map((t) => (t.id === taskId ? { ...t, tags: saved } : t))
-      );
-      saved.forEach((tag) => {
-        setAllTags((prev) =>
-          prev.some((t) => t.id === tag.id) ? prev : [...prev, tag]
-        );
-      });
-    },
-    [getUserId]
-  );
-
   // Creating a task from within a selected List auto-assigns it to that List;
   // Inbox and smart views default to Inbox (null), matching current behavior.
   const formDefaultListId = scope.type === "list" ? scope.id : null;
@@ -684,7 +570,7 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
     {
       key: "all",
       label: "All",
-      count: selectedTagId ? activeTasks.length + completedTasks.length : scopedTasks.length,
+      count: scopedTasks.length,
     },
     { key: "active", label: "Active", count: activeTasks.length },
     { key: "overdue", label: "Overdue", count: overdueTasks.length },
@@ -833,174 +719,39 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
           ))}
         </div>
 
-        {/* Tag filters */}
-        {sortedTags.length > 0 && (
-          <div className="mb-5 shrink-0">
-            <div className="flex items-center gap-1.5 mb-2">
-              <TagIcon className="w-3.5 h-3.5 text-[hsl(var(--muted-foreground))]" />
-              <p className="text-xs font-medium uppercase tracking-wide text-[hsl(var(--muted-foreground))]">
-                Tags
-              </p>
-              {selectedTag && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedTagId(null)}
-                  className="ml-auto text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {sortedTags.map((tag) => (
-                <TagBadge
-                  key={tag.id}
-                  tag={tag}
-                  selected={selectedTagId === tag.id}
-                  onClick={() =>
-                    setSelectedTagId((prev) => (prev === tag.id ? null : tag.id))
-                  }
-                  onContextMenu={(e) => openTagDeleteConfirm(tag, e)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {confirmingTag &&
-          confirmPos &&
-          typeof document !== "undefined" &&
-          createPortal(
-            <div
-              ref={confirmRef}
-              role="alertdialog"
-              aria-modal="true"
-              aria-labelledby="delete-tag-list-title"
-              style={{
-                position: "fixed",
-                top: confirmPos.top,
-                left: confirmPos.left,
-                zIndex: 9999,
-              }}
-              className="w-56 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-xl p-3"
-            >
-              <p id="delete-tag-list-title" className="text-sm font-medium mb-1">
-                Delete tag &ldquo;{confirmingTag.name}&rdquo;?
-              </p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))] mb-3">
-                It will be removed from all tasks.
-              </p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    closeTagConfirm();
-                  }}
-                  className="flex-1 py-1.5 text-xs font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={deletingTag}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    void confirmDeleteTagFromList();
-                  }}
-                  className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:opacity-60 transition-colors cursor-pointer"
-                >
-                  {deletingTag ? "Deleting…" : "Delete"}
-                </button>
-              </div>
-            </div>,
-            document.body
-          )}
         {/* Scrollable task list */}
         <div className="flex-1 overflow-y-auto min-h-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 
         <TaskQuickAdd
-          allTags={allTags}
           defaultListId={formDefaultListId}
-          onCreate={async (data, tags) => {
-            await handleCreate(data, [], tags);
+          onCreate={async (data) => {
+            await handleCreate(data, []);
           }}
-          onDeleteTag={handleDeleteTag}
         />
 
         {/* Active tasks */}
         {filterBy !== "completed" && (
           <div className="space-y-2 mb-4">
-            {selectedTag &&
-              activeTasks.length === 0 &&
-              completedTasks.length === 0 && (
+            {scopedTasks.length > 0 &&
+              visibleActive.length === 0 &&
+              filterBy === "active" && (
               <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
                 <EmptyState
-                  icon={TagIcon}
-                  title={`No tasks with “${selectedTag.name}”`}
-                  description="Try another tag, or clear the filter to see all tasks."
-                  action={
-                    <button
-                      onClick={() => setSelectedTagId(null)}
-                      className="px-4 py-2 text-sm font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
-                    >
-                      Clear tag filter
-                    </button>
-                  }
+                  icon={CheckSquare}
+                  title="No active tasks"
+                  description="All caught up!"
                 />
               </div>
             )}
 
             {scopedTasks.length > 0 &&
               visibleActive.length === 0 &&
-              filterBy === "active" &&
-              !(selectedTag && activeTasks.length === 0 && completedTasks.length === 0) && (
+              filterBy === "overdue" && (
               <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
                 <EmptyState
                   icon={CheckSquare}
-                  title={selectedTag ? `No active tasks with “${selectedTag.name}”` : "No active tasks"}
-                  description={
-                    selectedTag
-                      ? "There are no active tasks with this tag."
-                      : "All caught up!"
-                  }
-                  action={
-                    selectedTag ? (
-                      <button
-                        onClick={() => setSelectedTagId(null)}
-                        className="px-4 py-2 text-sm font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
-                      >
-                        Clear tag filter
-                      </button>
-                    ) : undefined
-                  }
-                />
-              </div>
-            )}
-
-            {scopedTasks.length > 0 &&
-              visibleActive.length === 0 &&
-              filterBy === "overdue" &&
-              !(selectedTag && activeTasks.length === 0 && completedTasks.length === 0) && (
-              <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
-                <EmptyState
-                  icon={CheckSquare}
-                  title={selectedTag ? `No overdue tasks with “${selectedTag.name}”` : "No overdue tasks"}
-                  description={
-                    selectedTag
-                      ? "There are no overdue tasks with this tag."
-                      : "You're all caught up — nothing past due."
-                  }
-                  action={
-                    selectedTag ? (
-                      <button
-                        onClick={() => setSelectedTagId(null)}
-                        className="px-4 py-2 text-sm font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
-                      >
-                        Clear tag filter
-                      </button>
-                    ) : undefined
-                  }
+                  title="No overdue tasks"
+                  description="You're all caught up — nothing past due."
                 />
               </div>
             )}
@@ -1038,9 +789,6 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
                 }}
                 onSetPriority={handleSetPriority}
                 onSetDue={handleSetDue}
-                onSetTags={handleSetTags}
-                onDeleteTag={handleDeleteTag}
-                allTags={allTags}
                 onSelect={openDetail}
                 selected={selectedTaskId === task.id}
                 lists={moveToListOptions}
@@ -1071,9 +819,6 @@ export function TasksClient({ initialTasks, initialTags, initialLists, userId }:
                   }}
                   onSetPriority={handleSetPriority}
                   onSetDue={handleSetDue}
-                  onSetTags={handleSetTags}
-                  onDeleteTag={handleDeleteTag}
-                  allTags={allTags}
                   onSelect={openDetail}
                   selected={selectedTaskId === task.id}
                   lists={moveToListOptions}

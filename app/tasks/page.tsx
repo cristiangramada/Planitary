@@ -2,15 +2,15 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { fetchTasksWithDetails, fetchAllTags } from "@/lib/tasks";
+import { fetchTasksWithDetails } from "@/lib/tasks";
 import { fetchTaskLists } from "@/lib/task-lists";
 import { TasksClient } from "./TasksClient";
 
 export const metadata: Metadata = { title: "Tasks" };
 
 /**
- * Server Component — fetches the initial task and tag data, then hands off
- * to the fully interactive TasksClient.
+ * Server Component — fetches the initial task data, then hands off to the
+ * fully interactive TasksClient.
  */
 export default async function TasksPage() {
   const supabase = await createClient();
@@ -20,9 +20,8 @@ export default async function TasksPage() {
   if (!user) redirect("/login");
 
   // All fetches run in parallel
-  const [tasks, tags, lists] = await Promise.all([
+  const [tasks, lists] = await Promise.all([
     fetchTasksWithDetails(supabase).catch(() => []),
-    fetchAllTags(supabase).catch(() => []),
     fetchTaskLists(supabase).catch(() => []),
   ]);
 
@@ -33,7 +32,6 @@ export default async function TasksPage() {
     <Suspense fallback={null}>
       <TasksClient
         initialTasks={tasks}
-        initialTags={tags}
         initialLists={lists}
         userId={user.id}
       />

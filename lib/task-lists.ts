@@ -1,15 +1,25 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { TaskList, TaskWithDetails } from "@/types";
-import { PLANET_TAG_COLORS } from "@/lib/tasks";
 
 // ---------------------------------------------------------------------------
-// Fixed color palette — same 8 planet hexes as tags (Mercury → Neptune).
-// Stored value is the hex string (e.g. "#2563EB"), matching tag colors.
+// Fixed color palette — eight planet-inspired hexes (Mercury → Neptune),
+// kept visually distinct.
 // ---------------------------------------------------------------------------
 
-export const LIST_COLORS = PLANET_TAG_COLORS.map((p) => p.color);
+const PLANET_COLORS = [
+  { planet: "Mercury", color: "#94A3B8" }, // cool slate gray
+  { planet: "Venus",   color: "#EAB308" }, // bright gold-yellow
+  { planet: "Earth",   color: "#16A34A" }, // verdant green
+  { planet: "Mars",    color: "#DC2626" }, // iron red
+  { planet: "Jupiter", color: "#EA580C" }, // banded orange
+  { planet: "Saturn",  color: "#D4A574" }, // pale bronze
+  { planet: "Uranus",  color: "#14B8A6" }, // icy teal
+  { planet: "Neptune", color: "#2563EB" }, // deep ocean blue
+] as const;
 
-export type ListColor = (typeof PLANET_TAG_COLORS)[number]["color"];
+export const LIST_COLORS = PLANET_COLORS.map((p) => p.color);
+
+export type ListColor = (typeof PLANET_COLORS)[number]["color"];
 
 /** @deprecated Prefer `ListColor`. Kept as an alias for existing call sites. */
 export type ListColorKey = ListColor;
