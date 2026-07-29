@@ -217,7 +217,6 @@ export function TaskCard({
 
   const canOpenMenu = !!(onSetPriority && onSetDue);
   const hasMeta =
-    !!task.list ||
     hasDue ||
     (isCompleted && !!task.completed_at);
 
@@ -380,33 +379,25 @@ export function TaskCard({
             </p>
           )}
 
-          {(!!task.list || hasDue) && (
+          {hasDue && (
             <div className="flex items-center gap-3 mt-2 flex-wrap">
-              {task.list && (
-                <span className="text-xs text-[hsl(var(--muted-foreground))]">
-                  {task.list.name}
-                </span>
-              )}
-
-              {hasDue && (
-                <span
-                  className={cn(
-                    "flex items-center gap-1 text-xs",
-                    isOverdue
-                      ? "text-red-500 font-medium"
-                      : "text-[hsl(var(--muted-foreground))]"
-                  )}
-                >
-                  <Calendar className="w-3 h-3" />
-                  {dueDateStr}
-                  {task.due_time && (
-                    <span className="flex items-center gap-0.5">
-                      <Clock className="w-3 h-3 ml-1" />
-                      {formatTimeValue(task.due_time)}
-                    </span>
-                  )}
-                </span>
-              )}
+              <span
+                className={cn(
+                  "flex items-center gap-1 text-xs",
+                  isOverdue
+                    ? "text-red-500 font-medium"
+                    : "text-[hsl(var(--muted-foreground))]"
+                )}
+              >
+                <Calendar className="w-3 h-3" />
+                {dueDateStr}
+                {task.due_time && (
+                  <span className="flex items-center gap-0.5">
+                    <Clock className="w-3 h-3 ml-1" />
+                    {formatTimeValue(task.due_time)}
+                  </span>
+                )}
+              </span>
             </div>
           )}
         </div>
