@@ -222,6 +222,7 @@ export function TaskCard({
 
   return (
     <div
+      id={`task-card-${task.id}`}
       role={onSelect ? "button" : undefined}
       tabIndex={onSelect ? 0 : undefined}
       onClick={() => onSelect?.(task)}

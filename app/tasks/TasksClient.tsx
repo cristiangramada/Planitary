@@ -105,6 +105,7 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
   const [sortReady, setSortReady] = useState(false);
   const [filterBy, setFilterBy] = useState<FilterKey>("active");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [scrollToTaskId, setScrollToTaskId] = useState<string | null>(null);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mobileListsOpen, setMobileListsOpen] = useState(false);
@@ -168,7 +169,8 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
 
   // ---------------------------------------------------------------------------
   // Deep-link support: /tasks?task=<id> (e.g. from a Search result) opens
-  // that task's editor, then clears the param so it doesn't reopen.
+  // that task's editor, scrolls it into the middle list, then clears the
+  // param so it doesn't reopen.
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
@@ -178,10 +180,34 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
     const task = tasks.find((t) => t.id === taskId);
     if (task) {
       setSelectedTaskId(task.id);
+      // Ensure the card is rendered under the current filter tab before scroll.
+      if (task.status === "completed") {
+        setFilterBy((prev) => (prev === "active" || prev === "overdue" ? "completed" : prev));
+      } else {
+        const today = localTodayStr();
+        const isOverdue = !!task.due_date && task.due_date < today;
+        setFilterBy((prev) => {
+          if (prev === "completed") return "active";
+          if (prev === "overdue" && !isOverdue) return "active";
+          return prev;
+        });
+      }
+      setScrollToTaskId(task.id);
     }
     /* eslint-enable react-hooks/set-state-in-effect */
     router.replace("/tasks", { scroll: false });
   }, [searchParams, tasks, router]);
+
+  useEffect(() => {
+    if (!scrollToTaskId) return;
+    const frame = requestAnimationFrame(() => {
+      document
+        .getElementById(`task-card-${scrollToTaskId}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setScrollToTaskId(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [scrollToTaskId, filterBy]);
 
   // ---------------------------------------------------------------------------
   // Derived state
