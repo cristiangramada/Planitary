@@ -33,7 +33,7 @@ import { parseDateOnly } from "@/utils/date";
 import { DashboardSection, DashboardSkeletonRows, DashboardEmptyState } from "./DashboardSection";
 import { JournalPreview } from "./JournalPreview";
 import { EventsPreview } from "./EventsPreview";
-import type { TaskWithDetails, CalendarEvent, Priority } from "@/types";
+import type { TaskWithDetails, CalendarEvent, Priority, RepeatOption } from "@/types";
 
 interface DashboardClientProps {
   initialDate: string;
@@ -164,13 +164,14 @@ export function DashboardClient({
       removeTask(taskId); // optimistic — Dashboard only shows active tasks
       try {
         const supabase = createClient();
-        await setTaskComplete(supabase, taskId, completed);
+        const { nextTask } = await setTaskComplete(supabase, taskId, completed);
+        if (nextTask) placeTask(nextTask);
       } catch (err) {
         setMutationError(err instanceof Error ? err.message : "Failed to update task.");
         refetchAll();
       }
     },
-    [refetchAll, removeTask]
+    [refetchAll, removeTask, placeTask]
   );
 
   const handleRenameTitle = useCallback(
@@ -218,20 +219,27 @@ export function DashboardClient({
   );
 
   const handleSetDue = useCallback(
-    async (taskId: string, date: string | null, time: string | null) => {
+    async (taskId: string, date: string | null, time: string | null, repeat: RepeatOption) => {
       const due_time = date && time ? (time.length === 5 ? `${time}:00` : time) : null;
       setData((d) => ({
         ...d,
         todayTasks: {
           ...d.todayTasks,
           data: d.todayTasks.data.map((t) =>
-            t.id === taskId ? { ...t, due_date: date, due_time } : t
+            t.id === taskId ? { ...t, due_date: date, due_time, repeat } : t
           ),
         },
       }));
       try {
         const supabase = createClient();
-        await patchTaskFields(supabase, taskId, { due_date: date, due_time });
+        const applied = await patchTaskFields(supabase, taskId, { due_date: date, due_time, repeat });
+        setData((d) => ({
+          ...d,
+          todayTasks: {
+            ...d.todayTasks,
+            data: d.todayTasks.data.map((t) => (t.id === taskId ? { ...t, ...applied } : t)),
+          },
+        }));
       } catch (err) {
         setMutationError(err instanceof Error ? err.message : "Failed to update due date.");
         refetchAll();

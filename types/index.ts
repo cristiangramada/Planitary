@@ -9,6 +9,9 @@ export interface Profile {
   created_at: string;
 }
 
+/** Recurrence cadence for a task. `never` means the task does not repeat. */
+export type RepeatOption = "never" | "daily" | "weekly" | "monthly" | "yearly";
+
 export interface Task {
   id: string;
   user_id: string;
@@ -20,6 +23,12 @@ export interface Task {
   due_time: string | null;   // HH:MM:SS
   completed_at: string | null;
   list_id: string | null;
+  /** Recurrence cadence; "never" (default) means this task does not repeat. */
+  repeat: RepeatOption;
+  /** Shared by every task in a recurring series; null when `repeat` is "never". */
+  recurrence_id: string | null;
+  /** Day-of-month (1-31) the series anchors to for monthly/yearly clamping; null when `repeat` is "never". */
+  recurrence_anchor_day: number | null;
   created_at: string;
   updated_at: string;
 }

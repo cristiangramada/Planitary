@@ -5,24 +5,20 @@ import { ChevronLeft, ChevronRight, Clock, Repeat, X } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { PickerSelect } from "@/components/ui/PickerSelect";
 import { TIME_SLOTS, snapToSlot } from "@/components/ui/TimeDropdown";
+import type { RepeatOption } from "@/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public types (exported so TaskForm can use them)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type RepeatOption =
-  | "never"
-  | "daily"
-  | "weekly"
-  | "monthly"
-  | "yearly";
+export type { RepeatOption };
 
 export interface DatePickerValue {
   /** ISO date string YYYY-MM-DD, or null for no date */
   date: string | null;
   /** HH:MM string, or null for no time */
   time: string | null;
-  /** Repeat preference — stored in UI state only until DB column is added */
+  /** Repeat preference. Persisted; requires a date (see lib/recurrence.ts). */
   repeat: RepeatOption;
 }
 
@@ -467,10 +463,11 @@ export function TaskDatePicker({
   }
 
   function handleOk() {
+    // Repeat requires a due date (see resolveRepeatFields); clear it if none.
     onConfirm({
       date: selectedDate,
-      time: selectedTime,
-      repeat,
+      time: selectedDate ? selectedTime : null,
+      repeat: selectedDate ? repeat : "never",
     });
   }
 

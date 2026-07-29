@@ -86,8 +86,7 @@ function TaskFormBody({
     if (!editTask?.due_time) return null;
     return editTask.due_time.slice(0, 5);
   });
-  // Repeat is UI-only for now (not yet persisted to DB)
-  const [repeat, setRepeat] = useState<RepeatOption>("never");
+  const [repeat, setRepeat] = useState<RepeatOption>(editTask?.repeat ?? "never");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -130,6 +129,7 @@ function TaskFormBody({
           due_date: dueDate,
           due_time: dueDate && dueTime ? dueTime + ":00" : null,
           list_id: editTask ? editTask.list_id : (defaultListId ?? null),
+          repeat,
         },
         preservedSubtasks
       );

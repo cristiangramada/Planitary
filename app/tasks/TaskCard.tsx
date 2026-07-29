@@ -6,7 +6,7 @@ import { cn } from "@/utils/cn";
 import type { MoveToListOption } from "@/app/calendar/AgendaItemContextMenu";
 import { relativeDate, formatDate, parseDateOnly } from "@/utils/date";
 import { formatTimeValue } from "@/components/ui/TimeDropdown";
-import type { Priority, TaskWithDetails } from "@/types";
+import type { Priority, RepeatOption, TaskWithDetails } from "@/types";
 import { TaskContextMenu } from "./TaskContextMenu";
 
 interface TaskCardProps {
@@ -16,7 +16,12 @@ interface TaskCardProps {
   /** Inline title edit (also opens the detail panel). */
   onRenameTitle?: (taskId: string, title: string) => Promise<void>;
   onSetPriority?: (taskId: string, priority: Priority) => Promise<void>;
-  onSetDue?: (taskId: string, date: string | null, time: string | null) => Promise<void>;
+  onSetDue?: (
+    taskId: string,
+    date: string | null,
+    time: string | null,
+    repeat: RepeatOption
+  ) => Promise<void>;
   /** Left-click anywhere on the card (except the check circle) opens the detail panel. */
   onSelect?: (task: TaskWithDetails) => void;
   selected?: boolean;
@@ -105,11 +110,10 @@ export function TaskCard({
     }
   }, [editingTitle]);
 
-  useEffect(() => {
-    if (optimisticTitle != null && task.title === optimisticTitle) {
-      setOptimisticTitle(null);
-    }
-  }, [task.title, optimisticTitle]);
+  // Clear optimistic title once the prop catches up (adjust state during render).
+  if (optimisticTitle != null && task.title === optimisticTitle) {
+    setOptimisticTitle(null);
+  }
 
   const displayTitle = optimisticTitle ?? task.title;
 
@@ -439,7 +443,7 @@ export function TaskCard({
           onClose={() => setContextMenu(null)}
           onDelete={() => onDelete(task.id)}
           onSetPriority={(priority) => onSetPriority!(task.id, priority)}
-          onSetDue={(date, time) => onSetDue!(task.id, date, time)}
+          onSetDue={(date, time, repeat) => onSetDue!(task.id, date, time, repeat)}
           onMoveToList={
             onMoveToList ? (listId) => onMoveToList(task.id, listId) : undefined
           }

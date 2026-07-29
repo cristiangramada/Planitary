@@ -47,7 +47,7 @@ interface TaskContextMenuProps {
   onClose: () => void;
   onDelete: () => void;
   onSetPriority: (priority: Priority) => Promise<void>;
-  onSetDue: (date: string | null, time: string | null) => Promise<void>;
+  onSetDue: (date: string | null, time: string | null, repeat: RepeatOption) => Promise<void>;
   onMoveToList?: (listId: string | null) => void;
 }
 
@@ -70,16 +70,13 @@ export function TaskContextMenu({
   const [movingOpen, setMovingOpen] = useState(false);
   const [dueOpen, setDueOpen] = useState(false);
   const [dueAnchor, setDueAnchor] = useState<{ x: number; y: number } | null>(null);
-  const [repeat, setRepeat] = useState<RepeatOption>("never");
-  /** Local highlight so the flag row updates without closing the menu. */
-  const [currentPriority, setCurrentPriority] = useState<Priority>(task.priority);
+  const [repeat, setRepeat] = useState<RepeatOption>(task.repeat);
+  /** Local highlight while a priority change is in flight; falls back to the task prop. */
+  const [priorityOverride, setPriorityOverride] = useState<Priority | null>(null);
+  const currentPriority = priorityOverride ?? task.priority;
   const [pos, setPos] = useState(() => fitMenuPos(x, y, align, 280, anchorTop));
 
   const canMove = !!lists && !!onMoveToList;
-
-  useEffect(() => {
-    setCurrentPriority(task.priority);
-  }, [task.priority]);
 
   useLayoutEffect(() => {
     const h = menuRef.current?.offsetHeight ?? 280;
@@ -117,12 +114,12 @@ export function TaskContextMenu({
 
   async function selectPriority(priority: Priority) {
     if (priority === currentPriority) return;
-    const prev = currentPriority;
-    setCurrentPriority(priority);
+    setPriorityOverride(priority);
     try {
       await onSetPriority(priority);
+      setPriorityOverride(null);
     } catch {
-      setCurrentPriority(prev);
+      setPriorityOverride(null);
     }
   }
 
@@ -143,7 +140,8 @@ export function TaskContextMenu({
     setRepeat(value.repeat);
     await onSetDue(
       value.date,
-      value.date && value.time ? value.time : null
+      value.date && value.time ? value.time : null,
+      value.repeat
     );
     setDueOpen(false);
     setDueAnchor(null);
@@ -171,10 +169,10 @@ export function TaskContextMenu({
                 <button
                   key={p.value}
                   type="button"
-                  role="menuitem"
+                  role="menuitemradio"
                   title={p.label}
                   aria-label={p.label}
-                  aria-pressed={currentPriority === p.value}
+                  aria-checked={currentPriority === p.value}
                   onClick={() => void selectPriority(p.value)}
                   className={cn(
                     "flex-1 flex items-center justify-center p-2 rounded-lg transition-colors cursor-pointer",

@@ -90,9 +90,15 @@ export function ListsPanel({
   const didDragRef = useRef(false);
   const rowElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const listsRef = useRef(lists);
-  listsRef.current = lists;
   const dropIndexRef = useRef(dropIndex);
-  dropIndexRef.current = dropIndex;
+
+  useEffect(() => {
+    listsRef.current = lists;
+  }, [lists]);
+
+  useEffect(() => {
+    dropIndexRef.current = dropIndex;
+  }, [dropIndex]);
 
   useEffect(() => {
     if (renamingId) renameInputRef.current?.focus();

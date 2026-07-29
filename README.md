@@ -251,7 +251,7 @@ Desktop (`lg+`): two columns — **Today's tasks** and **Today's events** stacke
 
 ### Database
 
-- **Migrations:** `supabase/migrations/0006_task_lists.sql` and `0007_search_list_support.sql` (run in order; do not modify `0001`–`0005`). `0009_remove_tags.sql` later recreates `search_planitary()` again to drop the tag join.
+- **Migrations:** `supabase/migrations/0006_task_lists.sql` and `0007_search_list_support.sql` (run in order; do not modify `0001`–`0005`). `0008_priority_none.sql` widens the tasks priority check to allow `'none'`. `0009_remove_tags.sql` later recreates `search_planitary()` again to drop the tag join. `0010_task_repeat.sql` adds task recurrence (see [Task Repeat](#task-repeat) below).
 - **Schema:** `public.task_lists (id, user_id, name, color, icon, position, created_at, updated_at)`; `public.tasks` gains a nullable `list_id uuid references public.task_lists(id) on delete set null`.
 - **Inbox is not a database row.** A task with `list_id = null` is the "Inbox" system view — same convention as the existing smart views (All/Active/Overdue/Completed), which also aren't stored rows.
 - **Deleting a List never deletes its Tasks.** `on delete set null` moves them to Inbox automatically; the app also mirrors this locally so the UI doesn't need a refetch.
@@ -301,8 +301,9 @@ The Lists panel is a persistent ~240px column on desktop (`lg+`), and a left sli
 
 ### Manual Supabase steps
 
-- [ ] Apply `supabase/migrations/0006_task_lists.sql`, then `0007_search_list_support.sql` (SQL editor or `supabase db push`), in that order.
+- [ ] Apply `supabase/migrations/0006_task_lists.sql`, then `0007_search_list_support.sql`, then `0008_priority_none.sql` (SQL editor or `supabase db push`), in that order.
 - [ ] Apply `supabase/migrations/0009_remove_tags.sql`. **This permanently deletes the `tags` and `task_tags` tables and all existing tag data/associations** — Tags were removed from V1; Tasks themselves (and their subtasks, priorities, due dates, and List assignments) are unaffected. Confirm `tags`/`task_tags` no longer appear under Database → Tables afterward.
+- [ ] Apply `supabase/migrations/0010_task_repeat.sql` (see [Task Repeat](#task-repeat)).
 - [ ] Confirm `task_lists` has RLS enabled with 4 policies (Database → Tables → task_lists → RLS).
 - [ ] Confirm the unique index `task_lists_user_id_name_lower_idx` exists (Database → Indexes).
 - [ ] As User A, create a List, then as User B confirm `select * from task_lists` (via the app, not the SQL editor's superuser context) never returns User A's List.
@@ -327,4 +328,59 @@ The Lists panel is a persistent ~240px column on desktop (`lg+`), and a left sli
 - [ ] Confirm the Dashboard's Today's tasks section is unaffected (still shows tasks due today regardless of List).
 - [ ] Mobile: open the Lists drawer from the Tasks header, select/create/rename/delete a List, and confirm no horizontal overflow.
 - [ ] Dark mode and light mode both render the Lists panel, color swatches, and context menus correctly.
+
+## Task Repeat
+
+Tasks can repeat daily, weekly, monthly, or yearly. V1 uses an **on-completion** model: completing a recurring task creates exactly one next-occurrence row with an advanced due date. Future occurrences are not pre-generated.
+
+### Database
+
+- **Migration:** `supabase/migrations/0010_task_repeat.sql` (additive; do not modify earlier migrations).
+- **Columns on `public.tasks`:**
+  - `repeat` — `'never' | 'daily' | 'weekly' | 'monthly' | 'yearly'` (default `'never'`).
+  - `recurrence_id` — shared UUID for every task in a series; `null` when not recurring.
+  - `recurrence_anchor_day` — day-of-month (1–31) used to clamp monthly/yearly dates after short months (e.g. Jan 31 → Feb 28 → Mar 31).
+- **Consistency check:** either non-recurring (`repeat = 'never'` and both series fields null) or fully recurring (series id + anchor day set **and** a due date). Repeat without a due date is rejected at the DB and normalized to `'never'` in the app.
+- **Idempotency:** unique constraint on `(user_id, recurrence_id, due_date)` so double-complete / retry / race cannot create two rows for the same occurrence date. A unique-violation (`23505`) is treated as a no-op when spawning the next occurrence.
+- **RLS:** unchanged — next-occurrence inserts use the signed-in user's `user_id` from the source task; table policies still enforce ownership.
+
+### Application layer
+
+| Concern | File |
+|---|---|
+| `RepeatOption`, Task recurrence fields | `types/index.ts` |
+| Next-date math + create/update field resolution | `lib/recurrence.ts` |
+| Create/update/patch + complete → next occurrence | `lib/tasks.ts` |
+| Date/time/repeat picker | `app/tasks/TaskDatePicker.tsx` |
+| Quick add / form / detail / context menu wiring | `app/tasks/TaskQuickAdd.tsx`, `TaskForm.tsx`, `TaskDetailPanel.tsx`, `TaskContextMenu.tsx` |
+| Tasks + Dashboard UI refresh after complete | `app/tasks/TasksClient.tsx`, `app/dashboard/DashboardClient.tsx` |
+
+### Behavior
+
+- Setting a repeat value requires a due date; clearing the date also clears repeat.
+- Completing a recurring task marks it completed and inserts the next occurrence (same title, notes, priority, list, due time, series id; subtasks copied with completion reset).
+- Reopening a completed recurring task does **not** create another occurrence. Completing the same occurrence again is idempotent.
+- Monthly/yearly use a fixed series `recurrence_anchor_day` so a short month does not permanently shrink later dates.
+
+### Known limitations
+
+- No “edit this and all future”, skip occurrence, or end-by date/count in V1.
+- No RRULE / custom interval (every N weeks, weekdays-only, etc.).
+- Completing then failing to insert the next occurrence (non-unique errors) can leave the source task completed without a successor — rare; retrying complete is safe thanks to the unique constraint when a successor already exists.
+
+### Manual Supabase steps
+
+- [ ] Apply `supabase/migrations/0010_task_repeat.sql` (SQL editor or `supabase db push`).
+- [ ] Confirm `tasks` has columns `repeat`, `recurrence_id`, `recurrence_anchor_day` and constraints `tasks_repeat_recurrence_consistency` + `tasks_recurrence_occurrence_unique`.
+
+### Manual testing checklist
+
+- [ ] Create a task with a due date and Repeat = Daily/Weekly/Monthly/Yearly; confirm it persists after refresh.
+- [ ] Attempt Repeat without a due date; confirm it saves as Never.
+- [ ] Complete a recurring task; confirm exactly one next occurrence appears with the advanced due date.
+- [ ] Complete the same occurrence twice (or double-click complete); confirm no duplicate next task.
+- [ ] For monthly anchored on the 31st, complete Jan 31 → Feb (28/29) → Mar 31 (anchor not degraded).
+- [ ] Dashboard: complete a recurring task due today whose next date is not today; confirm it leaves Today's list and the next occurrence only appears when due today.
+- [ ] Subtasks on a recurring task reset to incomplete on the next occurrence.
+- [ ] Dark/light mode and mobile: date picker Repeat control remains usable without overflow.
 

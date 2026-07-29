@@ -60,6 +60,7 @@ export function TaskQuickAdd({ defaultListId, onCreate }: TaskQuickAddProps) {
         due_date: dueDate,
         due_time: dueDate && dueTime ? `${dueTime}:00` : null,
         list_id: defaultListId,
+        repeat,
       });
       resetDraft();
       inputRef.current?.focus();

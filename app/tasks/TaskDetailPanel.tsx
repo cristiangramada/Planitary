@@ -21,7 +21,9 @@ interface TaskDetailPanelProps {
   onToggleSubtask: (taskId: string, subtaskId: string, completed: boolean) => void;
   onPatchFields: (
     taskId: string,
-    fields: Partial<Pick<TaskWithDetails, "priority" | "due_date" | "due_time">>
+    fields: Partial<Pick<TaskWithDetails, "priority" | "due_date" | "due_time">> & {
+      repeat?: RepeatOption;
+    }
   ) => Promise<void>;
 }
 
@@ -79,7 +81,7 @@ export function TaskDetailPanel({
   const [switching, setSwitching] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerAnchor, setPickerAnchor] = useState<{ x: number; y: number } | null>(null);
-  const [repeat, setRepeat] = useState<RepeatOption>("never");
+  const [repeat, setRepeat] = useState<RepeatOption>(task.repeat);
   const [priorityMenu, setPriorityMenu] = useState<{ x: number; y: number } | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const dueBtnRef = useRef<HTMLButtonElement>(null);
@@ -231,6 +233,7 @@ export function TaskDetailPanel({
       await onPatchFields(task.id, {
         due_date: value.date,
         due_time: value.date && value.time ? `${value.time}:00` : null,
+        repeat: value.repeat,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't update due date.");

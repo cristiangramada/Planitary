@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Task, Subtask, TaskList, TaskWithDetails, Priority } from "@/types";
+import type { Task, Subtask, TaskList, TaskWithDetails, Priority, RepeatOption } from "@/types";
+import {
+  nextRecurrenceDate,
+  resolveRepeatFields,
+  type ExistingRepeatState,
+} from "@/lib/recurrence";
 
 /** Canonical priority ordering used everywhere tasks are priority-sorted. */
 export const TASK_PRIORITY_ORDER: Record<Priority, number> = {
@@ -96,6 +101,7 @@ export interface TaskFormData {
   due_time: string | null;
   /** The List this task belongs to, or null for Inbox. */
   list_id: string | null;
+  repeat: RepeatOption;
 }
 
 /** Subtask items as represented in the form (new items have no id). */
@@ -112,6 +118,8 @@ export async function createTask(
   data: TaskFormData,
   subtasks: SubtaskFormItem[]
 ): Promise<TaskWithDetails> {
+  const repeatFields = resolveRepeatFields(data.repeat, data.due_date, null);
+
   const { data: task, error: taskErr } = await supabase
     .from("tasks")
     .insert({
@@ -122,6 +130,7 @@ export async function createTask(
       due_date: data.due_date,
       due_time: data.due_time,
       list_id: data.list_id,
+      ...repeatFields,
     })
     .select("id")
     .single();
@@ -151,6 +160,18 @@ export async function updateTask(
   data: TaskFormData,
   subtasks: SubtaskFormItem[]
 ): Promise<TaskWithDetails> {
+  const { data: existing, error: existingErr } = await supabase
+    .from("tasks")
+    .select("repeat, recurrence_id, recurrence_anchor_day, due_date")
+    .eq("id", taskId)
+    .single();
+  if (existingErr) throw existingErr;
+  const repeatFields = resolveRepeatFields(
+    data.repeat,
+    data.due_date,
+    existing as ExistingRepeatState
+  );
+
   const { error: taskErr } = await supabase
     .from("tasks")
     .update({
@@ -160,6 +181,7 @@ export async function updateTask(
       due_date: data.due_date,
       due_time: data.due_time,
       list_id: data.list_id,
+      ...repeatFields,
     })
     .eq("id", taskId);
   if (taskErr) throw taskErr;
@@ -201,14 +223,41 @@ export async function updateTaskTitleNotes(
   if (error) throw error;
 }
 
-/** Patches selected task fields without touching subtasks. */
+/**
+ * Patches selected task fields without touching subtasks. When `repeat` is
+ * included, resolves recurrence_id/recurrence_anchor_day against the task's
+ * current series state (fetched fresh) and returns the full set of fields
+ * actually written, so callers can merge an accurate patch into local state.
+ */
 export async function patchTaskFields(
   supabase: SupabaseClient,
   taskId: string,
-  fields: Partial<Pick<Task, "priority" | "due_date" | "due_time" | "title" | "notes">>
-): Promise<void> {
-  const { error } = await supabase.from("tasks").update(fields).eq("id", taskId);
+  fields: Partial<Pick<Task, "priority" | "due_date" | "due_time" | "title" | "notes">> & {
+    repeat?: RepeatOption;
+  }
+): Promise<Partial<Task>> {
+  const { repeat, ...rest } = fields;
+  let payload: Partial<Task> = { ...rest };
+
+  if (repeat !== undefined) {
+    const { data: existing, error: fetchErr } = await supabase
+      .from("tasks")
+      .select("repeat, recurrence_id, recurrence_anchor_day, due_date")
+      .eq("id", taskId)
+      .single();
+    if (fetchErr) throw fetchErr;
+    const dueDate =
+      fields.due_date !== undefined ? fields.due_date : (existing.due_date as string | null);
+    payload = {
+      ...payload,
+      due_date: dueDate,
+      ...resolveRepeatFields(repeat, dueDate, existing as ExistingRepeatState),
+    };
+  }
+
+  const { error } = await supabase.from("tasks").update(payload).eq("id", taskId);
   if (error) throw error;
+  return payload;
 }
 
 /** Replaces all subtasks for a task (delete + insert), preserving completion flags. */
@@ -248,15 +297,121 @@ export async function deleteTask(
 }
 
 // ---------------------------------------------------------------------------
-// Completion toggles
+// Completion toggles + recurrence — completing a recurring task creates one
+// next occurrence.
 // ---------------------------------------------------------------------------
 
-/** Marks a task as completed or reopens it. Returns updated task partial. */
+/** Minimal shape of a recurring task row needed to build its next occurrence. */
+export interface RecurrenceSourceTask {
+  user_id: string;
+  title: string;
+  notes: string | null;
+  priority: Priority;
+  due_date: string;
+  due_time: string | null;
+  list_id: string | null;
+  repeat: RepeatOption;
+  recurrence_id: string;
+  recurrence_anchor_day: number;
+}
+
+/** Pure: builds the insert payload for a recurring task's next occurrence. */
+export function buildNextOccurrenceInsert(source: RecurrenceSourceTask) {
+  const due_date = nextRecurrenceDate(
+    source.due_date,
+    source.repeat as Exclude<RepeatOption, "never">,
+    source.recurrence_anchor_day
+  );
+  return {
+    user_id: source.user_id,
+    title: source.title,
+    notes: source.notes,
+    priority: source.priority,
+    due_date,
+    due_time: source.due_time,
+    list_id: source.list_id,
+    repeat: source.repeat,
+    recurrence_id: source.recurrence_id,
+    recurrence_anchor_day: source.recurrence_anchor_day,
+  };
+}
+
+/** Pure: builds fresh (incomplete) subtask rows copied onto a next occurrence. */
+export function buildNextOccurrenceSubtasks(
+  sourceSubtasks: { title: string }[],
+  userId: string,
+  newTaskId: string
+) {
+  return sourceSubtasks.map((s) => ({
+    task_id: newTaskId,
+    user_id: userId,
+    title: s.title,
+    is_completed: false,
+  }));
+}
+
+async function createNextOccurrence(
+  supabase: SupabaseClient,
+  sourceTaskId: string,
+  source: RecurrenceSourceTask
+): Promise<TaskWithDetails | null> {
+  const { data: inserted, error } = await supabase
+    .from("tasks")
+    .insert(buildNextOccurrenceInsert(source))
+    .select("id")
+    .single();
+
+  if (error) {
+    // Unique violation on (user_id, recurrence_id, due_date) means the next
+    // occurrence already exists — a double-click, retry, or race. Treat as
+    // an idempotent no-op rather than surfacing a duplicate-creation error.
+    if ((error as { code?: string }).code === "23505") return null;
+    throw error;
+  }
+
+  const newTaskId = inserted.id as string;
+
+  const { data: sourceSubtasks, error: subFetchErr } = await supabase
+    .from("subtasks")
+    .select("title")
+    .eq("task_id", sourceTaskId);
+  if (subFetchErr) throw subFetchErr;
+
+  if (sourceSubtasks && sourceSubtasks.length > 0) {
+    const { error: subErr } = await supabase
+      .from("subtasks")
+      .insert(buildNextOccurrenceSubtasks(sourceSubtasks as { title: string }[], source.user_id, newTaskId));
+    if (subErr) throw subErr;
+  }
+
+  return refetchTask(supabase, newTaskId);
+}
+
+export interface SetTaskCompleteResult {
+  task: Pick<Task, "status" | "completed_at">;
+  /**
+   * The newly created next occurrence, when completing a recurring task
+   * produced one. Null when reopening, the task doesn't repeat, or the
+   * occurrence already existed (idempotent retry/race).
+   */
+  nextTask: TaskWithDetails | null;
+}
+
+/** Marks a task as completed or reopens it. Reopening never creates a next occurrence. */
 export async function setTaskComplete(
   supabase: SupabaseClient,
   taskId: string,
   completed: boolean
-): Promise<Pick<Task, "status" | "completed_at">> {
+): Promise<SetTaskCompleteResult> {
+  const { data: current, error: fetchErr } = await supabase
+    .from("tasks")
+    .select(
+      "user_id, title, notes, priority, due_date, due_time, list_id, repeat, recurrence_id, recurrence_anchor_day"
+    )
+    .eq("id", taskId)
+    .single();
+  if (fetchErr) throw fetchErr;
+
   const update = completed
     ? { status: "completed" as const, completed_at: new Date().toISOString() }
     : { status: "active" as const, completed_at: null };
@@ -267,9 +422,20 @@ export async function setTaskComplete(
     .eq("id", taskId)
     .select("status, completed_at")
     .single();
-
   if (error) throw error;
-  return data as Pick<Task, "status" | "completed_at">;
+
+  let nextTask: TaskWithDetails | null = null;
+  if (
+    completed &&
+    current.repeat !== "never" &&
+    current.recurrence_id &&
+    current.recurrence_anchor_day != null &&
+    current.due_date
+  ) {
+    nextTask = await createNextOccurrence(supabase, taskId, current as RecurrenceSourceTask);
+  }
+
+  return { task: data as Pick<Task, "status" | "completed_at">, nextTask };
 }
 
 /** Toggles a subtask's is_completed flag. */

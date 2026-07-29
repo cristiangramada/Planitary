@@ -22,7 +22,7 @@ import {
   patchTaskFields,
   TASK_PRIORITY_ORDER,
 } from "@/lib/tasks";
-import type { TaskWithDetails, TaskList, Subtask, Priority } from "@/types";
+import type { TaskWithDetails, TaskList, Subtask, Priority, RepeatOption } from "@/types";
 import type { TaskFormData, SubtaskFormItem } from "@/lib/tasks";
 import {
   createTaskList,
@@ -355,10 +355,14 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
       );
       try {
         const supabase = createClient();
-        const result = await setTaskComplete(supabase, taskId, shouldComplete);
-        setTasks((prev) =>
-          prev.map((t) => (t.id === taskId ? { ...t, ...result } : t))
-        );
+        const { task: result, nextTask } = await setTaskComplete(supabase, taskId, shouldComplete);
+        setTasks((prev) => {
+          const updated = prev.map((t) => (t.id === taskId ? { ...t, ...result } : t));
+          if (nextTask && !updated.some((t) => t.id === nextTask.id)) {
+            return [nextTask, ...updated];
+          }
+          return updated;
+        });
       } catch (err) {
         // Revert
         setTasks((prev) =>
@@ -447,12 +451,14 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
   const handlePatchFields = useCallback(
     async (
       taskId: string,
-      fields: Partial<Pick<TaskWithDetails, "priority" | "due_date" | "due_time">>
+      fields: Partial<Pick<TaskWithDetails, "priority" | "due_date" | "due_time">> & {
+        repeat?: RepeatOption;
+      }
     ) => {
       const supabase = createClient();
-      await patchTaskFields(supabase, taskId, fields);
+      const applied = await patchTaskFields(supabase, taskId, fields);
       setTasks((prev) =>
-        prev.map((t) => (t.id === taskId ? { ...t, ...fields } : t))
+        prev.map((t) => (t.id === taskId ? { ...t, ...applied } : t))
       );
     },
     []
@@ -466,10 +472,11 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
   );
 
   const handleSetDue = useCallback(
-    async (taskId: string, date: string | null, time: string | null) => {
+    async (taskId: string, date: string | null, time: string | null, repeat: RepeatOption) => {
       await handlePatchFields(taskId, {
         due_date: date,
         due_time: date && time ? (time.length === 5 ? `${time}:00` : time) : null,
+        repeat,
       });
     },
     [handlePatchFields]
