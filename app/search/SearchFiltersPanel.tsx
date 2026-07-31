@@ -19,7 +19,7 @@ const SORT_OPTIONS: { value: SearchSortMode; label: string }[] = [
   { value: "oldest", label: "Oldest" },
 ];
 
-const PRIORITY_OPTIONS: Priority[] = ["high", "medium", "low"];
+const PRIORITY_OPTIONS: Priority[] = ["high", "medium", "low", "none"];
 
 interface SearchFiltersPanelProps {
   filters: SearchFilters;

@@ -1,11 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Task, Subtask, Tag, TaskWithDetails, Priority } from "@/types";
+import type { Task, Subtask, TaskList, TaskWithDetails, Priority, RepeatOption } from "@/types";
+import {
+  nextRecurrenceDate,
+  resolveRepeatFields,
+  type ExistingRepeatState,
+} from "@/lib/recurrence";
 
 /** Canonical priority ordering used everywhere tasks are priority-sorted. */
 export const TASK_PRIORITY_ORDER: Record<Priority, number> = {
   high: 0,
   medium: 1,
   low: 2,
+  none: 3,
 };
 
 // ---------------------------------------------------------------------------
@@ -16,32 +22,30 @@ interface RawTaskRow extends Omit<Task, "priority" | "status"> {
   priority: string;
   status: string;
   subtasks: Subtask[];
-  task_tags: Array<{ tags: Tag | null }>;
+  task_lists: Pick<TaskList, "id" | "name" | "color" | "icon"> | null;
 }
 
 /** Normalizes the Supabase nested-select shape into TaskWithDetails. */
 function normalize(raw: RawTaskRow): TaskWithDetails {
-  const { task_tags, ...fields } = raw;
+  const { task_lists, ...fields } = raw;
   return {
     ...(fields as unknown as Task),
     subtasks: raw.subtasks ?? [],
-    tags: (task_tags ?? [])
-      .map((tt) => tt.tags)
-      .filter((t): t is Tag => t !== null),
+    list: task_lists ?? null,
   };
 }
 
 const TASK_SELECT = `
   *,
   subtasks ( * ),
-  task_tags ( tags ( * ) )
+  task_lists ( id, name, color, icon )
 ` as const;
 
 // ---------------------------------------------------------------------------
 // Read
 // ---------------------------------------------------------------------------
 
-/** Fetches all tasks for the signed-in user (includes subtasks + tags). */
+/** Fetches all tasks for the signed-in user (includes subtasks). */
 export async function fetchTasksWithDetails(
   supabase: SupabaseClient
 ): Promise<TaskWithDetails[]> {
@@ -52,17 +56,6 @@ export async function fetchTasksWithDetails(
 
   if (error) throw error;
   return ((data as RawTaskRow[]) ?? []).map(normalize);
-}
-
-/** Fetches all tags for the signed-in user. */
-export async function fetchAllTags(supabase: SupabaseClient): Promise<Tag[]> {
-  const { data, error } = await supabase
-    .from("tags")
-    .select("*")
-    .order("name", { ascending: true });
-
-  if (error) throw error;
-  return (data as Tag[]) ?? [];
 }
 
 /** Fetches active tasks due on a specific local date (YYYY-MM-DD), for the Dashboard. */
@@ -106,6 +99,9 @@ export interface TaskFormData {
   priority: Priority;
   due_date: string | null;
   due_time: string | null;
+  /** The List this task belongs to, or null for Inbox. */
+  list_id: string | null;
+  repeat: RepeatOption;
 }
 
 /** Subtask items as represented in the form (new items have no id). */
@@ -115,79 +111,15 @@ export interface SubtaskFormItem {
   is_completed: boolean;
 }
 
-/** Tag items as represented in the form (new items have no id). */
-export interface TagFormItem {
-  id?: string;
-  name: string;
-  color: string | null;
-}
-
-/** Eight planet-inspired tag colors (Mercury → Neptune), kept visually distinct. */
-export const PLANET_TAG_COLORS = [
-  { planet: "Mercury", color: "#94A3B8" }, // cool slate gray
-  { planet: "Venus",   color: "#EAB308" }, // bright gold-yellow
-  { planet: "Earth",   color: "#16A34A" }, // verdant green
-  { planet: "Mars",    color: "#DC2626" }, // iron red
-  { planet: "Jupiter", color: "#EA580C" }, // banded orange
-  { planet: "Saturn",  color: "#D4A574" }, // pale bronze
-  { planet: "Uranus",  color: "#14B8A6" }, // icy teal
-  { planet: "Neptune", color: "#2563EB" }, // deep ocean blue
-] as const;
-
-const TAG_COLORS = PLANET_TAG_COLORS.map((p) => p.color);
-
-function pickColor(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
-}
-
-/**
- * Resolves tag form items to tag IDs, creating new tags in Supabase as needed.
- * Returns IDs for all tags.
- */
-async function resolveTagIds(
-  supabase: SupabaseClient,
-  userId: string,
-  tags: TagFormItem[]
-): Promise<string[]> {
-  const ids: string[] = [];
-
-  for (const tag of tags) {
-    if (tag.id) {
-      ids.push(tag.id);
-    } else {
-      // Upsert so duplicate names are handled gracefully
-      const { data, error } = await supabase
-        .from("tags")
-        .upsert(
-          { user_id: userId, name: tag.name, color: tag.color ?? pickColor(tag.name) },
-          { onConflict: "user_id,name", ignoreDuplicates: false }
-        )
-        .select("id")
-        .single();
-      if (error) throw error;
-      ids.push(data.id as string);
-    }
-  }
-
-  return ids;
-}
-
-/** Creates a task with subtasks and tags. Returns the full TaskWithDetails. */
+/** Creates a task with subtasks. Returns the full TaskWithDetails. */
 export async function createTask(
   supabase: SupabaseClient,
   userId: string,
   data: TaskFormData,
-  subtasks: SubtaskFormItem[],
-  tags: TagFormItem[]
+  subtasks: SubtaskFormItem[]
 ): Promise<TaskWithDetails> {
-  // 1. Resolve / create tags
-  const tagIds = await resolveTagIds(supabase, userId, tags);
+  const repeatFields = resolveRepeatFields(data.repeat, data.due_date, null);
 
-  // 2. Insert task
   const { data: task, error: taskErr } = await supabase
     .from("tasks")
     .insert({
@@ -197,13 +129,14 @@ export async function createTask(
       priority: data.priority,
       due_date: data.due_date,
       due_time: data.due_time,
+      list_id: data.list_id,
+      ...repeatFields,
     })
     .select("id")
     .single();
   if (taskErr) throw taskErr;
   const taskId = task.id as string;
 
-  // 3. Insert subtasks
   if (subtasks.length > 0) {
     const { error } = await supabase.from("subtasks").insert(
       subtasks.map((s) => ({
@@ -216,30 +149,29 @@ export async function createTask(
     if (error) throw error;
   }
 
-  // 4. Insert task_tags
-  if (tagIds.length > 0) {
-    const { error } = await supabase.from("task_tags").insert(
-      tagIds.map((tagId) => ({ task_id: taskId, tag_id: tagId }))
-    );
-    if (error) throw error;
-  }
-
   return refetchTask(supabase, taskId);
 }
 
-/** Updates a task's fields, subtasks, and tags. Returns the full TaskWithDetails. */
+/** Updates a task's fields and subtasks. Returns the full TaskWithDetails. */
 export async function updateTask(
   supabase: SupabaseClient,
   taskId: string,
   userId: string,
   data: TaskFormData,
-  subtasks: SubtaskFormItem[],
-  tags: TagFormItem[]
+  subtasks: SubtaskFormItem[]
 ): Promise<TaskWithDetails> {
-  // 1. Resolve / create tags
-  const tagIds = await resolveTagIds(supabase, userId, tags);
+  const { data: existing, error: existingErr } = await supabase
+    .from("tasks")
+    .select("repeat, recurrence_id, recurrence_anchor_day, due_date")
+    .eq("id", taskId)
+    .single();
+  if (existingErr) throw existingErr;
+  const repeatFields = resolveRepeatFields(
+    data.repeat,
+    data.due_date,
+    existing as ExistingRepeatState
+  );
 
-  // 2. Update task fields
   const { error: taskErr } = await supabase
     .from("tasks")
     .update({
@@ -248,12 +180,14 @@ export async function updateTask(
       priority: data.priority,
       due_date: data.due_date,
       due_time: data.due_time,
+      list_id: data.list_id,
+      ...repeatFields,
     })
     .eq("id", taskId);
   if (taskErr) throw taskErr;
 
-  // 3. Sync subtasks — delete all then re-insert to keep it simple.
-  //    We preserve is_completed from the form items.
+  // Sync subtasks — delete all then re-insert to keep it simple.
+  // We preserve is_completed from the form items.
   const { error: delSubErr } = await supabase
     .from("subtasks")
     .delete()
@@ -272,24 +206,88 @@ export async function updateTask(
     if (error) throw error;
   }
 
-  // 4. Sync task_tags — delete all then re-insert
-  const { error: delTagErr } = await supabase
-    .from("task_tags")
-    .delete()
-    .eq("task_id", taskId);
-  if (delTagErr) throw delTagErr;
-
-  if (tagIds.length > 0) {
-    const { error } = await supabase.from("task_tags").insert(
-      tagIds.map((tagId) => ({ task_id: taskId, tag_id: tagId }))
-    );
-    if (error) throw error;
-  }
-
   return refetchTask(supabase, taskId);
 }
 
-/** Deletes a task (cascades subtasks and task_tags via DB constraints). */
+/** Updates only title and notes — leaves priority, schedule, and subtasks alone. */
+export async function updateTaskTitleNotes(
+  supabase: SupabaseClient,
+  taskId: string,
+  title: string,
+  notes: string | null
+): Promise<void> {
+  const { error } = await supabase
+    .from("tasks")
+    .update({ title, notes })
+    .eq("id", taskId);
+  if (error) throw error;
+}
+
+/**
+ * Patches selected task fields without touching subtasks. When `repeat` is
+ * included, resolves recurrence_id/recurrence_anchor_day against the task's
+ * current series state (fetched fresh) and returns the full set of fields
+ * actually written, so callers can merge an accurate patch into local state.
+ */
+export async function patchTaskFields(
+  supabase: SupabaseClient,
+  taskId: string,
+  fields: Partial<Pick<Task, "priority" | "due_date" | "due_time" | "title" | "notes">> & {
+    repeat?: RepeatOption;
+  }
+): Promise<Partial<Task>> {
+  const { repeat, ...rest } = fields;
+  let payload: Partial<Task> = { ...rest };
+
+  if (repeat !== undefined) {
+    const { data: existing, error: fetchErr } = await supabase
+      .from("tasks")
+      .select("repeat, recurrence_id, recurrence_anchor_day, due_date")
+      .eq("id", taskId)
+      .single();
+    if (fetchErr) throw fetchErr;
+    const dueDate =
+      fields.due_date !== undefined ? fields.due_date : (existing.due_date as string | null);
+    payload = {
+      ...payload,
+      due_date: dueDate,
+      ...resolveRepeatFields(repeat, dueDate, existing as ExistingRepeatState),
+    };
+  }
+
+  const { error } = await supabase.from("tasks").update(payload).eq("id", taskId);
+  if (error) throw error;
+  return payload;
+}
+
+/** Replaces all subtasks for a task (delete + insert), preserving completion flags. */
+export async function replaceTaskSubtasks(
+  supabase: SupabaseClient,
+  taskId: string,
+  userId: string,
+  subtasks: SubtaskFormItem[]
+): Promise<Subtask[]> {
+  const { error: delErr } = await supabase.from("subtasks").delete().eq("task_id", taskId);
+  if (delErr) throw delErr;
+
+  if (subtasks.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("subtasks")
+    .insert(
+      subtasks.map((s) => ({
+        task_id: taskId,
+        user_id: userId,
+        title: s.title,
+        is_completed: s.is_completed,
+      }))
+    )
+    .select("*");
+  if (error) throw error;
+  return (data as Subtask[]) ?? [];
+}
+
+/** Deletes a task (cascades subtasks via DB constraints). */
 export async function deleteTask(
   supabase: SupabaseClient,
   taskId: string
@@ -298,25 +296,122 @@ export async function deleteTask(
   if (error) throw error;
 }
 
-/** Deletes a tag (cascades task_tags via DB constraints). */
-export async function deleteTag(
-  supabase: SupabaseClient,
-  tagId: string
-): Promise<void> {
-  const { error } = await supabase.from("tags").delete().eq("id", tagId);
-  if (error) throw error;
+// ---------------------------------------------------------------------------
+// Completion toggles + recurrence — completing a recurring task creates one
+// next occurrence.
+// ---------------------------------------------------------------------------
+
+/** Minimal shape of a recurring task row needed to build its next occurrence. */
+export interface RecurrenceSourceTask {
+  user_id: string;
+  title: string;
+  notes: string | null;
+  priority: Priority;
+  due_date: string;
+  due_time: string | null;
+  list_id: string | null;
+  repeat: RepeatOption;
+  recurrence_id: string;
+  recurrence_anchor_day: number;
 }
 
-// ---------------------------------------------------------------------------
-// Completion toggles
-// ---------------------------------------------------------------------------
+/** Pure: builds the insert payload for a recurring task's next occurrence. */
+export function buildNextOccurrenceInsert(source: RecurrenceSourceTask) {
+  const due_date = nextRecurrenceDate(
+    source.due_date,
+    source.repeat as Exclude<RepeatOption, "never">,
+    source.recurrence_anchor_day
+  );
+  return {
+    user_id: source.user_id,
+    title: source.title,
+    notes: source.notes,
+    priority: source.priority,
+    due_date,
+    due_time: source.due_time,
+    list_id: source.list_id,
+    repeat: source.repeat,
+    recurrence_id: source.recurrence_id,
+    recurrence_anchor_day: source.recurrence_anchor_day,
+  };
+}
 
-/** Marks a task as completed or reopens it. Returns updated task partial. */
+/** Pure: builds fresh (incomplete) subtask rows copied onto a next occurrence. */
+export function buildNextOccurrenceSubtasks(
+  sourceSubtasks: { title: string }[],
+  userId: string,
+  newTaskId: string
+) {
+  return sourceSubtasks.map((s) => ({
+    task_id: newTaskId,
+    user_id: userId,
+    title: s.title,
+    is_completed: false,
+  }));
+}
+
+async function createNextOccurrence(
+  supabase: SupabaseClient,
+  sourceTaskId: string,
+  source: RecurrenceSourceTask
+): Promise<TaskWithDetails | null> {
+  const { data: inserted, error } = await supabase
+    .from("tasks")
+    .insert(buildNextOccurrenceInsert(source))
+    .select("id")
+    .single();
+
+  if (error) {
+    // Unique violation on (user_id, recurrence_id, due_date) means the next
+    // occurrence already exists — a double-click, retry, or race. Treat as
+    // an idempotent no-op rather than surfacing a duplicate-creation error.
+    if ((error as { code?: string }).code === "23505") return null;
+    throw error;
+  }
+
+  const newTaskId = inserted.id as string;
+
+  const { data: sourceSubtasks, error: subFetchErr } = await supabase
+    .from("subtasks")
+    .select("title")
+    .eq("task_id", sourceTaskId);
+  if (subFetchErr) throw subFetchErr;
+
+  if (sourceSubtasks && sourceSubtasks.length > 0) {
+    const { error: subErr } = await supabase
+      .from("subtasks")
+      .insert(buildNextOccurrenceSubtasks(sourceSubtasks as { title: string }[], source.user_id, newTaskId));
+    if (subErr) throw subErr;
+  }
+
+  return refetchTask(supabase, newTaskId);
+}
+
+export interface SetTaskCompleteResult {
+  task: Pick<Task, "status" | "completed_at">;
+  /**
+   * The newly created next occurrence, when completing a recurring task
+   * produced one. Null when reopening, the task doesn't repeat, or the
+   * occurrence already existed (idempotent retry/race).
+   */
+  nextTask: TaskWithDetails | null;
+}
+
+/** Marks a task as completed or reopens it. Reopening never creates a next occurrence. */
 export async function setTaskComplete(
   supabase: SupabaseClient,
   taskId: string,
   completed: boolean
-): Promise<Pick<Task, "status" | "completed_at">> {
+): Promise<SetTaskCompleteResult> {
+  const { data: current, error: fetchErr } = await supabase
+    .from("tasks")
+    .select(
+      "user_id, title, notes, priority, due_date, due_time, list_id, repeat, recurrence_id, recurrence_anchor_day"
+    )
+    .eq("id", taskId)
+    .single();
+  if (fetchErr) throw fetchErr;
+
   const update = completed
     ? { status: "completed" as const, completed_at: new Date().toISOString() }
     : { status: "active" as const, completed_at: null };
@@ -327,9 +422,20 @@ export async function setTaskComplete(
     .eq("id", taskId)
     .select("status, completed_at")
     .single();
-
   if (error) throw error;
-  return data as Pick<Task, "status" | "completed_at">;
+
+  let nextTask: TaskWithDetails | null = null;
+  if (
+    completed &&
+    current.repeat !== "never" &&
+    current.recurrence_id &&
+    current.recurrence_anchor_day != null &&
+    current.due_date
+  ) {
+    nextTask = await createNextOccurrence(supabase, taskId, current as RecurrenceSourceTask);
+  }
+
+  return { task: data as Pick<Task, "status" | "completed_at">, nextTask };
 }
 
 /** Toggles a subtask's is_completed flag. */

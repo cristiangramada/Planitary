@@ -14,10 +14,14 @@ function task(overrides: Partial<TaskWithDetails>): TaskWithDetails {
     due_date: null,
     due_time: null,
     completed_at: null,
+    list_id: null,
+    repeat: "never",
+    recurrence_id: null,
+    recurrence_anchor_day: null,
     created_at: "2026-01-01T00:00:00.000Z",
     updated_at: "2026-01-01T00:00:00.000Z",
     subtasks: [],
-    tags: [],
+    list: null,
     ...overrides,
   };
 }

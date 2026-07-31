@@ -13,11 +13,13 @@ const PRIORITY_PILL: Record<string, string> = {
   high:   "bg-red-500/10 text-red-600 dark:text-red-400",
   medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   low:    "bg-green-500/10 text-green-600 dark:text-green-500",
+  none:   "bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]",
 };
 const PRIORITY_DOT: Record<string, string> = {
   high:   "bg-red-500",
   medium: "bg-amber-500",
   low:    "bg-green-500",
+  none:   "bg-[hsl(var(--muted-foreground))]",
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -281,14 +283,6 @@ function TaskAgendaItem({
               {formatTimeValue(task.due_time)}
             </span>
           )}
-          {task.tags.slice(0, 2).map((tag) => (
-            <span
-              key={tag.id}
-              className="text-[11px] px-1.5 py-0.5 rounded-full bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]"
-            >
-              {tag.name}
-            </span>
-          ))}
         </div>
       </div>
     </div>

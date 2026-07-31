@@ -14,7 +14,7 @@ function makeRow(overrides: Record<string, unknown> = {}) {
     due_time: null,
     priority: "high",
     status: "active",
-    tags: ["urgent"],
+    list_name: null,
     relevance_score: 40.4,
     matched_fields: ["title"],
     ...overrides,
@@ -29,13 +29,24 @@ describe("normalizeRow", () => {
     assert.equal(result.title, "Fix Supabase authentication");
     assert.equal(result.priority, "high");
     assert.equal(result.status, "active");
-    assert.deepEqual(result.tags, ["urgent"]);
     assert.deepEqual(result.matchedFields, ["title"]);
   });
 
-  test("defaults null tags/matched_fields to empty arrays", () => {
-    const result = normalizeRow(makeRow({ tags: null, matched_fields: null }));
-    assert.deepEqual(result.tags, []);
+  test("maps list_name to listName, and passes through 'list' as a matched field", () => {
+    const result = normalizeRow(
+      makeRow({ list_name: "Work", matched_fields: ["title", "list"] })
+    );
+    assert.equal(result.listName, "Work");
+    assert.deepEqual(result.matchedFields, ["title", "list"]);
+  });
+
+  test("defaults a null list_name to null", () => {
+    const result = normalizeRow(makeRow({ list_name: null }));
+    assert.equal(result.listName, null);
+  });
+
+  test("defaults null matched_fields to an empty array", () => {
+    const result = normalizeRow(makeRow({ matched_fields: null }));
     assert.deepEqual(result.matchedFields, []);
   });
 
@@ -55,13 +66,12 @@ describe("normalizeRow", () => {
     assert.equal(result.entityType, "task");
   });
 
-  test("passes through journal-shaped rows (no priority/status/tags)", () => {
+  test("passes through journal-shaped rows (no priority/status)", () => {
     const result = normalizeRow(
       makeRow({
         entity_type: "journal",
         priority: null,
         status: null,
-        tags: [],
         result_date: "2026-07-20",
       })
     );

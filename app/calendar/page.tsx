@@ -2,17 +2,17 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { CalendarClient } from "./CalendarClient";
-import type { TaskWithDetails, Tag, Task, Subtask } from "@/types";
+import type { TaskWithDetails, Task, TaskList, Subtask } from "@/types";
 
 export const metadata: Metadata = { title: "Calendar" };
 
 // Flatten the Supabase nested shape into TaskWithDetails
 function normalizeTask(row: Record<string, unknown>): TaskWithDetails {
-  const taskTags = (row.task_tags as Array<{ tags: Tag | null }> | null) ?? [];
+  const list = (row.task_lists as Pick<TaskList, "id" | "name" | "color" | "icon"> | null) ?? null;
   return {
     ...(row as unknown as Task),
     subtasks: (row.subtasks as Subtask[]) ?? [],
-    tags: taskTags.map((tt) => tt.tags).filter((t): t is Tag => t !== null),
+    list,
   };
 }
 
@@ -35,23 +35,13 @@ export default async function CalendarPage() {
     .select(`
       *,
       subtasks ( * ),
-      task_tags ( tags ( * ) )
+      task_lists ( id, name, color, icon )
     `)
     .not("due_date", "is", null)
     .order("due_date", { ascending: true });
 
   if (tasksError) {
     console.error("Failed to load tasks:", tasksError.message);
-  }
-
-  // Fetch tags (for the task creation/editing form)
-  const { data: tagRows, error: tagsError } = await supabase
-    .from("tags")
-    .select("*")
-    .order("name", { ascending: true });
-
-  if (tagsError) {
-    console.error("Failed to load tags:", tagsError.message);
   }
 
   const tasks = (taskRows ?? []).map((r) =>
@@ -65,7 +55,6 @@ export default async function CalendarPage() {
       <CalendarClient
         initialEvents={eventRows ?? []}
         initialTasks={tasks}
-        allTags={(tagRows as Tag[]) ?? []}
       />
     </Suspense>
   );

@@ -1,54 +1,40 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronLeft, ChevronRight, Clock, Bell, Repeat, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { ChevronLeft, ChevronRight, Clock, Repeat, X } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { PickerSelect } from "@/components/ui/PickerSelect";
 import { TIME_SLOTS, snapToSlot } from "@/components/ui/TimeDropdown";
+import type { RepeatOption } from "@/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public types (exported so TaskForm can use them)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type ReminderOption =
-  | "none"
-  | "at_due"
-  | "5min"
-  | "15min"
-  | "30min"
-  | "1hr"
-  | "1day";
-
-export type RepeatOption =
-  | "never"
-  | "daily"
-  | "weekly"
-  | "monthly"
-  | "yearly"
-  | "custom";
+export type { RepeatOption };
 
 export interface DatePickerValue {
   /** ISO date string YYYY-MM-DD, or null for no date */
   date: string | null;
   /** HH:MM string, or null for no time */
   time: string | null;
-  /** Duration mode end date — not yet persisted, reserved for future use */
-  endDate: string | null;
-  /** Duration mode end time — not yet persisted, reserved for future use */
-  endTime: string | null;
-  /** Reminder preference — stored in UI state only until DB column is added */
-  reminder: ReminderOption;
-  /** Repeat preference — stored in UI state only until DB column is added */
+  /** Repeat preference. Persisted; requires a date (see lib/recurrence.ts). */
   repeat: RepeatOption;
 }
 
 export interface TaskDatePickerProps {
   initialDate?: string | null;
   initialTime?: string | null;
-  initialReminder?: ReminderOption;
   initialRepeat?: RepeatOption;
   onConfirm: (value: DatePickerValue) => void;
   onClose: () => void;
+  /** Top edge of the panel sits flush under the trigger.
+   *  `x` is the left edge when align is "start", or the right edge when align is "end". */
+  anchor?: { x: number; y: number };
+  /** Horizontal alignment of the panel relative to `anchor.x`. Defaults to "start". */
+  anchorAlign?: "start" | "end";
+  /** When set, clicks on this element do not count as "outside" (lets the trigger toggle-close). */
+  ignoreCloseRef?: RefObject<HTMLElement | null>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -63,23 +49,12 @@ const MONTH_NAMES = [
   "September", "October", "November", "December",
 ] as const;
 
-const REMINDER_OPTIONS: { value: ReminderOption; label: string }[] = [
-  { value: "none",   label: "None" },
-  { value: "at_due", label: "At due time" },
-  { value: "5min",   label: "5 minutes before" },
-  { value: "15min",  label: "15 minutes before" },
-  { value: "30min",  label: "30 minutes before" },
-  { value: "1hr",    label: "1 hour before" },
-  { value: "1day",   label: "1 day before" },
-];
-
 const REPEAT_OPTIONS: { value: RepeatOption; label: string }[] = [
   { value: "never",   label: "Never" },
   { value: "daily",   label: "Daily" },
   { value: "weekly",  label: "Weekly" },
   { value: "monthly", label: "Monthly" },
   { value: "yearly",  label: "Yearly" },
-  { value: "custom",  label: "Custom…" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -97,19 +72,6 @@ function localToday(): Date {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   return d;
-}
-
-function addDays(d: Date, n: number): Date {
-  const r = new Date(d);
-  r.setDate(r.getDate() + n);
-  return r;
-}
-
-/** Next Saturday from today (returns today if today is Saturday). */
-function thisWeekend(): Date {
-  const d = localToday();
-  const dow = d.getDay(); // 0 = Sun, 6 = Sat
-  return addDays(d, dow === 6 ? 0 : 6 - dow);
 }
 
 /** Returns an array of (day | null) for the month grid, padded to full weeks. */
@@ -186,17 +148,15 @@ interface CalendarGridProps {
   year: number;
   month: number;
   selectedDate: string | null;
-  endDate: string | null;
   onSelect: (iso: string) => void;
 }
 
-function CalendarGrid({ year, month, selectedDate, endDate, onSelect }: CalendarGridProps) {
+function CalendarGrid({ year, month, selectedDate, onSelect }: CalendarGridProps) {
   const todayISO = toISO(localToday());
   const grid = buildMonthGrid(year, month);
 
   return (
     <div className="px-3 pb-2">
-      {/* Day-of-week header */}
       <div className="grid grid-cols-7 mb-0.5">
         {WEEK_DAYS.map((d) => (
           <div
@@ -208,7 +168,6 @@ function CalendarGrid({ year, month, selectedDate, endDate, onSelect }: Calendar
         ))}
       </div>
 
-      {/* Day cells */}
       <div className="grid grid-cols-7 gap-y-0.5">
         {grid.map((day, i) => {
           if (!day) return <div key={i} className="aspect-square" />;
@@ -216,14 +175,6 @@ function CalendarGrid({ year, month, selectedDate, endDate, onSelect }: Calendar
           const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
           const isToday = iso === todayISO;
           const isSelected = iso === selectedDate;
-          const isEnd = endDate && iso === endDate;
-
-          // Highlight range between start and end in duration mode
-          const inRange =
-            endDate &&
-            selectedDate &&
-            iso > selectedDate &&
-            iso < endDate;
 
           return (
             <button
@@ -231,13 +182,11 @@ function CalendarGrid({ year, month, selectedDate, endDate, onSelect }: Calendar
               type="button"
               onClick={() => onSelect(iso)}
               aria-label={iso}
-              aria-pressed={isSelected || !!isEnd}
+              aria-pressed={isSelected}
               className={cn(
                 "aspect-square text-[13px] flex items-center justify-center rounded-full transition-colors font-medium",
-                isSelected || isEnd
+                isSelected
                   ? "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] font-semibold"
-                  : inRange
-                  ? "bg-[hsl(var(--primary)/0.15)] text-[hsl(var(--primary))]"
                   : isToday
                   ? "border border-[hsl(var(--primary))] text-[hsl(var(--primary))]"
                   : "text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]"
@@ -251,50 +200,6 @@ function CalendarGrid({ year, month, selectedDate, endDate, onSelect }: Calendar
     </div>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// QuickDateButtons
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface QuickDateButtonsProps {
-  selectedDate: string | null;
-  onSelect: (iso: string) => void;
-}
-
-function QuickDateButtons({ selectedDate, onSelect }: QuickDateButtonsProps) {
-  const t = localToday();
-  const options = [
-    { label: "Today",        iso: toISO(t) },
-    { label: "Tomorrow",     iso: toISO(addDays(t, 1)) },
-    { label: "This Weekend", iso: toISO(thisWeekend()) },
-    { label: "Next Week",    iso: toISO(addDays(t, 7)) },
-  ];
-
-  return (
-    <div className="grid grid-cols-2 gap-1.5 px-3 pb-2">
-      {options.map(({ label, iso }) => (
-        <button
-          key={label}
-          type="button"
-          onClick={() => onSelect(iso)}
-          className={cn(
-            "px-2.5 py-2 text-xs font-medium rounded-lg border transition-all text-left",
-            selectedDate === iso
-              ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary)/0.12)] text-[hsl(var(--primary))]"
-              : "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--muted-foreground)/0.5)] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]"
-          )}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TimeSelector — 30-minute-increment dropdown (12:00 AM → 11:30 PM)
-// ─────────────────────────────────────────────────────────────────────────────
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TimeSelector
@@ -342,32 +247,6 @@ function TimeSelector({ value, onChange, label = "Time" }: TimeSelectorProps) {
           No time
         </button>
       )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ReminderSelector
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface ReminderSelectorProps {
-  value: ReminderOption;
-  onChange: (v: ReminderOption) => void;
-}
-
-function ReminderSelector({ value, onChange }: ReminderSelectorProps) {
-  return (
-    <div className="flex items-center justify-between px-3 py-2.5">
-      <span className="flex items-center gap-2 text-sm font-medium">
-        <Bell className="w-4 h-4 text-[hsl(var(--muted-foreground))] shrink-0" />
-        Reminder
-      </span>
-      <PickerSelect
-        value={value}
-        options={REMINDER_OPTIONS}
-        onChange={onChange}
-        minWidth={160}
-      />
     </div>
   );
 }
@@ -432,31 +311,128 @@ function SchedulerFooter({ onClear, onOk }: SchedulerFooterProps) {
 // TaskDatePicker — main exported component
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Mode = "date" | "duration";
-
 export function TaskDatePicker({
   initialDate,
   initialTime,
-  initialReminder = "none",
   initialRepeat = "never",
   onConfirm,
   onClose,
+  anchor,
+  anchorAlign = "start",
+  ignoreCloseRef,
 }: TaskDatePickerProps) {
-  // Derive starting month from initialDate, or today
   const startDate = initialDate ? parseISO(initialDate) : localToday();
+  const panelRef = useRef<HTMLDivElement>(null);
 
-  const [mode, setMode] = useState<Mode>("date");
   const [calYear, setCalYear] = useState(startDate.getFullYear());
   const [calMonth, setCalMonth] = useState(startDate.getMonth());
   const [selectedDate, setSelectedDate] = useState<string | null>(initialDate ?? null);
   const [selectedTime, setSelectedTime] = useState<string | null>(initialTime ?? null);
-  // Duration-mode end values — not yet persisted to DB
-  const [endDate, setEndDate] = useState<string | null>(null);
-  const [endTime, setEndTime] = useState<string | null>(null);
-  const [reminder, setReminder] = useState<ReminderOption>(initialReminder);
   const [repeat, setRepeat] = useState<RepeatOption>(initialRepeat);
 
-  // ── Month navigation ──────────────────────────────────────────────────────
+  const panelWidth = 320;
+  const panelHeightEstimate = 480;
+  const gap = 4;
+  const pad = 8;
+  const [fittedStyle, setFittedStyle] = useState<
+    { left: number; top: number } | undefined
+  >(undefined);
+
+  const anchoredStyle = anchor
+    ? fittedStyle ?? {
+        left:
+          anchorAlign === "end"
+            ? Math.max(pad, anchor.x - panelWidth)
+            : Math.max(pad, Math.min(anchor.x, window.innerWidth - panelWidth - pad)),
+        top: Math.max(pad, anchor.y + gap),
+      }
+    : undefined;
+
+  // After paint, snap the panel fully into the viewport without covering the trigger.
+  useLayoutEffect(() => {
+    if (!anchor || !panelRef.current) {
+      setFittedStyle(undefined);
+      return;
+    }
+    const el = panelRef.current;
+    const h = el.offsetHeight || panelHeightEstimate;
+    const w = el.offsetWidth || panelWidth;
+    const trigger = ignoreCloseRef?.current?.getBoundingClientRect() ?? null;
+    const triggerBottom = trigger?.bottom ?? anchor.y;
+    const triggerTop = trigger?.top ?? anchor.y;
+    const triggerLeft = trigger?.left ?? anchor.x;
+    const triggerRight = trigger?.right ?? anchor.x;
+
+    let nextLeft =
+      anchorAlign === "end" ? anchor.x - w : anchor.x;
+    let nextTop = triggerBottom + gap;
+
+    const fitsBelow = nextTop + h <= window.innerHeight - pad;
+    const aboveTop = triggerTop - h - gap;
+    const fitsAbove = aboveTop >= pad;
+
+    if (!fitsBelow && fitsAbove) {
+      nextTop = aboveTop;
+    } else if (!fitsBelow && !fitsAbove) {
+      // Open beside the trigger so the button stays clickable.
+      const rightLeft = triggerRight + gap;
+      const leftLeft = triggerLeft - w - gap;
+      if (rightLeft + w <= window.innerWidth - pad) {
+        nextLeft = rightLeft;
+      } else if (leftLeft >= pad) {
+        nextLeft = leftLeft;
+      } else {
+        nextLeft = Math.max(pad, Math.min(nextLeft, window.innerWidth - w - pad));
+      }
+      nextTop = Math.max(pad, Math.min(triggerTop, window.innerHeight - h - pad));
+    }
+
+    nextLeft = Math.max(pad, Math.min(nextLeft, window.innerWidth - w - pad));
+    nextTop = Math.max(pad, Math.min(nextTop, window.innerHeight - h - pad));
+
+    // Last guard: if we still overlap the trigger, push fully below or above.
+    if (trigger) {
+      const overlaps =
+        nextLeft < triggerRight &&
+        nextLeft + w > triggerLeft &&
+        nextTop < triggerBottom + gap &&
+        nextTop + h > triggerTop - gap;
+      if (overlaps) {
+        if (fitsAbove || triggerTop - pad >= h + gap) {
+          nextTop = triggerTop - h - gap;
+        } else {
+          nextTop = triggerBottom + gap;
+        }
+        nextTop = Math.max(pad, Math.min(nextTop, window.innerHeight - h - pad));
+      }
+    }
+
+    setFittedStyle({ left: nextLeft, top: nextTop });
+  }, [anchor, anchorAlign, ignoreCloseRef]);
+
+  // Anchored mode: leave the trigger hoverable/clickable (no blocking scrim).
+  // Close on outside mousedown, but ignore the trigger so it can toggle-close.
+  useEffect(() => {
+    if (!anchor) return;
+
+    function onOutside(e: MouseEvent) {
+      const target = e.target as Node;
+      if (panelRef.current?.contains(target)) return;
+      if (ignoreCloseRef?.current?.contains(target)) return;
+      // Time/repeat lists portal outside the panel.
+      if ((e.target as Element | null)?.closest?.("[data-picker-select-list]")) return;
+      onClose();
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("mousedown", onOutside);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onOutside);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [anchor, ignoreCloseRef, onClose]);
 
   function prevMonth() {
     if (calMonth === 0) { setCalYear((y) => y - 1); setCalMonth(11); }
@@ -475,104 +451,50 @@ export function TaskDatePicker({
     setSelectedDate(toISO(t));
   }
 
-  // ── Date selection ────────────────────────────────────────────────────────
-
   function selectDate(iso: string) {
-    // Navigate the calendar to the chosen month
     const d = parseISO(iso);
     setCalYear(d.getFullYear());
     setCalMonth(d.getMonth());
     setSelectedDate(iso);
-    // In duration mode, reset end when start changes
-    if (mode === "duration") setEndDate(null);
   }
-
-  function handleCalendarSelect(iso: string) {
-    if (mode === "duration" && selectedDate && !endDate && iso >= selectedDate) {
-      // Second click sets the end date
-      setEndDate(iso);
-    } else {
-      selectDate(iso);
-    }
-  }
-
-  // ── Actions ───────────────────────────────────────────────────────────────
 
   function handleClear() {
-    onConfirm({
-      date: null, time: null,
-      endDate: null, endTime: null,
-      reminder: "none", repeat: "never",
-    });
+    onConfirm({ date: null, time: null, repeat: "never" });
   }
 
   function handleOk() {
+    // Repeat requires a due date (see resolveRepeatFields); clear it if none.
     onConfirm({
       date: selectedDate,
-      time: selectedTime,
-      endDate: mode === "duration" ? endDate : null,
-      endTime: mode === "duration" ? endTime : null,
-      reminder,
-      repeat,
+      time: selectedDate ? selectedTime : null,
+      repeat: selectedDate ? repeat : "never",
     });
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
   return (
     <>
-      {/* Scrim — sits above the form drawer (z-50) but below the picker (z-70) */}
-      <div
-        className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-[1px]"
-        onClick={onClose}
-        aria-hidden
-      />
+      {/* Centered (modal) mode keeps a blocking scrim. Anchored mode does not —
+          the trigger stays interactive so it can hover and toggle-close. */}
+      {!anchor && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-[1px]"
+          onClick={onClose}
+          aria-hidden
+        />
+      )}
 
-      {/* Picker panel — centered */}
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal
         aria-label="Date and time picker"
-        className="fixed z-[70] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[320px] rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-2xl flex flex-col overflow-hidden"
+        className={cn(
+          "fixed z-[70] w-[320px] rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-2xl flex flex-col overflow-hidden",
+          !anchor && "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+        )}
+        style={anchoredStyle}
       >
-        {/* ── Mode toggle + close ─────────────────────────────────────────── */}
-        <div className="flex items-center gap-2 px-3 pt-3 pb-2">
-          <div className="flex flex-1 p-0.5 rounded-xl bg-[hsl(var(--muted))]">
-            {(["date", "duration"] as Mode[]).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => {
-                  setMode(m);
-                  if (m === "date") { setEndDate(null); setEndTime(null); }
-                }}
-                className={cn(
-                  "flex-1 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all",
-                  mode === m
-                    ? "bg-[hsl(var(--background))] text-[hsl(var(--foreground))] shadow-sm"
-                    : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
-                )}
-              >
-                {m === "date" ? "Date" : "Duration"}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close date picker"
-            className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors shrink-0"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* ── Scrollable body ─────────────────────────────────────────────── */}
-        <div className="overflow-y-auto">
-          {/* Quick date buttons */}
-          <QuickDateButtons selectedDate={selectedDate} onSelect={selectDate} />
-
-          {/* Calendar */}
+        <div className="overflow-y-auto pt-2">
           <CalendarHeader
             year={calYear}
             month={calMonth}
@@ -584,63 +506,17 @@ export function TaskDatePicker({
             year={calYear}
             month={calMonth}
             selectedDate={selectedDate}
-            endDate={mode === "duration" ? endDate : null}
-            onSelect={handleCalendarSelect}
+            onSelect={selectDate}
           />
 
-          {/* Duration end section */}
-          {mode === "duration" && (
-            <div className="mx-3 mb-1 rounded-xl bg-[hsl(var(--muted)/0.5)] border border-[hsl(var(--border))] overflow-hidden">
-              <div className="px-3 pt-2.5 pb-1">
-                <p className="text-[10px] font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-2">
-                  End date
-                </p>
-                <input
-                  type="date"
-                  value={endDate ?? ""}
-                  min={selectedDate ?? undefined}
-                  onChange={(e) => setEndDate(e.target.value || null)}
-                  className="w-full text-sm px-2.5 py-1.5 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none transition"
-                />
-                {!selectedDate && (
-                  <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-1.5">
-                    Select a start date first.
-                  </p>
-                )}
-                {selectedDate && !endDate && (
-                  <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-1.5">
-                    Click a date on the calendar, or enter it above.
-                  </p>
-                )}
-              </div>
-              <div className="border-t border-[hsl(var(--border))]">
-                <TimeSelector
-                  label="End time"
-                  value={endTime}
-                  onChange={endDate ? setEndTime : () => {}}
-                />
-                {!endDate && (
-                  <p className="px-3 pb-2 text-[11px] text-[hsl(var(--muted-foreground))]">
-                    Set an end date to enable end time.
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ── Scheduling rows ──────────────────────────────────────────── */}
           <div className="border-t border-[hsl(var(--border))] mt-1">
             <TimeSelector value={selectedTime} onChange={setSelectedTime} />
-            <div className="border-t border-[hsl(var(--border))]">
-              <ReminderSelector value={reminder} onChange={setReminder} />
-            </div>
             <div className="border-t border-[hsl(var(--border))]">
               <RepeatSelector value={repeat} onChange={setRepeat} />
             </div>
           </div>
         </div>
 
-        {/* ── Footer ──────────────────────────────────────────────────────── */}
         <SchedulerFooter onClear={handleClear} onOk={handleOk} />
       </div>
     </>

@@ -9,16 +9,39 @@ export interface Profile {
   created_at: string;
 }
 
+/** Recurrence cadence for a task. `never` means the task does not repeat. */
+export type RepeatOption = "never" | "daily" | "weekly" | "monthly" | "yearly";
+
 export interface Task {
   id: string;
   user_id: string;
   title: string;
   notes: string | null;
-  priority: "low" | "medium" | "high";
+  priority: "none" | "low" | "medium" | "high";
   status: "active" | "completed";
   due_date: string | null;   // ISO date string (YYYY-MM-DD)
   due_time: string | null;   // HH:MM:SS
   completed_at: string | null;
+  list_id: string | null;
+  /** Recurrence cadence; "never" (default) means this task does not repeat. */
+  repeat: RepeatOption;
+  /** Shared by every task in a recurring series; null when `repeat` is "never". */
+  recurrence_id: string | null;
+  /** Day-of-month (1-31) the series anchors to for monthly/yearly clamping; null when `repeat` is "never". */
+  recurrence_anchor_day: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A user-owned container for Tasks (e.g. "Work", "Personal"). A task with a
+ *  null `list_id` belongs to no List and appears in the "Inbox" system view. */
+export interface TaskList {
+  id: string;
+  user_id: string;
+  name: string;
+  color: string | null;
+  icon: string | null;
+  position: number;
   created_at: string;
   updated_at: string;
 }
@@ -52,26 +75,15 @@ export interface JournalEntry {
   updated_at: string;
 }
 
-export interface Tag {
-  id: string;
-  user_id: string;
-  name: string;
-  color: string | null;
-}
-
-export interface TaskTag {
-  task_id: string;
-  tag_id: string;
-}
-
 // ---------------------------------------------------------------------------
 // Composite / view types
 // ---------------------------------------------------------------------------
 
-/** Task row joined with its subtasks and tags */
+/** Task row joined with its subtasks */
 export interface TaskWithDetails extends Task {
   subtasks: Subtask[];
-  tags: Tag[];
+  /** Populated from the joined `task_lists` row; null when `list_id` is null. */
+  list: Pick<TaskList, "id" | "name" | "color" | "icon"> | null;
 }
 
 // Search types (SearchEntityType, SearchResult, SearchFilters, etc.) live in

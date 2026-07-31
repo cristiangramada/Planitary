@@ -1,7 +1,6 @@
 import { CheckSquare, CalendarDays, BookOpen } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PriorityBadge } from "@/components/ui/PriorityBadge";
-import { TagBadge } from "@/components/ui/TagBadge";
 import { formatDate, formatTime } from "@/utils/date";
 import type { SearchResult } from "@/types/search";
 import { highlightQuery, stripHighlightMarks } from "./highlightText";
@@ -69,6 +68,11 @@ export function SearchResultRow({ result, query, onOpen }: SearchResultRowProps)
           <span className="text-[10px] font-semibold tracking-wide uppercase text-[hsl(var(--muted-foreground))]">
             {label}
           </span>
+          {result.entityType === "task" && result.listName && (
+            <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
+              · {result.listName}
+            </span>
+          )}
         </div>
 
         <p className="text-sm font-semibold text-[hsl(var(--foreground))] truncate">
@@ -90,9 +94,6 @@ export function SearchResultRow({ result, query, onOpen }: SearchResultRowProps)
               {i > 0 && <span className="mr-2 opacity-50">·</span>}
               {part}
             </span>
-          ))}
-          {result.tags.map((tag) => (
-            <TagBadge key={tag} tag={{ name: tag, color: null }} />
           ))}
         </div>
       </div>

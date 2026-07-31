@@ -3,25 +3,37 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, SortAsc, CheckSquare, Tag as TagIcon } from "lucide-react";
+import { SortAsc, CheckSquare, PanelLeft, Undo2 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { TagBadge } from "@/components/ui/TagBadge";
 import { TaskCard } from "./TaskCard";
-import { TaskForm } from "./TaskForm";
+import { TaskQuickAdd } from "./TaskQuickAdd";
+import { TaskDetailPanel } from "./TaskDetailPanel";
+import { ListsPanel } from "./ListsPanel";
 import { cn } from "@/utils/cn";
 import { createClient } from "@/lib/supabase/client";
 import {
   createTask,
-  updateTask,
   deleteTask,
-  deleteTag,
   setTaskComplete,
   setSubtaskComplete,
+  updateTaskTitleNotes,
+  replaceTaskSubtasks,
+  patchTaskFields,
   TASK_PRIORITY_ORDER,
 } from "@/lib/tasks";
-import type { TaskWithDetails, Tag } from "@/types";
-import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
+import type { TaskWithDetails, TaskList, Subtask, Priority, RepeatOption } from "@/types";
+import type { TaskFormData, SubtaskFormItem } from "@/lib/tasks";
+import {
+  createTaskList,
+  renameTaskList,
+  deleteTaskList,
+  moveTaskToList,
+  reorderTaskLists,
+  computeListTaskCounts,
+} from "@/lib/task-lists";
+import type { MoveToListOption } from "@/app/calendar/AgendaItemContextMenu";
+import { parseTasksScope, buildTasksScopeParams, type TasksScope } from "@/lib/tasks-url-state";
 import { localTodayStr } from "@/utils/date";
 import {
   readTasksSortPreference,
@@ -79,28 +91,64 @@ function sortTasks(tasks: TaskWithDetails[], sortBy: SortKey): TaskWithDetails[]
 
 interface TasksClientProps {
   initialTasks: TaskWithDetails[];
-  initialTags: Tag[];
+  initialLists: TaskList[];
   userId: string;
 }
 
-export function TasksClient({ initialTasks, initialTags, userId }: TasksClientProps) {
+export function TasksClient({ initialTasks, initialLists, userId }: TasksClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [tasks, setTasks] = useState<TaskWithDetails[]>(initialTasks);
-  const [allTags, setAllTags] = useState<Tag[]>(initialTags);
+  const [lists, setLists] = useState<TaskList[]>(initialLists);
   // Default matches SSR; restored preference applied after mount to avoid hydration mismatch.
   const [sortBy, setSortBy] = useState<SortKey>("priority");
   const [sortReady, setSortReady] = useState(false);
   const [filterBy, setFilterBy] = useState<FilterKey>("active");
-  const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
-  const [confirmingTag, setConfirmingTag] = useState<Tag | null>(null);
-  const [confirmPos, setConfirmPos] = useState<{ top: number; left: number } | null>(null);
-  const [deletingTag, setDeletingTag] = useState(false);
-  const confirmRef = useRef<HTMLDivElement>(null);
-  const [formOpen, setFormOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<TaskWithDetails | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [scrollToTaskId, setScrollToTaskId] = useState<string | null>(null);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mobileListsOpen, setMobileListsOpen] = useState(false);
+  const [deletedToast, setDeletedToast] = useState<{ taskId: string } | null>(null);
+  const pendingDeleteRef = useRef<{
+    task: TaskWithDetails;
+    index: number;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
+
+  // ---------------------------------------------------------------------------
+  // Lists / scope — the selected smart view or custom List, driven by the URL
+  // (?list=<uuid> / ?view=inbox) so refresh and browser back/forward work.
+  // ---------------------------------------------------------------------------
+
+  const ownedListIds = useMemo(() => new Set(lists.map((l) => l.id)), [lists]);
+  const scope = useMemo<TasksScope>(
+    () => parseTasksScope(searchParams, ownedListIds),
+    [searchParams, ownedListIds]
+  );
+
+  const selectScope = useCallback(
+    (next: TasksScope) => {
+      const qs = buildTasksScopeParams(next).toString();
+      router.push(qs ? `/tasks?${qs}` : "/tasks", { scroll: false });
+      setMobileListsOpen(false);
+      setSelectedTaskId(null);
+    },
+    [router]
+  );
+
+  const listTaskCounts = useMemo(() => computeListTaskCounts(tasks), [tasks]);
+
+  const moveToListOptions = useMemo<MoveToListOption[]>(
+    () => [
+      { id: null, name: "Inbox" },
+      ...lists.map((l) => ({
+        id: l.id,
+        name: l.name,
+      })),
+    ],
+    [lists]
+  );
 
   // ---------------------------------------------------------------------------
   // Per-account sort preference (localStorage) — restore after mount, then persist.
@@ -121,47 +169,76 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
 
   // ---------------------------------------------------------------------------
   // Deep-link support: /tasks?task=<id> (e.g. from a Search result) opens
-  // that task's editor, then clears the param so it doesn't reopen.
+  // that task's editor, scrolls it into the middle list, then clears the
+  // param so it doesn't reopen.
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
     const taskId = searchParams.get("task");
     if (!taskId) return;
-    /* eslint-disable react-hooks/set-state-in-effect -- open the deep-linked task's editor once, from a URL navigation */
+    /* eslint-disable react-hooks/set-state-in-effect -- open the deep-linked task's detail panel once, from a URL navigation */
     const task = tasks.find((t) => t.id === taskId);
     if (task) {
-      setEditingTask(task);
-      setFormOpen(true);
+      setSelectedTaskId(task.id);
+      // Ensure the card is rendered under the current filter tab before scroll.
+      if (task.status === "completed") {
+        setFilterBy((prev) => (prev === "active" || prev === "overdue" ? "completed" : prev));
+      } else {
+        const today = localTodayStr();
+        const isOverdue = !!task.due_date && task.due_date < today;
+        setFilterBy((prev) => {
+          if (prev === "completed") return "active";
+          if (prev === "overdue" && !isOverdue) return "active";
+          return prev;
+        });
+      }
+      setScrollToTaskId(task.id);
     }
     /* eslint-enable react-hooks/set-state-in-effect */
     router.replace("/tasks", { scroll: false });
   }, [searchParams, tasks, router]);
 
+  useEffect(() => {
+    if (!scrollToTaskId) return;
+    const frame = requestAnimationFrame(() => {
+      document
+        .getElementById(`task-card-${scrollToTaskId}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setScrollToTaskId(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [scrollToTaskId, filterBy]);
+
   // ---------------------------------------------------------------------------
   // Derived state
   // ---------------------------------------------------------------------------
 
-  const sortedTags = useMemo(
-    () => [...allTags].sort((a, b) => a.name.localeCompare(b.name)),
-    [allTags]
-  );
+  // Tasks within the selected smart view / List — applied before the
+  // existing sort and status tabs, which are preserved unchanged and simply
+  // operate on this narrower set.
+  const scopedTasks = useMemo(() => {
+    if (scope.type === "list") return tasks.filter((t) => t.list_id === scope.id);
+    if (scope.type === "inbox") return tasks.filter((t) => t.list_id === null);
+    return tasks;
+  }, [tasks, scope]);
 
   const { activeTasks, overdueTasks, completedTasks } = useMemo(() => {
     const today = localTodayStr();
-    const scoped = selectedTagId
-      ? tasks.filter((t) => t.tags.some((tag) => tag.id === selectedTagId))
-      : tasks;
-    const sorted = sortTasks(scoped, sortBy);
+    const sorted = sortTasks(scopedTasks, sortBy);
     const active = sorted.filter((t) => t.status === "active");
     return {
       activeTasks: active,
       overdueTasks: active.filter((t) => !!t.due_date && t.due_date < today),
       completedTasks: sorted.filter((t) => t.status === "completed"),
     };
-  }, [tasks, sortBy, selectedTagId]);
+  }, [scopedTasks, sortBy]);
 
-  const selectedTag = selectedTagId
-    ? allTags.find((t) => t.id === selectedTagId) ?? null
+  const selectedList = scope.type === "list" ? lists.find((l) => l.id === scope.id) ?? null : null;
+  const scopeTitle =
+    scope.type === "inbox" ? "Inbox" : scope.type === "list" ? (selectedList?.name ?? "List") : "My Tasks";
+
+  const selectedTask = selectedTaskId
+    ? tasks.find((t) => t.id === selectedTaskId) ?? null
     : null;
 
   const visibleActive =
@@ -185,127 +262,82 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
   }, []);
 
   const handleCreate = useCallback(
-    async (data: TaskFormData, subtasks: SubtaskFormItem[], tags: TagFormItem[]) => {
+    async (data: TaskFormData, subtasks: SubtaskFormItem[]) => {
       const supabase = createClient();
       const userId = await getUserId();
-      const newTask = await createTask(supabase, userId, data, subtasks, tags);
+      const newTask = await createTask(supabase, userId, data, subtasks);
       setTasks((prev) => [newTask, ...prev]);
-      // Sync any newly created tags into allTags
-      newTask.tags.forEach((tag) => {
-        setAllTags((prev) =>
-          prev.some((t) => t.id === tag.id) ? prev : [...prev, tag]
-        );
-      });
-      setFormOpen(false);
-      setEditingTask(null);
     },
     [getUserId]
   );
 
-  const handleUpdate = useCallback(
-    async (data: TaskFormData, subtasks: SubtaskFormItem[], tags: TagFormItem[]) => {
-      if (!editingTask) return;
-      const supabase = createClient();
-      const userId = await getUserId();
-      const updated = await updateTask(supabase, editingTask.id, userId, data, subtasks, tags);
-      setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-      updated.tags.forEach((tag) => {
-        setAllTags((prev) =>
-          prev.some((t) => t.id === tag.id) ? prev : [...prev, tag]
-        );
-      });
-      setFormOpen(false);
-      setEditingTask(null);
-    },
-    [editingTask, getUserId]
-  );
-
-  const handleSave = useCallback(
-    (data: TaskFormData, subtasks: SubtaskFormItem[], tags: TagFormItem[]) => {
-      if (editingTask) return handleUpdate(data, subtasks, tags);
-      return handleCreate(data, subtasks, tags);
-    },
-    [editingTask, handleCreate, handleUpdate]
-  );
-
-  const handleDelete = useCallback(async (taskId: string) => {
+  const commitPendingDelete = useCallback(async () => {
+    const pending = pendingDeleteRef.current;
+    if (!pending) return;
+    pendingDeleteRef.current = null;
+    clearTimeout(pending.timer);
+    setDeletedToast((prev) => (prev?.taskId === pending.task.id ? null : prev));
     try {
       const supabase = createClient();
-      await deleteTask(supabase, taskId);
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      await deleteTask(supabase, pending.task.id);
     } catch (err) {
+      // Restore if the permanent delete fails.
+      setTasks((prev) =>
+        prev.some((t) => t.id === pending.task.id) ? prev : [...prev, pending.task]
+      );
       setError(err instanceof Error ? err.message : "Failed to delete task.");
     }
   }, []);
 
-  const handleDeleteTag = useCallback(async (tagId: string) => {
-    const supabase = createClient();
-    await deleteTag(supabase, tagId);
-    setAllTags((prev) => prev.filter((t) => t.id !== tagId));
-    setTasks((prev) =>
-      prev.map((task) => ({
-        ...task,
-        tags: task.tags.filter((t) => t.id !== tagId),
-      }))
-    );
-    setSelectedTagId((prev) => (prev === tagId ? null : prev));
+  const handleDelete = useCallback(
+    (taskId: string) => {
+      const index = tasks.findIndex((t) => t.id === taskId);
+      const task = index >= 0 ? tasks[index] : undefined;
+      if (!task) return;
+
+      // Commit any previous pending delete before starting a new one.
+      if (pendingDeleteRef.current) {
+        void commitPendingDelete();
+      }
+
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      setSelectedTaskId((prev) => (prev === taskId ? null : prev));
+      setDeletedToast({ taskId });
+
+      const timer = setTimeout(() => {
+        void commitPendingDelete();
+      }, 6000);
+
+      pendingDeleteRef.current = { task, index, timer };
+    },
+    [tasks, commitPendingDelete]
+  );
+
+  const handleUndoDelete = useCallback(() => {
+    const pending = pendingDeleteRef.current;
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    pendingDeleteRef.current = null;
+    setDeletedToast(null);
+    setTasks((prev) => {
+      if (prev.some((t) => t.id === pending.task.id)) return prev;
+      const next = [...prev];
+      next.splice(Math.min(pending.index, next.length), 0, pending.task);
+      return next;
+    });
   }, []);
 
-  const closeTagConfirm = useCallback(() => {
-    setConfirmingTag(null);
-    setConfirmPos(null);
-  }, []);
-
-  const openTagDeleteConfirm = useCallback((tag: Tag, e: React.MouseEvent) => {
-    e.preventDefault();
-    const width = 224;
-    const height = 110;
-    let top = e.clientY + 8;
-    if (top + height > window.innerHeight - 8) {
-      top = Math.max(8, e.clientY - height - 8);
-    }
-    let left = e.clientX;
-    left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
-    setConfirmPos({ top, left });
-    setConfirmingTag(tag);
-  }, []);
-
-  const confirmDeleteTagFromList = useCallback(async () => {
-    if (!confirmingTag || deletingTag) return;
-    setDeletingTag(true);
-    try {
-      await handleDeleteTag(confirmingTag.id);
-      closeTagConfirm();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete tag.");
-      closeTagConfirm();
-    } finally {
-      setDeletingTag(false);
-    }
-  }, [confirmingTag, deletingTag, handleDeleteTag, closeTagConfirm]);
-
-  // Close tag delete confirm on outside click, Escape, or scroll
+  // Flush pending delete on unmount so it isn't lost.
   useEffect(() => {
-    if (!confirmingTag) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") closeTagConfirm();
-    }
-    function onOutside(e: MouseEvent) {
-      if (confirmRef.current?.contains(e.target as Node)) return;
-      closeTagConfirm();
-    }
-    function onScroll() {
-      closeTagConfirm();
-    }
-    window.addEventListener("keydown", onKey);
-    document.addEventListener("mousedown", onOutside);
-    window.addEventListener("scroll", onScroll, { capture: true });
     return () => {
-      window.removeEventListener("keydown", onKey);
-      document.removeEventListener("mousedown", onOutside);
-      window.removeEventListener("scroll", onScroll, { capture: true });
+      const pending = pendingDeleteRef.current;
+      if (!pending) return;
+      clearTimeout(pending.timer);
+      pendingDeleteRef.current = null;
+      const supabase = createClient();
+      void deleteTask(supabase, pending.task.id);
     };
-  }, [confirmingTag, closeTagConfirm]);
+  }, []);
 
   const handleToggleComplete = useCallback(
     async (taskId: string, shouldComplete: boolean) => {
@@ -323,10 +355,14 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
       );
       try {
         const supabase = createClient();
-        const result = await setTaskComplete(supabase, taskId, shouldComplete);
-        setTasks((prev) =>
-          prev.map((t) => (t.id === taskId ? { ...t, ...result } : t))
-        );
+        const { task: result, nextTask } = await setTaskComplete(supabase, taskId, shouldComplete);
+        setTasks((prev) => {
+          const updated = prev.map((t) => (t.id === taskId ? { ...t, ...result } : t));
+          if (nextTask && !updated.some((t) => t.id === nextTask.id)) {
+            return [nextTask, ...updated];
+          }
+          return updated;
+        });
       } catch (err) {
         // Revert
         setTasks((prev) =>
@@ -384,15 +420,173 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
     []
   );
 
-  function openCreate() {
-    setEditingTask(null);
-    setFormOpen(true);
+  function openDetail(task: TaskWithDetails) {
+    setSelectedTaskId(task.id);
   }
 
-  function openEdit(task: TaskWithDetails) {
-    setEditingTask(task);
-    setFormOpen(true);
-  }
+  const handleSaveTitleNotes = useCallback(
+    async (taskId: string, title: string, notes: string | null) => {
+      const supabase = createClient();
+      await updateTaskTitleNotes(supabase, taskId, title, notes);
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, title, notes } : t))
+      );
+    },
+    []
+  );
+
+  const handleReplaceSubtasks = useCallback(
+    async (taskId: string, subtasks: SubtaskFormItem[]): Promise<Subtask[]> => {
+      const supabase = createClient();
+      const uid = await getUserId();
+      const saved = await replaceTaskSubtasks(supabase, taskId, uid, subtasks);
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, subtasks: saved } : t))
+      );
+      return saved;
+    },
+    [getUserId]
+  );
+
+  const handlePatchFields = useCallback(
+    async (
+      taskId: string,
+      fields: Partial<Pick<TaskWithDetails, "priority" | "due_date" | "due_time">> & {
+        repeat?: RepeatOption;
+      }
+    ) => {
+      const supabase = createClient();
+      const applied = await patchTaskFields(supabase, taskId, fields);
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, ...applied } : t))
+      );
+    },
+    []
+  );
+
+  const handleSetPriority = useCallback(
+    async (taskId: string, priority: Priority) => {
+      await handlePatchFields(taskId, { priority });
+    },
+    [handlePatchFields]
+  );
+
+  const handleSetDue = useCallback(
+    async (taskId: string, date: string | null, time: string | null, repeat: RepeatOption) => {
+      await handlePatchFields(taskId, {
+        due_date: date,
+        due_time: date && time ? (time.length === 5 ? `${time}:00` : time) : null,
+        repeat,
+      });
+    },
+    [handlePatchFields]
+  );
+
+  // Creating a task from within a selected List auto-assigns it to that List;
+  // Inbox and smart views default to Inbox (null), matching current behavior.
+  const formDefaultListId = scope.type === "list" ? scope.id : null;
+
+  // ---------------------------------------------------------------------------
+  // List mutations
+  // ---------------------------------------------------------------------------
+
+  const handleCreateList = useCallback(
+    async (name: string) => {
+      const supabase = createClient();
+      const newList = await createTaskList(supabase, userId, name, null, lists);
+      setLists((prev) => [...prev, newList]);
+      selectScope({ type: "list", id: newList.id });
+    },
+    [userId, lists, selectScope]
+  );
+
+  const handleRenameList = useCallback(
+    async (listId: string, name: string) => {
+      const supabase = createClient();
+      const updated = await renameTaskList(supabase, listId, name, lists);
+      setLists((prev) => prev.map((l) => (l.id === listId ? updated : l)));
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.list_id === listId && t.list ? { ...t, list: { ...t.list, name: updated.name } } : t
+        )
+      );
+    },
+    [lists]
+  );
+
+  const handleDeleteList = useCallback(
+    async (listId: string) => {
+      try {
+        const supabase = createClient();
+        await deleteTaskList(supabase, listId);
+        setLists((prev) => prev.filter((l) => l.id !== listId));
+        // The DB's `on delete set null` already unassigned these tasks server-side;
+        // mirror that locally so the UI doesn't need a refetch.
+        setTasks((prev) =>
+          prev.map((t) => (t.list_id === listId ? { ...t, list_id: null, list: null } : t))
+        );
+        if (scope.type === "list" && scope.id === listId) {
+          selectScope({ type: "inbox" });
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't delete the list.");
+      }
+    },
+    [scope, selectScope]
+  );
+
+  const handleReorderLists = useCallback(
+    async (orderedIds: string[]) => {
+      const previous = lists;
+      const byId = new Map(lists.map((l) => [l.id, l]));
+      const next = orderedIds
+        .map((id, position) => {
+          const list = byId.get(id);
+          return list ? { ...list, position } : null;
+        })
+        .filter((l): l is TaskList => l !== null);
+      setLists(next);
+      try {
+        const supabase = createClient();
+        await reorderTaskLists(supabase, orderedIds);
+      } catch (err) {
+        setLists(previous);
+        setError(err instanceof Error ? err.message : "Couldn't reorder lists.");
+      }
+    },
+    [lists]
+  );
+
+  const handleMoveTask = useCallback(
+    async (taskId: string, listId: string | null) => {
+      const previous = tasks.find((t) => t.id === taskId);
+      if (!previous) return;
+      const nextList = listId ? lists.find((l) => l.id === listId) ?? null : null;
+      // Optimistic update
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId
+            ? {
+                ...t,
+                list_id: listId,
+                list: nextList
+                  ? { id: nextList.id, name: nextList.name, color: nextList.color, icon: nextList.icon }
+                  : null,
+              }
+            : t
+        )
+      );
+      try {
+        const supabase = createClient();
+        await moveTaskToList(supabase, taskId, listId);
+      } catch (err) {
+        // Revert
+        setTasks((prev) => prev.map((t) => (t.id === taskId ? previous : t)));
+        setError(err instanceof Error ? err.message : "Couldn't move the task.");
+      }
+    },
+    [tasks, lists]
+  );
 
   // ---------------------------------------------------------------------------
   // Render helpers
@@ -409,7 +603,7 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
     {
       key: "all",
       label: "All",
-      count: selectedTagId ? activeTasks.length + completedTasks.length : tasks.length,
+      count: scopedTasks.length,
     },
     { key: "active", label: "Active", count: activeTasks.length },
     { key: "overdue", label: "Overdue", count: overdueTasks.length },
@@ -418,11 +612,58 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
 
   return (
     <AppShell flushTop>
-      <div className="h-full flex flex-col max-w-3xl mx-auto pt-4">
+      <div className="h-full flex gap-6 w-full pt-4">
+        {/* Desktop Lists panel — extends the Tasks page's own sub-navigation
+            rather than adding a second global sidebar. */}
+        <aside className="hidden lg:block w-[240px] shrink-0 pr-5 border-r border-[hsl(var(--border))] overflow-y-auto">
+          <ListsPanel
+            scope={scope}
+            onSelectScope={selectScope}
+            lists={lists}
+            counts={listTaskCounts}
+            onCreateList={handleCreateList}
+            onRenameList={handleRenameList}
+            onDeleteList={handleDeleteList}
+            onReorderLists={handleReorderLists}
+          />
+        </aside>
+
+        {/* Mobile Lists drawer */}
+        {mobileListsOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+              onClick={() => setMobileListsOpen(false)}
+            />
+            <div className="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-[hsl(var(--background))] border-r border-[hsl(var(--border))] shadow-2xl p-4 overflow-y-auto lg:hidden">
+              <ListsPanel
+                scope={scope}
+                onSelectScope={selectScope}
+                lists={lists}
+                counts={listTaskCounts}
+                onCreateList={handleCreateList}
+                onRenameList={handleRenameList}
+                onDeleteList={handleDeleteList}
+                onReorderLists={handleReorderLists}
+                onRequestClose={() => setMobileListsOpen(false)}
+              />
+            </div>
+          </>
+        )}
+
+      <div className="w-full max-w-3xl shrink-0 min-w-0 flex flex-col">
         {/* Page header */}
         <div className="flex items-center justify-between mb-5 shrink-0">
           <div>
-            <h2 className="text-xl font-bold">My Tasks</h2>
+            <button
+              type="button"
+              onClick={() => setMobileListsOpen(true)}
+              className="flex items-center gap-1.5 mb-1 text-xs font-medium text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer lg:hidden"
+            >
+              <PanelLeft className="w-3.5 h-3.5" />
+              Lists
+            </button>
+            <h2 className="text-xl font-bold">{scopeTitle}</h2>
           </div>
 
           <div className="flex items-center gap-2">
@@ -465,15 +706,6 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
                 </>
               )}
             </div>
-
-            {/* New task */}
-            <button
-              onClick={openCreate}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 transition-opacity cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              New task
-            </button>
           </div>
         </div>
 
@@ -497,20 +729,20 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
               key={key}
               onClick={() => setFilterBy(key)}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+                "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors text-[hsl(var(--foreground))]",
                 filterBy === key
-                  ? "bg-[hsl(var(--background))] text-[hsl(var(--foreground))] shadow-sm cursor-default"
-                  : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] cursor-pointer"
+                  ? "bg-[hsl(var(--background))] shadow-sm cursor-default"
+                  : "cursor-pointer"
               )}
             >
               {label}
               {count !== undefined && count > 0 && (
                 <span
                   className={cn(
-                    "text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center",
+                    "text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center text-[hsl(var(--foreground))]",
                     filterBy === key
-                      ? "bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]"
-                      : "bg-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"
+                      ? "bg-[hsl(var(--muted))]"
+                      : "bg-[hsl(var(--border))]"
                   )}
                 >
                   {count}
@@ -520,192 +752,59 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
           ))}
         </div>
 
-        {/* Tag filters */}
-        {sortedTags.length > 0 && (
-          <div className="mb-5 shrink-0">
-            <div className="flex items-center gap-1.5 mb-2">
-              <TagIcon className="w-3.5 h-3.5 text-[hsl(var(--muted-foreground))]" />
-              <p className="text-xs font-medium uppercase tracking-wide text-[hsl(var(--muted-foreground))]">
-                Tags
-              </p>
-              {selectedTag && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedTagId(null)}
-                  className="ml-auto text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {sortedTags.map((tag) => (
-                <TagBadge
-                  key={tag.id}
-                  tag={tag}
-                  selected={selectedTagId === tag.id}
-                  onClick={() =>
-                    setSelectedTagId((prev) => (prev === tag.id ? null : tag.id))
-                  }
-                  onContextMenu={(e) => openTagDeleteConfirm(tag, e)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {confirmingTag &&
-          confirmPos &&
-          typeof document !== "undefined" &&
-          createPortal(
-            <div
-              ref={confirmRef}
-              role="alertdialog"
-              aria-modal="true"
-              aria-labelledby="delete-tag-list-title"
-              style={{
-                position: "fixed",
-                top: confirmPos.top,
-                left: confirmPos.left,
-                zIndex: 9999,
-              }}
-              className="w-56 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-xl p-3"
-            >
-              <p id="delete-tag-list-title" className="text-sm font-medium mb-1">
-                Delete tag &ldquo;{confirmingTag.name}&rdquo;?
-              </p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))] mb-3">
-                It will be removed from all tasks.
-              </p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    closeTagConfirm();
-                  }}
-                  className="flex-1 py-1.5 text-xs font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={deletingTag}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    void confirmDeleteTagFromList();
-                  }}
-                  className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:opacity-60 transition-colors cursor-pointer"
-                >
-                  {deletingTag ? "Deleting…" : "Delete"}
-                </button>
-              </div>
-            </div>,
-            document.body
-          )}
         {/* Scrollable task list */}
         <div className="flex-1 overflow-y-auto min-h-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+
+        <TaskQuickAdd
+          defaultListId={formDefaultListId}
+          onCreate={async (data) => {
+            await handleCreate(data, []);
+          }}
+        />
 
         {/* Active tasks */}
         {filterBy !== "completed" && (
           <div className="space-y-2 mb-4">
-            {selectedTag &&
-              activeTasks.length === 0 &&
-              completedTasks.length === 0 && (
-              <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
-                <EmptyState
-                  icon={TagIcon}
-                  title={`No tasks with “${selectedTag.name}”`}
-                  description="Try another tag, or clear the filter to see all tasks."
-                  action={
-                    <button
-                      onClick={() => setSelectedTagId(null)}
-                      className="px-4 py-2 text-sm font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
-                    >
-                      Clear tag filter
-                    </button>
-                  }
-                />
-              </div>
-            )}
-
-            {tasks.length > 0 &&
+            {scopedTasks.length > 0 &&
               visibleActive.length === 0 &&
-              filterBy === "active" &&
-              !(selectedTag && activeTasks.length === 0 && completedTasks.length === 0) && (
+              filterBy === "active" && (
               <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
                 <EmptyState
                   icon={CheckSquare}
-                  title={selectedTag ? `No active tasks with “${selectedTag.name}”` : "No active tasks"}
-                  description={
-                    selectedTag
-                      ? "There are no active tasks with this tag."
-                      : "All caught up!"
-                  }
-                  action={
-                    selectedTag ? (
-                      <button
-                        onClick={() => setSelectedTagId(null)}
-                        className="px-4 py-2 text-sm font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
-                      >
-                        Clear tag filter
-                      </button>
-                    ) : (
-                      <button
-                        onClick={openCreate}
-                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 transition-opacity cursor-pointer"
-                      >
-                        <Plus className="w-4 h-4" />
-                        New task
-                      </button>
-                    )
-                  }
+                  title="No active tasks"
+                  description="All caught up!"
                 />
               </div>
             )}
 
-            {tasks.length > 0 &&
+            {scopedTasks.length > 0 &&
               visibleActive.length === 0 &&
-              filterBy === "overdue" &&
-              !(selectedTag && activeTasks.length === 0 && completedTasks.length === 0) && (
+              filterBy === "overdue" && (
               <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
                 <EmptyState
                   icon={CheckSquare}
-                  title={selectedTag ? `No overdue tasks with “${selectedTag.name}”` : "No overdue tasks"}
-                  description={
-                    selectedTag
-                      ? "There are no overdue tasks with this tag."
-                      : "You're all caught up — nothing past due."
-                  }
-                  action={
-                    selectedTag ? (
-                      <button
-                        onClick={() => setSelectedTagId(null)}
-                        className="px-4 py-2 text-sm font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
-                      >
-                        Clear tag filter
-                      </button>
-                    ) : undefined
-                  }
+                  title="No overdue tasks"
+                  description="You're all caught up — nothing past due."
                 />
               </div>
             )}
 
-            {/* Empty state for very first task */}
-            {tasks.length === 0 && (
+            {/* Empty state — either the account's very first task, or an empty List/Inbox */}
+            {scopedTasks.length === 0 && (
               <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
                 <EmptyState
                   icon={CheckSquare}
-                  title="No tasks yet"
-                  description="Add your first task to start tracking what you need to accomplish."
-                  action={
-                    <button
-                      onClick={openCreate}
-                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 transition-opacity cursor-pointer"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add a task
-                    </button>
+                  title={
+                    scope.type === "inbox"
+                      ? "No tasks in Inbox."
+                      : scope.type === "list"
+                        ? "No tasks in this list."
+                        : "No tasks yet"
+                  }
+                  description={
+                    scope.type === "all"
+                      ? "Use Add task above to start tracking what you need to accomplish."
+                      : "Use Add task above to get started."
                   }
                 />
               </div>
@@ -715,10 +814,18 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
               <TaskCard
                 key={task.id}
                 task={task}
-                onEdit={openEdit}
                 onDelete={handleDelete}
                 onToggleComplete={handleToggleComplete}
-                onToggleSubtask={handleToggleSubtask}
+                onRenameTitle={async (taskId, title) => {
+                  const current = tasks.find((t) => t.id === taskId);
+                  await handleSaveTitleNotes(taskId, title, current?.notes ?? null);
+                }}
+                onSetPriority={handleSetPriority}
+                onSetDue={handleSetDue}
+                onSelect={openDetail}
+                selected={selectedTaskId === task.id}
+                lists={moveToListOptions}
+                onMoveToList={handleMoveTask}
               />
             ))}
           </div>
@@ -737,10 +844,18 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
                 <TaskCard
                   key={task.id}
                   task={task}
-                  onEdit={openEdit}
                   onDelete={handleDelete}
                   onToggleComplete={handleToggleComplete}
-                  onToggleSubtask={handleToggleSubtask}
+                  onRenameTitle={async (taskId, title) => {
+                    const current = tasks.find((t) => t.id === taskId);
+                    await handleSaveTitleNotes(taskId, title, current?.notes ?? null);
+                  }}
+                  onSetPriority={handleSetPriority}
+                  onSetDue={handleSetDue}
+                  onSelect={openDetail}
+                  selected={selectedTaskId === task.id}
+                  lists={moveToListOptions}
+                  onMoveToList={handleMoveTask}
                 />
               ))}
             </div>
@@ -748,20 +863,62 @@ export function TasksClient({ initialTasks, initialTags, userId }: TasksClientPr
         )}
 
         </div>{/* end scrollable list */}
-      </div>
+      </div>{/* end main content column */}
 
-      {/* Task form drawer */}
-      <TaskForm
-        open={formOpen}
-        onClose={() => {
-          setFormOpen(false);
-          setEditingTask(null);
-        }}
-        onSave={handleSave}
-        onDeleteTag={handleDeleteTag}
-        editTask={editingTask}
-        allTags={allTags}
-      />
+      {/* Desktop right detail column — fills remaining width to the right edge */}
+      <aside className="hidden md:flex flex-1 min-w-0 border-l border-[hsl(var(--border))] -my-4 -mr-6 self-stretch min-h-0">
+        {selectedTask ? (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <TaskDetailPanel
+              key={selectedTask.id}
+              task={selectedTask}
+              onSaveTitleNotes={handleSaveTitleNotes}
+              onReplaceSubtasks={handleReplaceSubtasks}
+              onToggleSubtask={handleToggleSubtask}
+              onPatchFields={handlePatchFields}
+            />
+          </div>
+        ) : null}
+      </aside>
+
+      {/* Mobile detail panel */}
+      {selectedTask && (
+        <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-[hsl(var(--background))] border-l border-[hsl(var(--border))] shadow-2xl md:hidden">
+          <TaskDetailPanel
+            key={selectedTask.id}
+            task={selectedTask}
+            onSaveTitleNotes={handleSaveTitleNotes}
+            onReplaceSubtasks={handleReplaceSubtasks}
+            onToggleSubtask={handleToggleSubtask}
+            onPatchFields={handlePatchFields}
+          />
+        </div>
+      )}
+      </div>{/* end Lists panel + main content row */}
+
+      {deletedToast &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            role="status"
+            aria-live="polite"
+            className="fixed inset-x-0 bottom-10 z-[100] flex justify-center pointer-events-none"
+          >
+            <button
+              type="button"
+              title="Undo"
+              aria-label="Undo delete"
+              onClick={handleUndoDelete}
+              className="toast-slide-up pointer-events-auto inline-flex items-center gap-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 py-3 shadow-2xl cursor-pointer"
+            >
+              <span className="text-sm font-medium leading-none text-[hsl(var(--foreground))]">
+                Task deleted
+              </span>
+              <Undo2 className="size-4 shrink-0 text-[hsl(var(--foreground))]" aria-hidden />
+            </button>
+          </div>,
+          document.body
+        )}
     </AppShell>
   );
 }

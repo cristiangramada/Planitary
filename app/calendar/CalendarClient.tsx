@@ -13,10 +13,10 @@ import { EventForm } from "./EventForm";
 import { TaskForm } from "@/app/tasks/TaskForm";
 import { createClient } from "@/lib/supabase/client";
 import { createEvent, updateEvent, deleteEvent } from "@/lib/calendar";
-import { createTask, updateTask, deleteTask, deleteTag } from "@/lib/tasks";
-import type { CalendarEvent, TaskWithDetails, Tag } from "@/types";
+import { createTask, updateTask, deleteTask } from "@/lib/tasks";
+import type { CalendarEvent, TaskWithDetails } from "@/types";
 import type { EventFormData } from "@/lib/calendar";
-import type { TaskFormData, SubtaskFormItem, TagFormItem } from "@/lib/tasks";
+import type { TaskFormData, SubtaskFormItem } from "@/lib/tasks";
 import {
   localTodayStr,
   dateToISO,
@@ -34,7 +34,6 @@ import {
 interface CalendarClientProps {
   initialEvents: CalendarEvent[];
   initialTasks: TaskWithDetails[];
-  allTags: Tag[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -44,7 +43,6 @@ interface CalendarClientProps {
 export function CalendarClient({
   initialEvents,
   initialTasks,
-  allTags: initialTags,
 }: CalendarClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -52,7 +50,6 @@ export function CalendarClient({
   // ── Data state ───────────────────────────────────────────────────────────
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
   const [tasks, setTasks] = useState<TaskWithDetails[]>(initialTasks);
-  const [allTags, setAllTags] = useState<Tag[]>(initialTags);
 
   // ── View + navigation state ───────────────────────────────────────────────
   const now = new Date();
@@ -257,11 +254,7 @@ export function CalendarClient({
   // ── Task CRUD (calendar context) ──────────────────────────────────────────
 
   const handleTaskSave = useCallback(
-    async (
-      data: TaskFormData,
-      subtasks: SubtaskFormItem[],
-      tags: TagFormItem[]
-    ) => {
+    async (data: TaskFormData, subtasks: SubtaskFormItem[]) => {
       setError(null);
       const supabase = createClient();
       const { data: authData } = await supabase.auth.getUser();
@@ -273,34 +266,22 @@ export function CalendarClient({
           editingTask.id,
           authData.user.id,
           data,
-          subtasks,
-          tags
+          subtasks
         );
         setTasks((prev) => {
           const without = prev.filter((t) => t.id !== updated.id);
           return updated.due_date ? [...without, updated] : without;
-        });
-        updated.tags.forEach((tag) => {
-          setAllTags((prev) =>
-            prev.some((t) => t.id === tag.id) ? prev : [...prev, tag]
-          );
         });
       } else {
         const created = await createTask(
           supabase,
           authData.user.id,
           data,
-          subtasks,
-          tags
+          subtasks
         );
         if (created.due_date) {
           setTasks((prev) => [...prev, created]);
         }
-        created.tags.forEach((tag) => {
-          setAllTags((prev) =>
-            prev.some((t) => t.id === tag.id) ? prev : [...prev, tag]
-          );
-        });
       }
 
       setTaskFormOpen(false);
@@ -324,18 +305,6 @@ export function CalendarClient({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete task.");
     }
-  }, []);
-
-  const handleDeleteTag = useCallback(async (tagId: string) => {
-    const supabase = createClient();
-    await deleteTag(supabase, tagId);
-    setAllTags((prev) => prev.filter((t) => t.id !== tagId));
-    setTasks((prev) =>
-      prev.map((task) => ({
-        ...task,
-        tags: task.tags.filter((t) => t.id !== tagId),
-      }))
-    );
   }, []);
 
   function openNewTaskForm(date?: string) {
@@ -463,14 +432,12 @@ export function CalendarClient({
         open={taskFormOpen}
         editTask={editingTask}
         defaultDueDate={taskFormDefaultDate}
-        allTags={allTags}
         onClose={() => {
           setTaskFormOpen(false);
           setEditingTask(null);
           setTaskFormDefaultDate(null);
         }}
         onSave={handleTaskSave}
-        onDeleteTag={handleDeleteTag}
       />
     </AppShell>
   );
