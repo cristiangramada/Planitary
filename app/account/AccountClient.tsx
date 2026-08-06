@@ -11,9 +11,15 @@ interface AccountClientProps {
   userId: string;
   email: string;
   initialDisplayName: string | null;
+  productiveDayCount: number;
 }
 
-export function AccountClient({ userId, email, initialDisplayName }: AccountClientProps) {
+export function AccountClient({
+  userId,
+  email,
+  initialDisplayName,
+  productiveDayCount,
+}: AccountClientProps) {
   return (
     <AppShell>
       <div className="h-full overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -33,9 +39,10 @@ export function AccountClient({ userId, email, initialDisplayName }: AccountClie
             </div>
             <div className="flex flex-col gap-4">
               <ProfileSection userId={userId} email={email} initialDisplayName={initialDisplayName} />
-              <AppearanceSection />
             </div>
           </div>
+
+          <AppearanceSection productiveDayCount={productiveDayCount} />
         </div>
       </div>
     </AppShell>

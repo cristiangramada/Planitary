@@ -5,6 +5,11 @@ import {
   resolveRepeatFields,
   type ExistingRepeatState,
 } from "@/lib/recurrence";
+import {
+  recordProductiveDay,
+  type RecordProductiveDayResult,
+} from "@/lib/productive-days";
+import { localTodayStr } from "@/utils/date";
 
 /** Canonical priority ordering used everywhere tasks are priority-sorted. */
 export const TASK_PRIORITY_ORDER: Record<Priority, number> = {
@@ -387,6 +392,15 @@ async function createNextOccurrence(
   return refetchTask(supabase, newTaskId);
 }
 
+export interface SetTaskCompleteOptions {
+  /**
+   * User's local calendar date (YYYY-MM-DD) at completion time.
+   * Used to record a durable productive day. Defaults to the browser's
+   * local today when omitted in a browser context.
+   */
+  localProductiveDate?: string;
+}
+
 export interface SetTaskCompleteResult {
   task: Pick<Task, "status" | "completed_at">;
   /**
@@ -395,13 +409,16 @@ export interface SetTaskCompleteResult {
    * occurrence already existed (idempotent retry/race).
    */
   nextTask: TaskWithDetails | null;
+  /** Present when a completion recorded (or reaffirmed) a productive day. */
+  productiveDay: RecordProductiveDayResult | null;
 }
 
 /** Marks a task as completed or reopens it. Reopening never creates a next occurrence. */
 export async function setTaskComplete(
   supabase: SupabaseClient,
   taskId: string,
-  completed: boolean
+  completed: boolean,
+  options?: SetTaskCompleteOptions
 ): Promise<SetTaskCompleteResult> {
   const { data: current, error: fetchErr } = await supabase
     .from("tasks")
@@ -435,7 +452,21 @@ export async function setTaskComplete(
     nextTask = await createNextOccurrence(supabase, taskId, current as RecurrenceSourceTask);
   }
 
-  return { task: data as Pick<Task, "status" | "completed_at">, nextTask };
+  let productiveDay: RecordProductiveDayResult | null = null;
+  if (completed) {
+    const productiveDate =
+      options?.localProductiveDate ??
+      (typeof window !== "undefined" ? localTodayStr() : null);
+    if (productiveDate) {
+      productiveDay = await recordProductiveDay(supabase, productiveDate);
+    }
+  }
+
+  return {
+    task: data as Pick<Task, "status" | "completed_at">,
+    nextTask,
+    productiveDay,
+  };
 }
 
 /** Toggles a subtask's is_completed flag. */

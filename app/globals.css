@@ -1,34 +1,282 @@
 @import "tailwindcss";
 
+/*
+  Theme tokens are space-separated HSL channels (no hsl() wrapper).
+  Components use hsl(var(--token)) / hsl(var(--token)/alpha).
+
+  :root mirrors Dark (defaultTheme) so the first paint before next-themes
+  applies a class stays readable. Each theme class fully overrides tokens.
+*/
+
 @layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 224 71.4% 4.1%;
-    --card: 0 0% 100%;
-    --card-foreground: 224 71.4% 4.1%;
-    --muted: 220 14.3% 95.9%;
-    --muted-foreground: 220 8.9% 46.1%;
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --primary: 220 90% 56%;
-    --primary-foreground: 210 20% 98%;
-    --sidebar-bg: 220 20% 97%;
-    --sidebar-border: 220 13% 88%;
+  :root,
+  .dark {
+    --background: 222 47% 4%;
+    --foreground: 210 25% 96%;
+    --card: 222 35% 8%;
+    --card-foreground: 210 25% 96%;
+    --surface: 222 32% 7%;
+    --surface-elevated: 222 30% 11%;
+    --surface-muted: 215 28% 14%;
+    --muted: 215 28% 14%;
+    --muted-foreground: 215 16% 62%;
+    --border: 215 22% 18%;
+    --input: 215 22% 16%;
+    --primary: 250 70% 68%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 222 28% 16%;
+    --accent: 250 55% 55%;
+    --success: 152 48% 42%;
+    --destructive: 0 72% 58%;
+    --ring: 250 70% 68%;
+    --sidebar-bg: 222 42% 5%;
+    --sidebar-foreground: 210 20% 90%;
+    --sidebar-border: 215 22% 14%;
+    --gradient-from: 250 60% 28%;
+    --gradient-to: 222 47% 8%;
   }
 
-  .dark {
-    --background: 224 71.4% 4.1%;
-    --foreground: 210 20% 98%;
-    --card: 224 40% 8%;
-    --card-foreground: 210 20% 98%;
-    --muted: 215 27.9% 16.9%;
-    --muted-foreground: 217.9 10.6% 64.9%;
-    --border: 215 27.9% 16.9%;
-    --input: 215 27.9% 16.9%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 210 20% 98%;
-    --sidebar-bg: 224 50% 6%;
-    --sidebar-border: 215 27.9% 14%;
+  /* Warm bone-white — replaces pure white Light */
+  .light {
+    --background: 40 33% 94%;
+    --foreground: 40 6% 15%;
+    --card: 43 45% 97%;
+    --card-foreground: 40 6% 15%;
+    --surface: 43 40% 96%;
+    --surface-elevated: 40 60% 99%;
+    --surface-muted: 38 22% 90%;
+    --muted: 38 22% 90%;
+    --muted-foreground: 40 8% 42%;
+    --border: 38 18% 83%;
+    --input: 38 20% 88%;
+    --primary: 250 58% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 38 20% 90%;
+    --accent: 250 45% 58%;
+    --success: 152 42% 36%;
+    --destructive: 0 65% 48%;
+    --ring: 250 58% 52%;
+    --sidebar-bg: 40 28% 92%;
+    --sidebar-foreground: 40 6% 18%;
+    --sidebar-border: 38 18% 82%;
+    --gradient-from: 40 30% 90%;
+    --gradient-to: 43 45% 97%;
+  }
+
+  /* Mercury — restrained metallic graphite */
+  .mercury {
+    --background: 210 8% 11%;
+    --foreground: 210 12% 90%;
+    --card: 210 8% 15%;
+    --card-foreground: 210 12% 90%;
+    --surface: 210 8% 13%;
+    --surface-elevated: 210 8% 18%;
+    --surface-muted: 210 6% 20%;
+    --muted: 210 6% 20%;
+    --muted-foreground: 210 8% 58%;
+    --border: 210 6% 24%;
+    --input: 210 6% 18%;
+    --primary: 205 14% 68%;
+    --primary-foreground: 210 10% 10%;
+    --secondary: 210 6% 22%;
+    --accent: 200 18% 72%;
+    --success: 152 35% 42%;
+    --destructive: 0 58% 55%;
+    --ring: 205 14% 68%;
+    --sidebar-bg: 210 9% 9%;
+    --sidebar-foreground: 210 10% 85%;
+    --sidebar-border: 210 6% 18%;
+    --gradient-from: 210 8% 22%;
+    --gradient-to: 210 8% 11%;
+  }
+
+  /* Venus — warm cream, burnished gold, soft amber */
+  .venus {
+    --background: 36 38% 92%;
+    --foreground: 28 18% 18%;
+    --card: 38 42% 95%;
+    --card-foreground: 28 18% 18%;
+    --surface: 38 40% 94%;
+    --surface-elevated: 40 50% 97%;
+    --surface-muted: 34 28% 86%;
+    --muted: 34 28% 86%;
+    --muted-foreground: 28 12% 40%;
+    --border: 34 22% 78%;
+    --input: 34 24% 88%;
+    --primary: 38 48% 42%;
+    --primary-foreground: 40 50% 98%;
+    --secondary: 34 25% 88%;
+    --accent: 22 45% 48%;
+    --success: 152 35% 34%;
+    --destructive: 0 58% 42%;
+    --ring: 38 48% 42%;
+    --sidebar-bg: 36 32% 89%;
+    --sidebar-foreground: 28 18% 20%;
+    --sidebar-border: 34 22% 78%;
+    --gradient-from: 36 40% 86%;
+    --gradient-to: 38 42% 95%;
+  }
+
+  /* Earth — ocean blue, forest green, muted teal */
+  .earth {
+    --background: 198 48% 9%;
+    --foreground: 180 15% 92%;
+    --card: 198 38% 12%;
+    --card-foreground: 180 15% 92%;
+    --surface: 198 40% 11%;
+    --surface-elevated: 198 35% 15%;
+    --surface-muted: 198 28% 18%;
+    --muted: 198 28% 18%;
+    --muted-foreground: 190 14% 60%;
+    --border: 198 24% 20%;
+    --input: 198 26% 16%;
+    --primary: 158 42% 42%;
+    --primary-foreground: 160 40% 98%;
+    --secondary: 198 28% 18%;
+    --accent: 192 38% 48%;
+    --success: 152 48% 40%;
+    --destructive: 0 62% 55%;
+    --ring: 158 42% 42%;
+    --sidebar-bg: 198 48% 7%;
+    --sidebar-foreground: 180 12% 88%;
+    --sidebar-border: 198 24% 16%;
+    --gradient-from: 192 40% 22%;
+    --gradient-to: 198 48% 9%;
+  }
+
+  /* Mars — rust / terracotta; destructive stays a distinct true red */
+  .mars {
+    --background: 15 28% 8%;
+    --foreground: 30 18% 92%;
+    --card: 15 24% 12%;
+    --card-foreground: 30 18% 92%;
+    --surface: 15 26% 10%;
+    --surface-elevated: 15 22% 15%;
+    --surface-muted: 15 18% 18%;
+    --muted: 15 18% 18%;
+    --muted-foreground: 20 12% 58%;
+    --border: 15 16% 22%;
+    --input: 15 18% 16%;
+    --primary: 22 62% 52%;
+    --primary-foreground: 20 40% 98%;
+    --secondary: 15 20% 18%;
+    --accent: 18 48% 42%;
+    --success: 152 42% 40%;
+    --destructive: 350 72% 52%;
+    --ring: 22 62% 52%;
+    --sidebar-bg: 15 30% 6%;
+    --sidebar-foreground: 30 14% 88%;
+    --sidebar-border: 15 16% 16%;
+    --gradient-from: 18 40% 22%;
+    --gradient-to: 15 28% 8%;
+  }
+
+  /* Jupiter — sand, caramel, copper; optional banded gradient tokens */
+  .jupiter {
+    --background: 28 22% 9%;
+    --foreground: 36 30% 92%;
+    --card: 28 20% 13%;
+    --card-foreground: 36 30% 92%;
+    --surface: 28 20% 11%;
+    --surface-elevated: 30 18% 16%;
+    --surface-muted: 28 14% 18%;
+    --muted: 28 14% 18%;
+    --muted-foreground: 32 12% 58%;
+    --border: 28 14% 22%;
+    --input: 28 14% 16%;
+    --primary: 28 48% 55%;
+    --primary-foreground: 28 40% 98%;
+    --secondary: 28 16% 18%;
+    --accent: 8 42% 48%;
+    --success: 152 40% 40%;
+    --destructive: 0 68% 52%;
+    --ring: 28 48% 55%;
+    --sidebar-bg: 28 24% 7%;
+    --sidebar-foreground: 36 24% 88%;
+    --sidebar-border: 28 14% 16%;
+    --gradient-from: 28 45% 32%;
+    --gradient-to: 8 35% 22%;
+  }
+
+  /* Saturn — champagne / soft gold on deep navy-charcoal */
+  .saturn {
+    --background: 230 28% 8%;
+    --foreground: 40 20% 92%;
+    --card: 230 24% 12%;
+    --card-foreground: 40 20% 92%;
+    --surface: 230 26% 10%;
+    --surface-elevated: 230 22% 15%;
+    --surface-muted: 230 16% 18%;
+    --muted: 230 16% 18%;
+    --muted-foreground: 40 10% 58%;
+    --border: 230 14% 22%;
+    --input: 230 16% 16%;
+    --primary: 38 38% 58%;
+    --primary-foreground: 230 30% 10%;
+    --secondary: 230 16% 18%;
+    --accent: 38 28% 48%;
+    --success: 152 38% 40%;
+    --destructive: 0 65% 55%;
+    --ring: 38 38% 58%;
+    --sidebar-bg: 230 30% 6%;
+    --sidebar-foreground: 40 16% 88%;
+    --sidebar-border: 230 14% 16%;
+    --gradient-from: 38 28% 28%;
+    --gradient-to: 230 28% 10%;
+  }
+
+  /* Uranus — pale cyan / ice blue (not neon) */
+  .uranus {
+    --background: 198 32% 9%;
+    --foreground: 190 20% 92%;
+    --card: 198 28% 12%;
+    --card-foreground: 190 20% 92%;
+    --surface: 198 30% 10%;
+    --surface-elevated: 198 26% 15%;
+    --surface-muted: 198 20% 18%;
+    --muted: 198 20% 18%;
+    --muted-foreground: 192 14% 58%;
+    --border: 198 18% 22%;
+    --input: 198 20% 16%;
+    --primary: 188 42% 52%;
+    --primary-foreground: 198 40% 8%;
+    --secondary: 198 20% 18%;
+    --accent: 192 38% 58%;
+    --success: 152 40% 40%;
+    --destructive: 0 62% 55%;
+    --ring: 188 42% 52%;
+    --sidebar-bg: 198 34% 7%;
+    --sidebar-foreground: 190 16% 88%;
+    --sidebar-border: 198 18% 16%;
+    --gradient-from: 188 35% 28%;
+    --gradient-to: 198 32% 9%;
+  }
+
+  /* Neptune — midnight ocean; distinct from default Dark (more blue/indigo) */
+  .neptune {
+    --background: 228 55% 6%;
+    --foreground: 220 30% 94%;
+    --card: 228 45% 10%;
+    --card-foreground: 220 30% 94%;
+    --surface: 228 48% 8%;
+    --surface-elevated: 228 40% 14%;
+    --surface-muted: 228 32% 16%;
+    --muted: 228 32% 16%;
+    --muted-foreground: 220 18% 62%;
+    --border: 228 30% 20%;
+    --input: 228 32% 14%;
+    --primary: 245 55% 65%;
+    --primary-foreground: 228 50% 98%;
+    --secondary: 228 32% 16%;
+    --accent: 258 50% 58%;
+    --success: 152 45% 42%;
+    --destructive: 0 70% 58%;
+    --ring: 245 55% 65%;
+    --sidebar-bg: 228 58% 5%;
+    --sidebar-foreground: 220 25% 90%;
+    --sidebar-border: 228 30% 14%;
+    --gradient-from: 245 45% 28%;
+    --gradient-to: 228 55% 8%;
   }
 }
 
@@ -99,6 +347,15 @@
 
   .toast-slide-up {
     animation: toast-slide-up 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Subtle Jupiter band — opt-in decorative use only */
+  .theme-band {
+    background: linear-gradient(
+      180deg,
+      hsl(var(--gradient-from) / 0.35),
+      hsl(var(--gradient-to) / 0.1)
+    );
   }
 
   /* Custom scrollbar */
