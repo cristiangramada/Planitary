@@ -64,8 +64,8 @@ export const THEME_DEFINITIONS: readonly ThemeDefinition[] = [
     preview: {
       background: "#070b14",
       surface: "#121826",
-      primary: "#8b7cf6",
-      accent: "#6366f1",
+      primary: "#725bef",
+      accent: "#5f48e0",
     },
   },
   {
@@ -76,8 +76,8 @@ export const THEME_DEFINITIONS: readonly ThemeDefinition[] = [
     preview: {
       background: "#F5F1E8",
       surface: "#FFFDF8",
-      primary: "#6b5ce0",
-      accent: "#8b7cf6",
+      primary: "#725bef",
+      accent: "#5f48e0",
     },
   },
   {
