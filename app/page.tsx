@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { Globe, CheckSquare, CalendarDays, BookOpen } from "lucide-react";
+import { CheckSquare, CalendarDays, BookOpen } from "lucide-react";
 import type { Metadata } from "next";
+import { Logo } from "@/components/ui/Logo";
 
 export const metadata: Metadata = {
   title: "Planitary — Your productivity universe",
@@ -29,10 +30,7 @@ export default function HomePage() {
     <div className="flex flex-col min-h-screen bg-[hsl(var(--background))]">
       {/* Nav */}
       <header className="flex items-center justify-between px-8 py-5 border-b border-[hsl(var(--border))]">
-        <div className="flex items-center gap-2">
-          <Globe className="w-6 h-6 text-[hsl(var(--primary))]" />
-          <span className="text-lg font-semibold tracking-tight">Planitary</span>
-        </div>
+        <Logo size={48} priority />
         <div className="flex items-center gap-3">
           <Link
             href="/login"
@@ -51,9 +49,7 @@ export default function HomePage() {
 
       {/* Hero */}
       <main className="flex flex-col items-center justify-center flex-1 text-center px-6 py-24">
-        <div className="flex items-center justify-center w-20 h-20 rounded-3xl bg-[hsl(var(--primary)/0.15)] mb-8">
-          <Globe className="w-10 h-10 text-[hsl(var(--primary))]" />
-        </div>
+        <Logo size={120} className="mb-8" priority />
         <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4 max-w-2xl">
           Your productivity universe
         </h1>

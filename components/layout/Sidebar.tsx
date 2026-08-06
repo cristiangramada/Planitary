@@ -9,8 +9,8 @@ import {
   BookOpen,
   Search,
   User,
-  Globe,
 } from "lucide-react";
+import { Logo } from "@/components/ui/Logo";
 import { cn } from "@/utils/cn";
 
 const navItems = [
@@ -38,7 +38,7 @@ export function Sidebar() {
     <aside className="flex flex-col w-64 h-full border-r border-[hsl(var(--sidebar-border))] bg-[hsl(var(--sidebar-bg))] shrink-0">
       {/* Logo */}
       <div className="flex items-center gap-2 px-6 py-5 border-b border-[hsl(var(--sidebar-border))]">
-        <Globe className="w-6 h-6 text-[hsl(var(--primary))]" />
+        <Logo size={36} />
         <span className="text-lg font-semibold tracking-tight">Planitary</span>
       </div>
 

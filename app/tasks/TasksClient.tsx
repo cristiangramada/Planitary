@@ -40,6 +40,7 @@ import {
   writeTasksSortPreference,
   type TasksSortKey,
 } from "@/lib/tasks-sort-preference";
+import { formatThemeUnlockMessage } from "@/lib/theme-unlock-message";
 
 // ---------------------------------------------------------------------------
 // Sorting helpers
@@ -110,6 +111,7 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
   const [error, setError] = useState<string | null>(null);
   const [mobileListsOpen, setMobileListsOpen] = useState(false);
   const [deletedToast, setDeletedToast] = useState<{ taskId: string } | null>(null);
+  const [unlockToast, setUnlockToast] = useState<string | null>(null);
   const pendingDeleteRef = useRef<{
     task: TaskWithDetails;
     index: number;
@@ -355,7 +357,12 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
       );
       try {
         const supabase = createClient();
-        const { task: result, nextTask } = await setTaskComplete(supabase, taskId, shouldComplete);
+        const { task: result, nextTask, productiveDay } = await setTaskComplete(
+          supabase,
+          taskId,
+          shouldComplete,
+          shouldComplete ? { localProductiveDate: localTodayStr() } : undefined
+        );
         setTasks((prev) => {
           const updated = prev.map((t) => (t.id === taskId ? { ...t, ...result } : t));
           if (nextTask && !updated.some((t) => t.id === nextTask.id)) {
@@ -363,6 +370,13 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
           }
           return updated;
         });
+        if (productiveDay?.newlyUnlocked.length) {
+          const message = formatThemeUnlockMessage(productiveDay.newlyUnlocked);
+          if (message) {
+            setUnlockToast(message);
+            window.setTimeout(() => setUnlockToast(null), 4500);
+          }
+        }
       } catch (err) {
         // Revert
         setTasks((prev) =>
@@ -916,6 +930,23 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
               </span>
               <Undo2 className="size-4 shrink-0 text-[hsl(var(--foreground))]" aria-hidden />
             </button>
+          </div>,
+          document.body
+        )}
+
+      {unlockToast &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            role="status"
+            aria-live="polite"
+            className="fixed inset-x-0 bottom-10 z-[100] flex justify-center pointer-events-none"
+          >
+            <div className="toast-slide-up pointer-events-auto inline-flex items-center gap-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 py-3 shadow-2xl max-w-sm">
+              <span className="text-sm font-medium leading-snug text-[hsl(var(--foreground))]">
+                {unlockToast}
+              </span>
+            </div>
           </div>,
           document.body
         )}

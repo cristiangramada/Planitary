@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { Globe } from "lucide-react";
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { Logo } from "@/components/ui/Logo";
 import { LoginForm } from "./LoginForm";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -12,9 +12,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-[hsl(var(--primary)/0.15)] mb-4">
-            <Globe className="w-6 h-6 text-[hsl(var(--primary))]" />
-          </div>
+          <Logo size={72} className="mb-4" priority />
           <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
           <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">
             Sign in to your Planitary account

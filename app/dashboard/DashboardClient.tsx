@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   CheckSquare,
   Plus,
@@ -29,7 +30,8 @@ import {
 } from "@/lib/dashboard";
 import { useClientLocalToday, useClientLocalHour } from "@/hooks/useClientLocalToday";
 import { toLocalDate as eventLocalDate } from "@/app/calendar/calendarUtils";
-import { parseDateOnly } from "@/utils/date";
+import { parseDateOnly, localTodayStr } from "@/utils/date";
+import { formatThemeUnlockMessage } from "@/lib/theme-unlock-message";
 import { DashboardSection, DashboardSkeletonRows, DashboardEmptyState } from "./DashboardSection";
 import { JournalPreview } from "./JournalPreview";
 import { EventsPreview } from "./EventsPreview";
@@ -73,6 +75,7 @@ export function DashboardClient({
   const [editingTask, setEditingTask] = useState<TaskWithDetails | null>(null);
   const [eventFormOpen, setEventFormOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [unlockToast, setUnlockToast] = useState<string | null>(null);
   const journalInputRef = useRef<HTMLInputElement>(null);
 
   const isFirstRun = useRef(true);
@@ -164,8 +167,20 @@ export function DashboardClient({
       removeTask(taskId); // optimistic — Dashboard only shows active tasks
       try {
         const supabase = createClient();
-        const { nextTask } = await setTaskComplete(supabase, taskId, completed);
+        const { nextTask, productiveDay } = await setTaskComplete(
+          supabase,
+          taskId,
+          completed,
+          completed ? { localProductiveDate: localTodayStr() } : undefined
+        );
         if (nextTask) placeTask(nextTask);
+        if (productiveDay?.newlyUnlocked.length) {
+          const message = formatThemeUnlockMessage(productiveDay.newlyUnlocked);
+          if (message) {
+            setUnlockToast(message);
+            window.setTimeout(() => setUnlockToast(null), 4500);
+          }
+        }
       } catch (err) {
         setMutationError(err instanceof Error ? err.message : "Failed to update task.");
         refetchAll();
@@ -487,6 +502,23 @@ export function DashboardClient({
         editEvent={editingEvent}
         defaultDate={clientToday}
       />
+
+      {unlockToast &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            role="status"
+            aria-live="polite"
+            className="fixed inset-x-0 bottom-10 z-[100] flex justify-center pointer-events-none"
+          >
+            <div className="toast-slide-up pointer-events-auto inline-flex items-center gap-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 py-3 shadow-2xl max-w-sm">
+              <span className="text-sm font-medium leading-snug text-[hsl(var(--foreground))]">
+                {unlockToast}
+              </span>
+            </div>
+          </div>,
+          document.body
+        )}
     </AppShell>
   );
 }
