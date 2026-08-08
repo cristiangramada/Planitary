@@ -211,15 +211,20 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [userId]);
 
-  useEffect(() => {
-    if (!layoutReady) return;
-    writeTasksLayoutPreference(userId, { listsWidth, tasksWidth });
-  }, [userId, listsWidth, tasksWidth, layoutReady]);
-
   const tasksColumnMinWidth = Math.max(
     TASKS_LAYOUT_LIMITS.tasksMin,
     filterTabsMinWidth
   );
+  // Derive (don't sync via effect) so the column never renders below the tabs min.
+  const displayTasksWidth = Math.max(tasksWidth, tasksColumnMinWidth);
+
+  useEffect(() => {
+    if (!layoutReady) return;
+    writeTasksLayoutPreference(userId, {
+      listsWidth,
+      tasksWidth: displayTasksWidth,
+    });
+  }, [userId, listsWidth, displayTasksWidth, layoutReady]);
 
   // Min column width = filter tabs + horizontal padding so task cards line up
   // with the tabs bar and the gutter before the divider doesn't collapse.
@@ -240,12 +245,6 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
     ro.observe(column);
     return () => ro.disconnect();
   }, []);
-
-  useEffect(() => {
-    if (tasksWidth < tasksColumnMinWidth) {
-      setTasksWidth(tasksColumnMinWidth);
-    }
-  }, [tasksColumnMinWidth, tasksWidth]);
 
   // Restore last Inbox/List on bare /tasks (sidebar link); remember scope from URL.
   useEffect(() => {
@@ -831,7 +830,7 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
         className="min-w-0 flex flex-col flex-1 w-full md:flex-none md:w-[var(--tasks-panel-width)] px-2"
         style={
           {
-            "--tasks-panel-width": `${tasksWidth}px`,
+            "--tasks-panel-width": `${displayTasksWidth}px`,
           } as CSSProperties
         }
       >
@@ -1049,7 +1048,7 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
         className="hidden md:block"
         aria-label="Resize tasks and detail panels"
         onDragStart={() => {
-          tasksWidthDragStartRef.current = tasksWidth;
+          tasksWidthDragStartRef.current = displayTasksWidth;
           listsWidthDragStartRef.current = listsWidth;
         }}
         onDrag={handleTasksResize}
