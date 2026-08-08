@@ -48,6 +48,10 @@ import {
   readTasksLayoutPreference,
   writeTasksLayoutPreference,
 } from "@/lib/tasks-layout-preference";
+import {
+  readTasksScopePreference,
+  writeTasksScopePreference,
+} from "@/lib/tasks-scope-preference";
 import { formatThemeUnlockMessage } from "@/lib/theme-unlock-message";
 import { ColumnResizeHandle } from "./ColumnResizeHandle";
 
@@ -127,6 +131,11 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
   const layoutRowRef = useRef<HTMLDivElement>(null);
   const listsWidthDragStartRef = useRef<number>(TASKS_LAYOUT_DEFAULTS.listsWidth);
   const tasksWidthDragStartRef = useRef<number>(TASKS_LAYOUT_DEFAULTS.tasksWidth);
+  const filterTabsRef = useRef<HTMLDivElement>(null);
+  const tasksColumnRef = useRef<HTMLDivElement>(null);
+  const [filterTabsMinWidth, setFilterTabsMinWidth] = useState<number>(
+    TASKS_LAYOUT_LIMITS.tasksMin
+  );
   const pendingDeleteRef = useRef<{
     task: TaskWithDetails;
     index: number;
@@ -146,12 +155,13 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
 
   const selectScope = useCallback(
     (next: TasksScope) => {
+      writeTasksScopePreference(userId, next);
       const qs = buildTasksScopeParams(next).toString();
-      router.push(qs ? `/tasks?${qs}` : "/tasks", { scroll: false });
+      router.push(`/tasks?${qs}`, { scroll: false });
       setMobileListsOpen(false);
       setSelectedTaskId(null);
     },
-    [router]
+    [router, userId]
   );
 
   const listTaskCounts = useMemo(() => computeListTaskCounts(tasks), [tasks]);
@@ -206,39 +216,97 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
     writeTasksLayoutPreference(userId, { listsWidth, tasksWidth });
   }, [userId, listsWidth, tasksWidth, layoutReady]);
 
-  const handleListsResize = useCallback((deltaFromStart: number) => {
-    const row = layoutRowRef.current;
-    const next = clampListsWidth(listsWidthDragStartRef.current + deltaFromStart);
-    if (!row) {
-      setListsWidth(next);
-      return;
-    }
-    const rowWidth = row.getBoundingClientRect().width;
-    // Handle widths ≈ 0.5rem each; keep room for tasks + detail mins.
-    const maxLists =
-      rowWidth -
-      TASKS_LAYOUT_LIMITS.tasksMin -
-      TASKS_LAYOUT_LIMITS.detailMin -
-      16;
-    setListsWidth(Math.min(next, Math.max(TASKS_LAYOUT_LIMITS.listsMin, maxLists)));
+  const tasksColumnMinWidth = Math.max(
+    TASKS_LAYOUT_LIMITS.tasksMin,
+    filterTabsMinWidth
+  );
+
+  // Min column width = filter tabs + horizontal padding so task cards line up
+  // with the tabs bar and the gutter before the divider doesn't collapse.
+  useEffect(() => {
+    const tabs = filterTabsRef.current;
+    const column = tasksColumnRef.current;
+    if (!tabs || !column || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const style = getComputedStyle(column);
+      const padL = parseFloat(style.paddingLeft) || 0;
+      const padR = parseFloat(style.paddingRight) || 0;
+      const tabsWidth = tabs.getBoundingClientRect().width;
+      setFilterTabsMinWidth(Math.ceil(tabsWidth + padL + padR));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(tabs);
+    ro.observe(column);
+    return () => ro.disconnect();
   }, []);
 
-  const handleTasksResize = useCallback((deltaFromStart: number) => {
-    const row = layoutRowRef.current;
-    const next = clampTasksWidth(tasksWidthDragStartRef.current + deltaFromStart);
-    if (!row) {
-      setTasksWidth(next);
+  useEffect(() => {
+    if (tasksWidth < tasksColumnMinWidth) {
+      setTasksWidth(tasksColumnMinWidth);
+    }
+  }, [tasksColumnMinWidth, tasksWidth]);
+
+  // Restore last Inbox/List on bare /tasks (sidebar link); remember scope from URL.
+  useEffect(() => {
+    if (searchParams.get("task")) return;
+
+    const hasList = searchParams.has("list");
+    const hasView = searchParams.has("view");
+    if (hasList || hasView) {
+      writeTasksScopePreference(userId, scope);
       return;
     }
-    const rowWidth = row.getBoundingClientRect().width;
-    const listsVisible =
-      typeof window !== "undefined" &&
-      window.matchMedia("(min-width: 1024px)").matches;
-    const listsTaken = listsVisible ? listsWidthDragStartRef.current + 8 : 0;
-    const maxTasks =
-      rowWidth - listsTaken - TASKS_LAYOUT_LIMITS.detailMin - 8;
-    setTasksWidth(Math.min(next, Math.max(TASKS_LAYOUT_LIMITS.tasksMin, maxTasks)));
-  }, []);
+
+    const saved = readTasksScopePreference(userId, ownedListIds);
+    if (saved?.type === "list") {
+      router.replace(`/tasks?list=${saved.id}`, { scroll: false });
+      return;
+    }
+    router.replace("/tasks?view=inbox", { scroll: false });
+  }, [searchParams, userId, ownedListIds, router, scope]);
+
+  const handleListsResize = useCallback(
+    (deltaFromStart: number) => {
+      const row = layoutRowRef.current;
+      const next = clampListsWidth(listsWidthDragStartRef.current + deltaFromStart);
+      if (!row) {
+        setListsWidth(next);
+        return;
+      }
+      const rowWidth = row.getBoundingClientRect().width;
+      const maxLists =
+        rowWidth -
+        tasksColumnMinWidth -
+        TASKS_LAYOUT_LIMITS.detailMin -
+        16;
+      setListsWidth(Math.min(next, Math.max(TASKS_LAYOUT_LIMITS.listsMin, maxLists)));
+    },
+    [tasksColumnMinWidth]
+  );
+
+  const handleTasksResize = useCallback(
+    (deltaFromStart: number) => {
+      const row = layoutRowRef.current;
+      const next = clampTasksWidth(tasksWidthDragStartRef.current + deltaFromStart);
+      const floored = Math.max(tasksColumnMinWidth, next);
+      if (!row) {
+        setTasksWidth(floored);
+        return;
+      }
+      const rowWidth = row.getBoundingClientRect().width;
+      const listsVisible =
+        typeof window !== "undefined" &&
+        window.matchMedia("(min-width: 1024px)").matches;
+      const listsTaken = listsVisible ? listsWidthDragStartRef.current + 8 : 0;
+      const maxTasks =
+        rowWidth - listsTaken - TASKS_LAYOUT_LIMITS.detailMin - 8;
+      setTasksWidth(
+        Math.min(floored, Math.max(tasksColumnMinWidth, maxTasks))
+      );
+    },
+    [tasksColumnMinWidth]
+  );
 
   // ---------------------------------------------------------------------------
   // Deep-link support: /tasks?task=<id> (e.g. from a Search result) opens
@@ -266,10 +334,21 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
         });
       }
       setScrollToTaskId(task.id);
+      // Land in the task's list (or Inbox) so the card is in scope.
+      const landingScope: TasksScope = task.list_id
+        ? ownedListIds.has(task.list_id)
+          ? { type: "list", id: task.list_id }
+          : { type: "inbox" }
+        : { type: "inbox" };
+      writeTasksScopePreference(userId, landingScope);
+      router.replace(`/tasks?${buildTasksScopeParams(landingScope).toString()}`, {
+        scroll: false,
+      });
+    } else {
+      router.replace("/tasks?view=inbox", { scroll: false });
     }
     /* eslint-enable react-hooks/set-state-in-effect */
-    router.replace("/tasks", { scroll: false });
-  }, [searchParams, tasks, router]);
+  }, [searchParams, tasks, router, ownedListIds, userId]);
 
   useEffect(() => {
     if (!scrollToTaskId) return;
@@ -291,8 +370,7 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
   // operate on this narrower set.
   const scopedTasks = useMemo(() => {
     if (scope.type === "list") return tasks.filter((t) => t.list_id === scope.id);
-    if (scope.type === "inbox") return tasks.filter((t) => t.list_id === null);
-    return tasks;
+    return tasks.filter((t) => t.list_id === null);
   }, [tasks, scope]);
 
   const { activeTasks, overdueTasks, completedTasks } = useMemo(() => {
@@ -308,7 +386,7 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
 
   const selectedList = scope.type === "list" ? lists.find((l) => l.id === scope.id) ?? null : null;
   const scopeTitle =
-    scope.type === "inbox" ? "Inbox" : scope.type === "list" ? (selectedList?.name ?? "List") : "My Tasks";
+    scope.type === "list" ? (selectedList?.name ?? "List") : "Inbox";
 
   const selectedTask = selectedTaskId
     ? tasks.find((t) => t.id === selectedTaskId) ?? null
@@ -749,7 +827,8 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
         )}
 
       <div
-        className="min-w-0 flex flex-col flex-1 w-full md:flex-none md:w-[var(--tasks-panel-width)] px-1 md:px-2"
+        ref={tasksColumnRef}
+        className="min-w-0 flex flex-col flex-1 w-full md:flex-none md:w-[var(--tasks-panel-width)] px-2"
         style={
           {
             "--tasks-panel-width": `${tasksWidth}px`,
@@ -827,7 +906,10 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
         )}
 
         {/* Filter tabs */}
-        <div className="flex gap-1 p-1 rounded-lg bg-[hsl(var(--muted))] mb-4 w-fit shrink-0">
+        <div
+          ref={filterTabsRef}
+          className="flex gap-1 p-1 rounded-lg bg-[hsl(var(--muted))] mb-4 w-fit shrink-0"
+        >
           {FILTER_TABS.map(({ key, label, count }) => (
             <button
               key={key}
@@ -901,15 +983,9 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
                   title={
                     scope.type === "inbox"
                       ? "No tasks in Inbox."
-                      : scope.type === "list"
-                        ? "No tasks in this list."
-                        : "No tasks yet"
+                      : "No tasks in this list."
                   }
-                  description={
-                    scope.type === "all"
-                      ? "Use Add task above to start tracking what you need to accomplish."
-                      : "Use Add task above to get started."
-                  }
+                  description="Use Add task above to get started."
                 />
               </div>
             )}
