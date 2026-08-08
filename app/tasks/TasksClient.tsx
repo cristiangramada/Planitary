@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SortAsc, CheckSquare, PanelLeft, Undo2 } from "lucide-react";
@@ -40,7 +40,16 @@ import {
   writeTasksSortPreference,
   type TasksSortKey,
 } from "@/lib/tasks-sort-preference";
+import {
+  TASKS_LAYOUT_DEFAULTS,
+  TASKS_LAYOUT_LIMITS,
+  clampListsWidth,
+  clampTasksWidth,
+  readTasksLayoutPreference,
+  writeTasksLayoutPreference,
+} from "@/lib/tasks-layout-preference";
 import { formatThemeUnlockMessage } from "@/lib/theme-unlock-message";
+import { ColumnResizeHandle } from "./ColumnResizeHandle";
 
 // ---------------------------------------------------------------------------
 // Sorting helpers
@@ -112,6 +121,12 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
   const [mobileListsOpen, setMobileListsOpen] = useState(false);
   const [deletedToast, setDeletedToast] = useState<{ taskId: string } | null>(null);
   const [unlockToast, setUnlockToast] = useState<string | null>(null);
+  const [listsWidth, setListsWidth] = useState<number>(TASKS_LAYOUT_DEFAULTS.listsWidth);
+  const [tasksWidth, setTasksWidth] = useState<number>(TASKS_LAYOUT_DEFAULTS.tasksWidth);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const layoutRowRef = useRef<HTMLDivElement>(null);
+  const listsWidthDragStartRef = useRef<number>(TASKS_LAYOUT_DEFAULTS.listsWidth);
+  const tasksWidthDragStartRef = useRef<number>(TASKS_LAYOUT_DEFAULTS.tasksWidth);
   const pendingDeleteRef = useRef<{
     task: TaskWithDetails;
     index: number;
@@ -168,6 +183,62 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
     if (!sortReady) return;
     writeTasksSortPreference(userId, sortBy);
   }, [userId, sortBy, sortReady]);
+
+  // ---------------------------------------------------------------------------
+  // Per-account column widths (localStorage) — restore after mount, then persist.
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- hydrate layout preference from localStorage after mount */
+    const saved = readTasksLayoutPreference(userId);
+    if (saved) {
+      setListsWidth(saved.listsWidth);
+      setTasksWidth(saved.tasksWidth);
+      listsWidthDragStartRef.current = saved.listsWidth;
+      tasksWidthDragStartRef.current = saved.tasksWidth;
+    }
+    setLayoutReady(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [userId]);
+
+  useEffect(() => {
+    if (!layoutReady) return;
+    writeTasksLayoutPreference(userId, { listsWidth, tasksWidth });
+  }, [userId, listsWidth, tasksWidth, layoutReady]);
+
+  const handleListsResize = useCallback((deltaFromStart: number) => {
+    const row = layoutRowRef.current;
+    const next = clampListsWidth(listsWidthDragStartRef.current + deltaFromStart);
+    if (!row) {
+      setListsWidth(next);
+      return;
+    }
+    const rowWidth = row.getBoundingClientRect().width;
+    // Handle widths ≈ 0.5rem each; keep room for tasks + detail mins.
+    const maxLists =
+      rowWidth -
+      TASKS_LAYOUT_LIMITS.tasksMin -
+      TASKS_LAYOUT_LIMITS.detailMin -
+      16;
+    setListsWidth(Math.min(next, Math.max(TASKS_LAYOUT_LIMITS.listsMin, maxLists)));
+  }, []);
+
+  const handleTasksResize = useCallback((deltaFromStart: number) => {
+    const row = layoutRowRef.current;
+    const next = clampTasksWidth(tasksWidthDragStartRef.current + deltaFromStart);
+    if (!row) {
+      setTasksWidth(next);
+      return;
+    }
+    const rowWidth = row.getBoundingClientRect().width;
+    const listsVisible =
+      typeof window !== "undefined" &&
+      window.matchMedia("(min-width: 1024px)").matches;
+    const listsTaken = listsVisible ? listsWidthDragStartRef.current + 8 : 0;
+    const maxTasks =
+      rowWidth - listsTaken - TASKS_LAYOUT_LIMITS.detailMin - 8;
+    setTasksWidth(Math.min(next, Math.max(TASKS_LAYOUT_LIMITS.tasksMin, maxTasks)));
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Deep-link support: /tasks?task=<id> (e.g. from a Search result) opens
@@ -626,10 +697,13 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
 
   return (
     <AppShell flushTop>
-      <div className="h-full flex gap-6 w-full pt-4">
+      <div ref={layoutRowRef} className="h-full flex w-full pt-4 min-h-0">
         {/* Desktop Lists panel — extends the Tasks page's own sub-navigation
             rather than adding a second global sidebar. */}
-        <aside className="hidden lg:block w-[240px] shrink-0 pr-5 border-r border-[hsl(var(--border))] overflow-y-auto">
+        <aside
+          className="hidden lg:block shrink-0 overflow-y-auto pr-1"
+          style={{ width: listsWidth }}
+        >
           <ListsPanel
             scope={scope}
             onSelectScope={selectScope}
@@ -641,6 +715,15 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
             onReorderLists={handleReorderLists}
           />
         </aside>
+
+        <ColumnResizeHandle
+          className="hidden lg:block"
+          aria-label="Resize lists and tasks panels"
+          onDragStart={() => {
+            listsWidthDragStartRef.current = listsWidth;
+          }}
+          onDrag={handleListsResize}
+        />
 
         {/* Mobile Lists drawer */}
         {mobileListsOpen && (
@@ -665,7 +748,14 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
           </>
         )}
 
-      <div className="flex-1 basis-0 max-w-3xl min-w-0 flex flex-col">
+      <div
+        className="min-w-0 flex flex-col flex-1 w-full md:flex-none md:w-[var(--tasks-panel-width)] px-1 md:px-2"
+        style={
+          {
+            "--tasks-panel-width": `${tasksWidth}px`,
+          } as CSSProperties
+        }
+      >
         {/* Page header */}
         <div className="flex items-center justify-between mb-5 shrink-0">
           <div>
@@ -879,8 +969,18 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
         </div>{/* end scrollable list */}
       </div>{/* end main content column */}
 
+      <ColumnResizeHandle
+        className="hidden md:block"
+        aria-label="Resize tasks and detail panels"
+        onDragStart={() => {
+          tasksWidthDragStartRef.current = tasksWidth;
+          listsWidthDragStartRef.current = listsWidth;
+        }}
+        onDrag={handleTasksResize}
+      />
+
       {/* Desktop right detail column — always reserved; fills remaining width */}
-      <aside className="hidden md:flex flex-1 min-w-[20rem] border-l border-[hsl(var(--border))] -my-4 -mr-6 self-stretch min-h-0">
+      <aside className="hidden md:flex flex-1 min-w-[25rem] -my-4 -mr-6 self-stretch min-h-0">
         {selectedTask ? (
           <div className="flex-1 min-h-0 overflow-hidden">
             <TaskDetailPanel
