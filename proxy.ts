@@ -8,6 +8,7 @@ const PUBLIC_PREFIXES = ["/", "/login", "/signup", "/auth"];
 
 /**
  * Routes that authenticated users should be redirected away from.
+ * Exact `/` is handled separately — prefix matching would match every path.
  */
 const AUTH_ONLY_PREFIXES = ["/login", "/signup"];
 
@@ -19,6 +20,7 @@ function isPublicPath(pathname: string): boolean {
 }
 
 function isAuthOnlyPath(pathname: string): boolean {
+  if (pathname === "/") return true;
   return AUTH_ONLY_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
@@ -28,7 +30,7 @@ function isAuthOnlyPath(pathname: string): boolean {
  * Responsibilities:
  *  1. Refresh the Supabase session token on every request so it stays valid.
  *  2. Redirect unauthenticated visitors from protected routes to /login.
- *  3. Redirect authenticated users away from /login and /signup to /dashboard.
+ *  3. Redirect authenticated users away from /, /login, and /signup to /dashboard.
  */
 export async function proxy(request: NextRequest) {
   // We mutate supabaseResponse when Supabase needs to write cookies, so we
@@ -76,7 +78,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Authenticated user visiting a login/signup page → redirect to /dashboard
+  // Authenticated user visiting welcome/login/signup → redirect to /dashboard
   if (user && isAuthOnlyPath(pathname)) {
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = "/dashboard";
