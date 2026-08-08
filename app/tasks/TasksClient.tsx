@@ -665,14 +665,7 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
           </>
         )}
 
-      <div
-        className={cn(
-          "max-w-3xl min-w-0 flex flex-col",
-          // When detail is open, share leftover width instead of locking at
-          // max-w-3xl (shrink-0), which starves the panel on laptop widths.
-          selectedTask ? "flex-1 basis-0" : "w-full shrink-0"
-        )}
-      >
+      <div className="flex-1 basis-0 max-w-3xl min-w-0 flex flex-col">
         {/* Page header */}
         <div className="flex items-center justify-between mb-5 shrink-0">
           <div>
@@ -886,15 +879,8 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
         </div>{/* end scrollable list */}
       </div>{/* end main content column */}
 
-      {/* Desktop right detail column — fills remaining width to the right edge */}
-      <aside
-        className={cn(
-          "hidden md:flex flex-1 min-w-0 border-l border-[hsl(var(--border))] -my-4 -mr-6 self-stretch min-h-0",
-          // Floor so description/controls stay usable on ~13–14" laptop widths
-          // after the app sidebar + Lists column take their share.
-          selectedTask && "min-w-[20rem]"
-        )}
-      >
+      {/* Desktop right detail column — always reserved; fills remaining width */}
+      <aside className="hidden md:flex flex-1 min-w-[20rem] border-l border-[hsl(var(--border))] -my-4 -mr-6 self-stretch min-h-0">
         {selectedTask ? (
           <div className="flex-1 min-h-0 overflow-hidden">
             <TaskDetailPanel
