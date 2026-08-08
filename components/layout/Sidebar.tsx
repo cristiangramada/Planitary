@@ -35,9 +35,9 @@ export function Sidebar() {
   const accountActive = pathname === "/account" || pathname.startsWith("/account/");
 
   return (
-    <aside className="flex flex-col w-64 h-full border-r border-[hsl(var(--sidebar-border))] bg-[hsl(var(--sidebar-bg))] shrink-0">
-      {/* Logo */}
-      <div className="flex items-center gap-2 px-6 py-5 border-b border-[hsl(var(--sidebar-border))]">
+    <aside className="flex flex-col w-max h-full border-r border-[hsl(var(--sidebar-border))] bg-[hsl(var(--sidebar-bg))] shrink-0">
+      {/* Logo — sidebar width hugs this row; slightly more inset on the right */}
+      <div className="flex items-center gap-2 pl-6 pr-9 py-5 border-b border-[hsl(var(--sidebar-border))] whitespace-nowrap">
         <Logo size={36} />
         <span className="text-lg font-semibold tracking-tight">Planitary</span>
       </div>

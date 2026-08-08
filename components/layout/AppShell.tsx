@@ -42,8 +42,9 @@ export function AppShell({ children, topBar, flushTop = false }: AppShellProps) 
         <div
           className={cn(
             "shrink-0 flex items-center gap-3 px-6",
-            // Match sidebar logo row when showing topBar; otherwise keep former TopNav height
-            topBar ? "py-5" : "h-14",
+            // Match sidebar logo row (py-5 + 36px logo = 76px) so the greeting
+            // lines up with "Planitary"
+            topBar ? "h-[76px]" : "h-14",
             flushTop && !topBar && "lg:hidden"
           )}
         >
@@ -60,8 +61,9 @@ export function AppShell({ children, topBar, flushTop = false }: AppShellProps) 
         <main
           className={cn(
             "flex-1 overflow-hidden px-6 pb-6",
-            // With topBar (dashboard greeting), sit the date even with the Dashboard nav item
-            topBar ? "pt-5" : "pt-6"
+            // Logo block (76) + border (1) + nav py-4 (16) + half Dashboard link (20)
+            // = 113px. Date (text-3xl ≈ 36px line) centers with pt-[19px].
+            topBar ? "pt-[19px]" : "pt-6"
           )}
         >
           {children}

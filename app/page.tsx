@@ -27,9 +27,9 @@ const features = [
 
 export default function HomePage() {
   return (
-    <div className="flex flex-col min-h-screen bg-[hsl(var(--background))]">
+    <div className="flex flex-col h-full overflow-hidden bg-[hsl(var(--background))]">
       {/* Nav */}
-      <header className="flex items-center justify-between px-8 py-5 border-b border-[hsl(var(--border))]">
+      <header className="flex items-center justify-between px-8 py-5 border-b border-[hsl(var(--border))] shrink-0">
         <Logo size={48} priority />
         <div className="flex items-center gap-3">
           <Link
@@ -47,13 +47,20 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* Hero */}
-      <main className="flex flex-col items-center justify-center flex-1 text-center px-6 py-24">
-        <Logo size={120} className="mb-8" priority />
-        <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4 max-w-2xl">
+      {/*
+        Same proportions as production on roomy screens; modest clamp on short
+        heights so MacBooks fit without inventing large empty gaps between sections.
+      */}
+      <main className="flex flex-1 min-h-0 flex-col items-center justify-center text-center px-6 py-[clamp(1.5rem,6vh,6rem)]">
+        <Logo
+          size={120}
+          className="size-[clamp(5rem,14vh,7.5rem)] mb-[clamp(1.25rem,2.5vh,2rem)]"
+          priority
+        />
+        <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4 max-w-2xl [@media(max-height:800px)]:text-4xl">
           Your productivity universe
         </h1>
-        <p className="text-lg text-[hsl(var(--muted-foreground))] max-w-lg mb-10">
+        <p className="text-lg text-[hsl(var(--muted-foreground))] max-w-lg mb-10 [@media(max-height:800px)]:mb-6 [@media(max-height:800px)]:text-base">
           Manage tasks, schedule events, journal your thoughts, and find anything — all in one
           beautifully focused place.
         </p>
@@ -72,12 +79,12 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {/* Feature cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mt-20 max-w-3xl w-full">
+        {/* Feature cards — production mt-20 on tall screens, slightly tighter when short */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mt-[clamp(5.5rem,6vh,6rem)] max-w-3xl w-full">
           {features.map(({ icon: Icon, title, description }) => (
             <div
               key={title}
-              className="flex flex-col items-center p-6 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-center gap-3"
+              className="flex flex-col items-center p-6 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-center gap-3 [@media(max-height:800px)]:p-5"
             >
               <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-[hsl(var(--muted))]">
                 <Icon className="w-5 h-5 text-[hsl(var(--primary))]" />
@@ -90,10 +97,6 @@ export default function HomePage() {
           ))}
         </div>
       </main>
-
-      <footer className="text-center py-6 text-xs text-[hsl(var(--muted-foreground))] border-t border-[hsl(var(--border))]">
-        &copy; {new Date().getFullYear()} Planitary. All rights reserved.
-      </footer>
     </div>
   );
 }

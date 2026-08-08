@@ -6,9 +6,9 @@ const OWNED_ID = "11111111-1111-1111-1111-111111111111";
 const FOREIGN_ID = "22222222-2222-2222-2222-222222222222";
 
 describe("parseTasksScope", () => {
-  test("defaults to 'all' with no params", () => {
+  test("defaults to Inbox with no params", () => {
     const scope = parseTasksScope(new URLSearchParams(""), new Set([OWNED_ID]));
-    assert.deepEqual(scope, { type: "all" });
+    assert.deepEqual(scope, { type: "inbox" });
   });
 
   test("?view=inbox selects Inbox", () => {
@@ -16,9 +16,9 @@ describe("parseTasksScope", () => {
     assert.deepEqual(scope, { type: "inbox" });
   });
 
-  test("an unrecognized ?view value falls back to 'all'", () => {
+  test("an unrecognized ?view value falls back to Inbox", () => {
     const scope = parseTasksScope(new URLSearchParams("view=today"), new Set());
-    assert.deepEqual(scope, { type: "all" });
+    assert.deepEqual(scope, { type: "inbox" });
   });
 
   test("?list=<owned uuid> selects that List", () => {
@@ -26,19 +26,19 @@ describe("parseTasksScope", () => {
     assert.deepEqual(scope, { type: "list", id: OWNED_ID });
   });
 
-  test("a List id not owned by the user falls back to 'all' (no cross-user leak)", () => {
+  test("a List id not owned by the user falls back to Inbox (no cross-user leak)", () => {
     const scope = parseTasksScope(new URLSearchParams(`list=${FOREIGN_ID}`), new Set([OWNED_ID]));
-    assert.deepEqual(scope, { type: "all" });
+    assert.deepEqual(scope, { type: "inbox" });
   });
 
-  test("a deleted List id (no longer owned) falls back to 'all'", () => {
+  test("a deleted List id (no longer owned) falls back to Inbox", () => {
     const scope = parseTasksScope(new URLSearchParams(`list=${OWNED_ID}`), new Set());
-    assert.deepEqual(scope, { type: "all" });
+    assert.deepEqual(scope, { type: "inbox" });
   });
 
-  test("a malformed (non-uuid) list id falls back to 'all' rather than throwing", () => {
+  test("a malformed (non-uuid) list id falls back to Inbox rather than throwing", () => {
     const scope = parseTasksScope(new URLSearchParams("list=not-a-uuid"), new Set([OWNED_ID]));
-    assert.deepEqual(scope, { type: "all" });
+    assert.deepEqual(scope, { type: "inbox" });
   });
 
   test("'list' takes precedence over 'view' when both are present", () => {
@@ -51,11 +51,6 @@ describe("parseTasksScope", () => {
 });
 
 describe("buildTasksScopeParams", () => {
-  test("'all' produces no params", () => {
-    const params = buildTasksScopeParams({ type: "all" });
-    assert.equal(params.toString(), "");
-  });
-
   test("'inbox' produces view=inbox", () => {
     const params = buildTasksScopeParams({ type: "inbox" });
     assert.equal(params.toString(), "view=inbox");
