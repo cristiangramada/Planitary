@@ -9,6 +9,7 @@ import {
   BookOpen,
   Search,
   User,
+  Palette,
 } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { cn } from "@/utils/cn";
@@ -32,7 +33,9 @@ function navLinkClass(active: boolean) {
 
 export function Sidebar() {
   const pathname = usePathname();
-  const accountActive = pathname === "/account" || pathname.startsWith("/account/");
+  const accountActive = pathname === "/account";
+  const appearanceActive =
+    pathname === "/account/appearance" || pathname.startsWith("/account/appearance/");
 
   return (
     <aside className="flex flex-col w-max h-full border-r border-[hsl(var(--sidebar-border))] bg-[hsl(var(--sidebar-bg))] shrink-0">
@@ -55,8 +58,12 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Footer — account */}
-      <div className="px-3 pb-4 border-t border-[hsl(var(--sidebar-border))] pt-4">
+      {/* Footer — appearance + account */}
+      <div className="px-3 pb-4 border-t border-[hsl(var(--sidebar-border))] pt-4 space-y-0.5">
+        <Link href="/account/appearance" className={navLinkClass(appearanceActive)}>
+          <Palette className="w-4 h-4 shrink-0" />
+          Appearance
+        </Link>
         <Link href="/account" className={navLinkClass(accountActive)}>
           <User className="w-4 h-4 shrink-0" />
           Account

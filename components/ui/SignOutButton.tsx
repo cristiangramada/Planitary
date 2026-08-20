@@ -23,7 +23,7 @@ export function SignOutButton() {
     <button
       onClick={handleSignOut}
       disabled={loading}
-      className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] disabled:opacity-60 disabled:cursor-not-allowed transition-colors cursor-pointer"
+      className="flex w-fit items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))] disabled:opacity-60 disabled:cursor-not-allowed transition-colors cursor-pointer"
     >
       <LogOut className="w-4 h-4 shrink-0" />
       {loading ? "Signing out…" : "Sign out"}

@@ -4,24 +4,24 @@ import type { Metadata } from "next";
 import { Logo } from "@/components/ui/Logo";
 
 export const metadata: Metadata = {
-  title: "Planitary — Your productivity universe",
+  title: "Planitary",
 };
 
 const features = [
   {
     icon: CheckSquare,
     title: "Tasks",
-    description: "Capture and organize everything on your mind with priority levels and due dates.",
+    description: "Organize work in lists with priorities, due dates, subtasks, and recurring tasks.",
   },
   {
     icon: CalendarDays,
     title: "Calendar",
-    description: "Stay on top of your schedule with a clean, distraction-free event view.",
+    description: "See events and due tasks together in month, week, or day views.",
   },
   {
     icon: BookOpen,
     title: "Journal",
-    description: "Reflect on your day with private journal entries and mood tracking.",
+    description: "Write daily entries, review completed tasks, and draft weekly standup summaries.",
   },
 ];
 
