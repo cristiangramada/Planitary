@@ -4,21 +4,18 @@ import { AppShell } from "@/components/layout/AppShell";
 import { ProfileSection } from "./ProfileSection";
 import { EmailSection } from "./EmailSection";
 import { PasswordSection } from "./PasswordSection";
-import { AppearanceSection } from "./AppearanceSection";
 import { SessionSection } from "./SessionSection";
 
 interface AccountClientProps {
   userId: string;
   email: string;
   initialDisplayName: string | null;
-  productiveDayCount: number;
 }
 
 export function AccountClient({
   userId,
   email,
   initialDisplayName,
-  productiveDayCount,
 }: AccountClientProps) {
   return (
     <AppShell>
@@ -41,8 +38,6 @@ export function AccountClient({
               <ProfileSection userId={userId} email={email} initialDisplayName={initialDisplayName} />
             </div>
           </div>
-
-          <AppearanceSection productiveDayCount={productiveDayCount} />
         </div>
       </div>
     </AppShell>

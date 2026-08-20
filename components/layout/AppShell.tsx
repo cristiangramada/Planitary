@@ -12,9 +12,16 @@ interface AppShellProps {
   topBar?: ReactNode;
   /** Skip the desktop top spacer so page content sits higher. */
   flushTop?: boolean;
+  /** Extra classes on the main content area. */
+  mainClassName?: string;
 }
 
-export function AppShell({ children, topBar, flushTop = false }: AppShellProps) {
+export function AppShell({
+  children,
+  topBar,
+  flushTop = false,
+  mainClassName,
+}: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
@@ -60,10 +67,8 @@ export function AppShell({ children, topBar, flushTop = false }: AppShellProps) 
         </div>
         <main
           className={cn(
-            "flex-1 overflow-hidden px-6 pb-6",
-            // Logo block (76) + border (1) + nav py-4 (16) + half Dashboard link (20)
-            // = 113px. Date (text-3xl ≈ 36px line) centers with pt-[19px].
-            topBar ? "pt-[19px]" : "pt-6"
+            "flex-1 overflow-hidden px-6",
+            mainClassName ?? (topBar ? "pt-[19px] pb-6" : "pt-6 pb-6")
           )}
         >
           {children}

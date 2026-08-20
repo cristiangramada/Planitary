@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { fetchDisplayName } from "@/lib/profile";
-import { countProductiveDays } from "@/lib/productive-days";
 import { AccountClient } from "./AccountClient";
 
 export const metadata: Metadata = { title: "Account" };
@@ -19,17 +18,13 @@ export default async function AccountPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [displayName, productiveDayCount] = await Promise.all([
-    fetchDisplayName(supabase).catch(() => null),
-    countProductiveDays(supabase).catch(() => 0),
-  ]);
+  const displayName = await fetchDisplayName(supabase).catch(() => null);
 
   return (
     <AccountClient
       userId={user.id}
       email={user.email ?? ""}
       initialDisplayName={displayName}
-      productiveDayCount={productiveDayCount}
     />
   );
 }

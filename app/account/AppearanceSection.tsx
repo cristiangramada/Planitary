@@ -62,8 +62,8 @@ export function AppearanceSection({ productiveDayCount }: AppearanceSectionProps
 
   return (
     <AccountCard
-      title="Appearance"
-      description="Choose how Planitary looks on this device. Planet themes unlock as you complete tasks on more days."
+      description="Themes unlock as you complete tasks on more days."
+      className="p-4 gap-3 [@media(max-height:820px)]:gap-2"
     >
       <p className="text-xs text-[hsl(var(--muted-foreground))] -mt-1">
         {productiveDayCount === 0
@@ -74,7 +74,7 @@ export function AppearanceSection({ productiveDayCount }: AppearanceSectionProps
       <div
         role="radiogroup"
         aria-label="Theme"
-        className="grid grid-cols-1 sm:grid-cols-2 gap-2"
+        className="grid grid-cols-1 gap-2 sm:grid-cols-2 [@media(max-height:820px)]:gap-1.5"
       >
         {THEME_DEFINITIONS.map((def) => {
           const unlocked = isThemeUnlocked(def.id, productiveDayCount);
@@ -102,7 +102,8 @@ export function AppearanceSection({ productiveDayCount }: AppearanceSectionProps
                 }
               }}
               className={cn(
-                "relative flex flex-col items-start gap-2 px-3 py-3 rounded-lg border text-left text-sm transition-colors",
+                "relative flex flex-col items-start gap-2 rounded-lg border px-3 py-3 text-left text-sm transition-colors",
+                "[@media(max-height:820px)]:gap-1.5 [@media(max-height:820px)]:py-2",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--background))]",
                 selected
                   ? "border-[hsl(var(--primary))] bg-[hsl(var(--primary))]/10 text-[hsl(var(--foreground))]"
@@ -122,7 +123,7 @@ export function AppearanceSection({ productiveDayCount }: AppearanceSectionProps
               <span className="text-xs text-[hsl(var(--muted-foreground))]">{def.description}</span>
 
               {!unlocked && progress && (
-                <div className="w-full flex flex-col gap-1.5 mt-0.5">
+                <div className="mt-0.5 flex w-full flex-col gap-1.5 [@media(max-height:820px)]:gap-1">
                   <span className="text-xs text-[hsl(var(--muted-foreground))]">
                     Complete tasks on {progress.required} different days
                   </span>
