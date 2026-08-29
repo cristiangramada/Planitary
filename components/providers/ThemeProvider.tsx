@@ -1,6 +1,7 @@
 "use client";
 
 import { ThemeProvider as NextThemesProvider, useTheme } from "next-themes";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, type ReactNode } from "react";
 import { DisableNativeContextMenu } from "./DisableNativeContextMenu";
 import { createClient } from "@/lib/supabase/client";
@@ -11,6 +12,18 @@ import {
   isThemeId,
   resolveActiveTheme,
 } from "@/lib/themes";
+
+/**
+ * Signed-out surfaces (welcome, login, signup) always render the default
+ * theme, regardless of the visitor's stored preference. This is a visual
+ * override only — it must never write to the persisted theme preference,
+ * so a returning user's theme survives sign-out and reappears on sign-in.
+ */
+const THEME_LOCKED_PATHS = ["/", "/login", "/signup"];
+
+function isThemeLockedPath(pathname: string): boolean {
+  return THEME_LOCKED_PATHS.includes(pathname);
+}
 
 interface ThemeProviderProps {
   children: ReactNode;
@@ -38,10 +51,13 @@ if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
  * Unlock state is derived from durable productive-day rows in Supabase.
  */
 function ThemeUnlockGuard({ children }: { children: ReactNode }) {
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme, forcedTheme } = useTheme();
   const checked = useRef(false);
 
   useEffect(() => {
+    // A locked page already forces the default theme visually — leave the
+    // stored preference untouched so it's there when the user signs back in.
+    if (forcedTheme) return;
     if (checked.current) return;
     const candidate = theme ?? resolvedTheme;
     if (!candidate) return;
@@ -67,8 +83,9 @@ function ThemeUnlockGuard({ children }: { children: ReactNode }) {
           data: { user },
         } = await supabase.auth.getUser();
         if (!user) {
-          // Unauthenticated surfaces should not keep a planet theme active.
-          if (!cancelled) setTheme(DEFAULT_THEME);
+          // Signed-out user with a planet theme stored (e.g. mid sign-out
+          // redirect) — nothing to validate here; locked pages already
+          // force the default theme visually without touching storage.
           checked.current = true;
           return;
         }
@@ -87,12 +104,15 @@ function ThemeUnlockGuard({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [theme, resolvedTheme, setTheme]);
+  }, [theme, resolvedTheme, setTheme, forcedTheme]);
 
   return children;
 }
 
 export function ThemeProvider({ children }: ThemeProviderProps) {
+  const pathname = usePathname();
+  const forcedTheme = isThemeLockedPath(pathname) ? DEFAULT_THEME : undefined;
+
   return (
     <NextThemesProvider
       attribute="class"
@@ -100,6 +120,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       enableSystem={false}
       disableTransitionOnChange
       themes={[...THEME_IDS]}
+      forcedTheme={forcedTheme}
     >
       <ThemeUnlockGuard>
         <DisableNativeContextMenu />
