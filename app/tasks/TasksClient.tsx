@@ -907,14 +907,14 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
         {/* Filter tabs */}
         <div
           ref={filterTabsRef}
-          className="flex gap-1 p-1 rounded-lg bg-[hsl(var(--muted))] mb-4 w-fit shrink-0"
+          className="flex gap-1 p-1 rounded-lg bg-[hsl(var(--muted))] mb-4 w-fit max-w-full overflow-x-auto shrink-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {FILTER_TABS.map(({ key, label, count }) => (
             <button
               key={key}
               onClick={() => setFilterBy(key)}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors text-[hsl(var(--foreground))]",
+                "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors text-[hsl(var(--foreground))] shrink-0 whitespace-nowrap",
                 filterBy === key
                   ? "bg-[hsl(var(--background))] shadow-sm cursor-default"
                   : "cursor-pointer"
@@ -1072,15 +1072,22 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
 
       {/* Mobile detail panel */}
       {selectedTask && (
-        <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-[hsl(var(--background))] border-l border-[hsl(var(--border))] shadow-2xl md:hidden">
-          <TaskDetailPanel
-            key={selectedTask.id}
-            task={selectedTask}
-            onSaveTitleNotes={handleSaveTitleNotes}
-            onReplaceSubtasks={handleReplaceSubtasks}
-            onToggleSubtask={handleToggleSubtask}
-            onPatchFields={handlePatchFields}
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setSelectedTaskId(null)}
           />
+          <div className="absolute inset-y-0 right-0 w-full max-w-md bg-[hsl(var(--background))] border-l border-[hsl(var(--border))] shadow-2xl">
+            <TaskDetailPanel
+              key={selectedTask.id}
+              task={selectedTask}
+              onSaveTitleNotes={handleSaveTitleNotes}
+              onReplaceSubtasks={handleReplaceSubtasks}
+              onToggleSubtask={handleToggleSubtask}
+              onPatchFields={handlePatchFields}
+              onClose={() => setSelectedTaskId(null)}
+            />
+          </div>
         </div>
       )}
       </div>{/* end Lists panel + main content row */}

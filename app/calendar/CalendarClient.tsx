@@ -2,7 +2,9 @@
 
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { X } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { CalendarHeader, type CalView } from "./CalendarHeader";
 import { MonthView } from "./MonthView";
 import { WeekView } from "./WeekView";
@@ -46,6 +48,12 @@ export function CalendarClient({
 }: CalendarClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isMobile = useIsMobile();
+
+  // On mobile/tablet, Month and Week views hide the persistent agenda column;
+  // selecting a day opens it as a bottom sheet instead (same "tap → detail"
+  // flow as the Tasks page).
+  const [mobileAgendaOpen, setMobileAgendaOpen] = useState(false);
 
   // ── Data state ───────────────────────────────────────────────────────────
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
@@ -169,6 +177,7 @@ export function CalendarClient({
 
   function handleSelectDay(iso: string) {
     setSelectedDay(iso);
+    if (isMobile && view !== "day") setMobileAgendaOpen(true);
   }
 
   // ── Event CRUD ────────────────────────────────────────────────────────────
@@ -326,15 +335,27 @@ export function CalendarClient({
         )}
 
         {/* ── Header ── */}
-        <div className="shrink-0">
-          <CalendarHeader
-            label={headerLabel}
-            view={view}
-            onPrev={handlePrev}
-            onNext={handleNext}
-            onToday={handleToday}
-            onViewChange={handleViewChange}
-          />
+        <div className="shrink-0 flex items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <CalendarHeader
+              label={headerLabel}
+              view={view}
+              onPrev={handlePrev}
+              onNext={handleNext}
+              onToday={handleToday}
+              onViewChange={handleViewChange}
+            />
+          </div>
+          {/* Mobile-only: opens the agenda sheet for the selected day — also
+              the only touch-accessible way to add an event/task, since the
+              desktop right-click "add" menu has no touch equivalent here. */}
+          <button
+            type="button"
+            onClick={() => setMobileAgendaOpen(true)}
+            className="lg:hidden mt-3 shrink-0 h-7 px-3 rounded-full border border-[hsl(var(--border))] text-xs font-semibold text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary))] hover:text-[hsl(var(--primary))] transition-colors cursor-pointer"
+          >
+            Agenda
+          </button>
         </div>
 
         {/* ── Two-column body ── */}
@@ -379,8 +400,9 @@ export function CalendarClient({
             )}
           </div>
 
-          {/* Right: agenda panel */}
-          <div className="w-80 shrink-0 flex flex-col min-h-0 border-l border-[hsl(var(--border))] pl-4">
+          {/* Right: agenda panel — persistent on desktop/laptop only.
+              On mobile/tablet it becomes a bottom sheet (below). */}
+          <div className="hidden lg:flex w-80 shrink-0 flex-col min-h-0 border-l border-[hsl(var(--border))] pl-4">
             <AgendaPanel
               selectedDay={selectedDay}
               events={events}
@@ -396,6 +418,44 @@ export function CalendarClient({
 
         </div>
       </div>
+
+      {/* ── Mobile agenda bottom sheet ── */}
+      {mobileAgendaOpen && (
+        <div className="lg:hidden fixed inset-0 z-40">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setMobileAgendaOpen(false)}
+          />
+          <div
+            className="absolute inset-x-0 bottom-0 max-h-[80dvh] flex flex-col bg-[hsl(var(--background))] rounded-t-2xl border-t border-[hsl(var(--border))] shadow-2xl"
+            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+          >
+            <div className="flex items-center justify-end px-4 pt-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setMobileAgendaOpen(false)}
+                aria-label="Close agenda"
+                className="p-1.5 rounded-md text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 flex flex-col px-4 pb-4">
+              <AgendaPanel
+                selectedDay={selectedDay}
+                events={events}
+                tasks={tasks}
+                onEditEvent={handleEditEvent}
+                onEditTask={handleEditTask}
+                onDeleteEvent={handleDeleteEvent}
+                onDeleteTask={handleDeleteTask}
+                onNewEvent={openNewEventForm}
+                onNewTask={openNewTaskForm}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {dayContextMenu && (
         <CalendarDayContextMenu

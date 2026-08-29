@@ -259,7 +259,7 @@ export function JournalClient({
         )}
 
         {/* ── Date navigation + sort ── */}
-        <div className="flex items-center justify-between gap-3 mb-4 shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4 shrink-0">
           <div className="flex items-center gap-1 min-w-0">
             <button
               type="button"
@@ -282,7 +282,7 @@ export function JournalClient({
               <MiniCalendarPicker
                 value={selectedDate}
                 onChange={(v) => goToDate(v ?? todayStr)}
-                className="w-48"
+                className="w-32 sm:w-48"
               />
             </div>
 
