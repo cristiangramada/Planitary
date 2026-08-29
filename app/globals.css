@@ -91,85 +91,85 @@
     --gradient-to: 210 8% 11%;
   }
 
-  /* Venus — warm cream, burnished gold, soft amber */
+  /* Venus — deep bronze, muted amber, candlelight warmth */
   .venus {
-    --background: 36 38% 92%;
-    --foreground: 28 18% 18%;
-    --card: 38 42% 95%;
-    --card-foreground: 28 18% 18%;
-    --surface: 38 40% 94%;
-    --surface-elevated: 40 50% 97%;
-    --surface-muted: 34 28% 86%;
-    --muted: 34 28% 86%;
-    --muted-foreground: 28 12% 40%;
-    --border: 34 22% 78%;
-    --input: 34 24% 88%;
-    --primary: 38 48% 42%;
-    --primary-foreground: 40 50% 98%;
-    --secondary: 34 25% 88%;
-    --accent: 22 45% 48%;
+    --background: 26 27% 10%;
+    --foreground: 35 44% 89%;
+    --card: 24 29% 14%;
+    --card-foreground: 35 44% 89%;
+    --surface: 24 29% 14%;
+    --surface-elevated: 23 30% 17%;
+    --surface-muted: 26 23% 20%;
+    --muted: 26 23% 20%;
+    --muted-foreground: 32 19% 58%;
+    --border: 26 23% 24%;
+    --input: 24 25% 18%;
+    --primary: 34 52% 55%;
+    --primary-foreground: 26 30% 10%;
+    --secondary: 24 20% 20%;
+    --accent: 24 45% 43%;
     --success: 152 35% 34%;
-    --destructive: 0 58% 42%;
-    --ring: 38 48% 42%;
-    --sidebar-bg: 36 32% 89%;
-    --sidebar-foreground: 28 18% 20%;
-    --sidebar-border: 34 22% 78%;
-    --gradient-from: 36 40% 86%;
-    --gradient-to: 38 42% 95%;
+    --destructive: 0 58% 48%;
+    --ring: 34 52% 55%;
+    --sidebar-bg: 26 27% 8%;
+    --sidebar-foreground: 35 40% 88%;
+    --sidebar-border: 26 23% 18%;
+    --gradient-from: 34 40% 28%;
+    --gradient-to: 26 27% 10%;
   }
 
-  /* Earth — ocean blue, forest green, muted teal */
+  /* Earth — muted sage green with balanced ocean blue */
   .earth {
-    --background: 198 48% 9%;
-    --foreground: 180 15% 92%;
-    --card: 198 38% 12%;
-    --card-foreground: 180 15% 92%;
-    --surface: 198 40% 11%;
-    --surface-elevated: 198 35% 15%;
-    --surface-muted: 198 28% 18%;
-    --muted: 198 28% 18%;
-    --muted-foreground: 190 14% 60%;
-    --border: 198 24% 20%;
-    --input: 198 26% 16%;
-    --primary: 158 42% 42%;
-    --primary-foreground: 160 40% 98%;
-    --secondary: 198 28% 18%;
-    --accent: 192 38% 48%;
+    --background: 174 23% 9%;
+    --foreground: 160 15% 92%;
+    --card: 170 20% 12%;
+    --card-foreground: 160 15% 92%;
+    --surface: 170 20% 12%;
+    --surface-elevated: 167 19% 15%;
+    --surface-muted: 168 16% 17%;
+    --muted: 168 16% 17%;
+    --muted-foreground: 150 5% 56%;
+    --border: 168 17% 17%;
+    --input: 170 18% 13%;
+    --primary: 153 20% 44%;
+    --primary-foreground: 150 40% 98%;
+    --secondary: 168 16% 17%;
+    --accent: 200 27% 44%;
     --success: 152 48% 40%;
     --destructive: 0 62% 55%;
-    --ring: 158 42% 42%;
-    --sidebar-bg: 198 48% 7%;
-    --sidebar-foreground: 180 12% 88%;
-    --sidebar-border: 198 24% 16%;
-    --gradient-from: 192 40% 22%;
-    --gradient-to: 198 48% 9%;
+    --ring: 153 20% 44%;
+    --sidebar-bg: 174 23% 7%;
+    --sidebar-foreground: 160 12% 88%;
+    --sidebar-border: 168 17% 15%;
+    --gradient-from: 153 18% 20%;
+    --gradient-to: 174 23% 9%;
   }
 
-  /* Mars — rust / terracotta; destructive stays a distinct true red */
+  /* Mars — warm rust red, restrained; destructive is magenta-red */
   .mars {
-    --background: 15 28% 8%;
-    --foreground: 30 18% 92%;
-    --card: 15 24% 12%;
-    --card-foreground: 30 18% 92%;
-    --surface: 15 26% 10%;
-    --surface-elevated: 15 22% 15%;
-    --surface-muted: 15 18% 18%;
-    --muted: 15 18% 18%;
-    --muted-foreground: 20 12% 58%;
-    --border: 15 16% 22%;
-    --input: 15 18% 16%;
-    --primary: 22 62% 52%;
-    --primary-foreground: 20 40% 98%;
-    --secondary: 15 20% 18%;
-    --accent: 18 48% 42%;
+    --background: 12 22% 9%;
+    --foreground: 15 25% 93%;
+    --card: 15 24% 13%;
+    --card-foreground: 15 25% 93%;
+    --surface: 15 24% 13%;
+    --surface-elevated: 13 21% 17%;
+    --surface-muted: 12 18% 19%;
+    --muted: 12 18% 19%;
+    --muted-foreground: 12 18% 61%;
+    --border: 12 20% 22%;
+    --input: 14 20% 14%;
+    --primary: 10 40% 48%;
+    --primary-foreground: 10 40% 98%;
+    --secondary: 12 18% 18%;
+    --accent: 9 43% 38%;
     --success: 152 42% 40%;
-    --destructive: 350 72% 52%;
-    --ring: 22 62% 52%;
-    --sidebar-bg: 15 30% 6%;
-    --sidebar-foreground: 30 14% 88%;
-    --sidebar-border: 15 16% 16%;
-    --gradient-from: 18 40% 22%;
-    --gradient-to: 15 28% 8%;
+    --destructive: 346 71% 57%;
+    --ring: 10 40% 48%;
+    --sidebar-bg: 12 24% 7%;
+    --sidebar-foreground: 15 20% 88%;
+    --sidebar-border: 12 18% 15%;
+    --gradient-from: 10 32% 22%;
+    --gradient-to: 12 22% 9%;
   }
 
   /* Jupiter — sand, caramel, copper; optional banded gradient tokens */
@@ -226,58 +226,58 @@
     --gradient-to: 230 28% 10%;
   }
 
-  /* Uranus — pale cyan / ice blue (not neon) */
+  /* Uranus — icy blue-cyan (not teal-green) */
   .uranus {
-    --background: 198 32% 9%;
-    --foreground: 190 20% 92%;
-    --card: 198 28% 12%;
-    --card-foreground: 190 20% 92%;
-    --surface: 198 30% 10%;
-    --surface-elevated: 198 26% 15%;
-    --surface-muted: 198 20% 18%;
-    --muted: 198 20% 18%;
-    --muted-foreground: 192 14% 58%;
-    --border: 198 18% 22%;
-    --input: 198 20% 16%;
-    --primary: 188 42% 52%;
-    --primary-foreground: 198 40% 8%;
-    --secondary: 198 20% 18%;
-    --accent: 192 38% 58%;
+    --background: 201 47% 10%;
+    --foreground: 203 42% 93%;
+    --card: 202 42% 14%;
+    --card-foreground: 203 42% 93%;
+    --surface: 202 42% 14%;
+    --surface-elevated: 202 42% 18%;
+    --surface-muted: 202 35% 19%;
+    --muted: 202 35% 19%;
+    --muted-foreground: 203 17% 59%;
+    --border: 202 42% 20%;
+    --input: 202 40% 15%;
+    --primary: 196 38% 53%;
+    --primary-foreground: 201 40% 8%;
+    --secondary: 202 35% 19%;
+    --accent: 197 44% 64%;
     --success: 152 40% 40%;
     --destructive: 0 62% 55%;
-    --ring: 188 42% 52%;
-    --sidebar-bg: 198 34% 7%;
-    --sidebar-foreground: 190 16% 88%;
-    --sidebar-border: 198 18% 16%;
-    --gradient-from: 188 35% 28%;
-    --gradient-to: 198 32% 9%;
+    --ring: 196 38% 53%;
+    --sidebar-bg: 201 48% 8%;
+    --sidebar-foreground: 203 38% 88%;
+    --sidebar-border: 202 35% 14%;
+    --gradient-from: 196 35% 28%;
+    --gradient-to: 201 47% 10%;
   }
 
-  /* Neptune — midnight ocean; distinct from default Dark (more blue/indigo) */
+  /* Neptune — abyss blue / deep indigo / muted violet */
   .neptune {
-    --background: 228 55% 6%;
-    --foreground: 220 30% 94%;
-    --card: 228 45% 10%;
-    --card-foreground: 220 30% 94%;
-    --surface: 228 48% 8%;
-    --surface-elevated: 228 40% 14%;
-    --surface-muted: 228 32% 16%;
-    --muted: 228 32% 16%;
-    --muted-foreground: 220 18% 62%;
-    --border: 228 30% 20%;
-    --input: 228 32% 14%;
-    --primary: 245 55% 65%;
-    --primary-foreground: 228 50% 98%;
-    --secondary: 228 32% 16%;
-    --accent: 258 50% 58%;
+    --background: 226 49% 8%;
+    --foreground: 222 39% 94%;
+    --card: 225 46% 13%;
+    --card-foreground: 222 39% 94%;
+    --surface: 225 46% 13%;
+    --surface-elevated: 223 44% 17%;
+    --surface-muted: 224 40% 18%;
+    --muted: 224 40% 18%;
+    --muted-foreground: 224 19% 62%;
+    --border: 224 42% 20%;
+    --input: 225 44% 14%;
+    --primary: 224 55% 46%;
+    --primary-foreground: 226 50% 98%;
+    --secondary: 224 40% 18%;
+    --accent: 251 38% 52%;
     --success: 152 45% 42%;
     --destructive: 0 70% 58%;
-    --ring: 245 55% 65%;
-    --sidebar-bg: 228 58% 5%;
-    --sidebar-foreground: 220 25% 90%;
-    --sidebar-border: 228 30% 14%;
-    --gradient-from: 245 45% 28%;
-    --gradient-to: 228 55% 8%;
+    --ring: 224 55% 46%;
+    --sidebar-bg: 226 52% 6%;
+    --sidebar-foreground: 222 35% 90%;
+    --sidebar-border: 224 40% 14%;
+    --gradient-from: 224 50% 28%;
+    --gradient-to: 226 49% 10%;
   }
 }
 
