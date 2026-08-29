@@ -907,14 +907,14 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
         {/* Filter tabs */}
         <div
           ref={filterTabsRef}
-          className="flex gap-1 p-1 rounded-lg bg-[hsl(var(--muted))] mb-4 w-fit shrink-0"
+          className="flex gap-1 p-1 rounded-lg bg-[hsl(var(--muted))] mb-4 max-w-full overflow-x-auto shrink-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {FILTER_TABS.map(({ key, label, count }) => (
             <button
               key={key}
               onClick={() => setFilterBy(key)}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors text-[hsl(var(--foreground))]",
+                "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors text-[hsl(var(--foreground))] shrink-0 whitespace-nowrap",
                 filterBy === key
                   ? "bg-[hsl(var(--background))] shadow-sm cursor-default"
                   : "cursor-pointer"
