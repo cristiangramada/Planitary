@@ -907,7 +907,7 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
         {/* Filter tabs */}
         <div
           ref={filterTabsRef}
-          className="flex gap-1 p-1 rounded-lg bg-[hsl(var(--muted))] mb-4 max-w-full overflow-x-auto shrink-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex gap-1 p-1 rounded-lg bg-[hsl(var(--muted))] mb-4 w-fit max-w-full overflow-x-auto shrink-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {FILTER_TABS.map(({ key, label, count }) => (
             <button
