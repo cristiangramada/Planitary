@@ -32,21 +32,21 @@ interface AppearanceSectionProps {
 
 function ThemeSwatch({
   background,
-  surface,
+  card,
   primary,
-  accent,
+  border,
 }: {
   background: string;
-  surface: string;
+  card: string;
   primary: string;
-  accent: string;
+  border: string;
 }) {
   return (
     <span className="flex items-center gap-1" aria-hidden="true">
       <span className="size-3 rounded-full border border-black/10" style={{ background }} />
-      <span className="size-3 rounded-full border border-black/10" style={{ background: surface }} />
+      <span className="size-3 rounded-full border border-black/10" style={{ background: card }} />
       <span className="size-3 rounded-full border border-black/10" style={{ background: primary }} />
-      <span className="size-3 rounded-full border border-black/10" style={{ background: accent }} />
+      <span className="size-3 rounded-full border border-black/10" style={{ background: border }} />
     </span>
   );
 }
