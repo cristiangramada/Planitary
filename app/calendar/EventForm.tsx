@@ -148,7 +148,7 @@ function EventFormBody({
         role="dialog"
         aria-modal
         aria-label={isEdit ? "Edit event" : "New event"}
-        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg flex flex-col bg-[hsl(var(--background))] border border-[hsl(var(--border))] rounded-2xl shadow-2xl max-h-[90vh]"
+        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[calc(100vw-1.5rem)] max-w-lg flex flex-col bg-[hsl(var(--background))] border border-[hsl(var(--border))] rounded-2xl shadow-2xl max-h-[90dvh]"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))] shrink-0">

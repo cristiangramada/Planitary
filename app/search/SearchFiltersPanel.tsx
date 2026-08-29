@@ -48,7 +48,7 @@ export function SearchFiltersPanel({
   const showTaskFilters = filters.entityTypes.length === 0 || filters.entityTypes.includes("task");
 
   return (
-    <div className="flex w-max flex-nowrap items-end gap-3 py-3">
+    <div className="flex w-full flex-wrap items-end gap-3 py-3 lg:w-max lg:flex-nowrap">
       {/* Date range */}
       <div className="flex items-end gap-2 shrink-0">
         <div>
@@ -67,7 +67,7 @@ export function SearchFiltersPanel({
             }
             placeholder="Any"
             nullable
-            className="w-[12.25rem]"
+            className="w-32 sm:w-[12.25rem]"
           />
         </div>
         <div>
@@ -80,7 +80,7 @@ export function SearchFiltersPanel({
             placeholder="Any"
             nullable
             minDate={filters.startDate ?? undefined}
-            className="w-[12.25rem]"
+            className="w-32 sm:w-[12.25rem]"
           />
         </div>
       </div>

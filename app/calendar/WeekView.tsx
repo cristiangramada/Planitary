@@ -89,6 +89,10 @@ export function WeekView({
 
   return (
     <div className="rounded-xl border border-[hsl(var(--border))] overflow-hidden flex flex-col h-full">
+      {/* Horizontal scroll wrapper: on narrow screens 7 day columns can't all
+          be full-width, so this area scrolls internally instead of the page. */}
+      <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden flex flex-col">
+      <div className="min-w-[640px] flex flex-col flex-1 min-h-0">
       {/* ── Day column headers ── */}
       <div className="grid grid-cols-[56px_repeat(7,1fr)] border-b border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.4)] shrink-0">
         <div /> {/* spacer for hour labels */}
@@ -305,6 +309,8 @@ export function WeekView({
             );
           })}
         </div>
+      </div>
+      </div>
       </div>
     </div>
   );

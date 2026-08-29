@@ -1072,15 +1072,22 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
 
       {/* Mobile detail panel */}
       {selectedTask && (
-        <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-[hsl(var(--background))] border-l border-[hsl(var(--border))] shadow-2xl md:hidden">
-          <TaskDetailPanel
-            key={selectedTask.id}
-            task={selectedTask}
-            onSaveTitleNotes={handleSaveTitleNotes}
-            onReplaceSubtasks={handleReplaceSubtasks}
-            onToggleSubtask={handleToggleSubtask}
-            onPatchFields={handlePatchFields}
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setSelectedTaskId(null)}
           />
+          <div className="absolute inset-y-0 right-0 w-full max-w-md bg-[hsl(var(--background))] border-l border-[hsl(var(--border))] shadow-2xl">
+            <TaskDetailPanel
+              key={selectedTask.id}
+              task={selectedTask}
+              onSaveTitleNotes={handleSaveTitleNotes}
+              onReplaceSubtasks={handleReplaceSubtasks}
+              onToggleSubtask={handleToggleSubtask}
+              onPatchFields={handlePatchFields}
+              onClose={() => setSelectedTaskId(null)}
+            />
+          </div>
         </div>
       )}
       </div>{/* end Lists panel + main content row */}

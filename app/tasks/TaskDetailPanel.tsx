@@ -25,6 +25,8 @@ interface TaskDetailPanelProps {
       repeat?: RepeatOption;
     }
   ) => Promise<void>;
+  /** Shows a mobile-only back/close header when provided (the drawer variant below `md`). */
+  onClose?: () => void;
 }
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
@@ -73,6 +75,7 @@ export function TaskDetailPanel({
   onReplaceSubtasks,
   onToggleSubtask,
   onPatchFields,
+  onClose,
 }: TaskDetailPanelProps) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes ?? "");
@@ -266,6 +269,20 @@ export function TaskDetailPanel({
 
   return (
     <div className="flex h-full flex-col bg-[hsl(var(--background))]">
+      {/* Mobile-only header: back to task list */}
+      {onClose && (
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-[hsl(var(--border))] shrink-0 md:hidden">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Back to tasks"
+            className="p-1.5 -ml-1.5 rounded-md text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+          <h2 className="text-sm font-semibold">Task</h2>
+        </div>
+      )}
       {/* Meta bar — due date + priority (flag shares a column with the mode toggle below) */}
       <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] items-center gap-2 pl-4 pr-5 pt-3 pb-2.5 shrink-0">
         <button

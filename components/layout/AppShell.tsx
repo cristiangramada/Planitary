@@ -25,7 +25,7 @@ export function AppShell({
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-dvh overflow-hidden">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -40,6 +40,7 @@ export function AppShell({
           "fixed inset-y-0 left-0 z-30 transition-transform duration-200 lg:relative lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <Sidebar />
       </div>
@@ -48,7 +49,7 @@ export function AppShell({
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <div
           className={cn(
-            "shrink-0 flex items-center gap-3 px-6",
+            "shrink-0 flex items-center gap-3 px-4 sm:px-6",
             // Match sidebar logo row (py-5 + 36px logo = 76px) so the greeting
             // lines up with "Planitary"
             topBar ? "h-[76px]" : "h-14",
@@ -67,7 +68,7 @@ export function AppShell({
         </div>
         <main
           className={cn(
-            "flex-1 overflow-hidden px-6",
+            "flex-1 overflow-hidden px-4 sm:px-6 min-w-0",
             mainClassName ?? (topBar ? "pt-[19px] pb-6" : "pt-6 pb-6")
           )}
         >
