@@ -13,13 +13,20 @@ function scrollToSection(e: React.MouseEvent<HTMLAnchorElement>, id: string) {
   el.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
 }
 
+function scrollToTop(e: React.MouseEvent<HTMLAnchorElement>) {
+  const scrollContainer = e.currentTarget.closest<HTMLElement>(".overflow-y-auto");
+  if (!scrollContainer) return;
+  e.preventDefault();
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  scrollContainer.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+}
+
 export function MarketingNavbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-[hsl(var(--border))] bg-[hsl(var(--background))]">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 sm:px-6 py-3.5">
-        <Link href="/" className="flex items-center gap-2">
-          <Logo size={32} priority />
-          <span className="hidden sm:inline text-[15px] font-semibold tracking-tight">Planitary</span>
+      <div className="mx-auto flex w-full max-w-[90rem] items-center justify-between px-4 sm:px-6 py-3">
+        <Link href="/" onClick={scrollToTop} aria-label="Planitary home" className="flex items-center">
+          <Logo size={44} priority />
         </Link>
 
         <nav className="flex items-center gap-0.5 sm:gap-1">

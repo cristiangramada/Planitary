@@ -67,15 +67,15 @@ export default function HomePage() {
         <CelestialDecor />
 
         <div className="relative mx-auto max-w-2xl text-center">
-          <Logo size={128} priority className="mx-auto mb-4 sm:mb-5" />
+          <Logo size={192} priority className="mx-auto mb-4 sm:mb-5" />
           <h1 className="text-5xl sm:text-7xl font-bold tracking-tight">Planitary</h1>
-          <p className="mt-5 sm:mt-6 text-lg sm:text-2xl font-medium text-[hsl(var(--muted-foreground))]">
+          <p className="mt-8 sm:mt-10 text-lg sm:text-2xl font-medium text-[hsl(var(--muted-foreground))]">
             Your productivity universe.
           </p>
-          <p className="mt-5 text-base sm:text-lg text-[hsl(var(--muted-foreground))] max-w-lg mx-auto text-pretty">
+          <p className="mt-5 text-base sm:text-lg text-[hsl(var(--muted-foreground))] mx-auto text-pretty sm:whitespace-nowrap">
             Plan your work, track your days, and keep everything in one place.
           </p>
-          <div className="mt-7 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <div className="mt-10 sm:mt-12 flex flex-col sm:flex-row items-center justify-center gap-3">
             <Link href="/signup" className={PRIMARY_CTA}>
               Get started
             </Link>
@@ -89,7 +89,7 @@ export default function HomePage() {
       </section>
 
       {/* Product walkthrough */}
-      <section id="features" className="px-4 sm:px-6 py-20 sm:py-28">
+      <section id="features" className="px-4 sm:px-6 pt-10 sm:pt-14 pb-20 sm:pb-28">
         <div className="mx-auto max-w-5xl">
           <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-center mb-14 sm:mb-20">
             Plan it. Do it. Remember it.
