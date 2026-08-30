@@ -1,7 +1,17 @@
+"use client";
+
 import Link from "next/link";
 import { Logo } from "@/components/ui/Logo";
 
 const NAV_LINK = "px-3 py-2 text-sm font-medium text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer";
+
+function scrollToSection(e: React.MouseEvent<HTMLAnchorElement>, id: string) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  e.preventDefault();
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  el.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+}
 
 export function MarketingNavbar() {
   return (
@@ -13,10 +23,10 @@ export function MarketingNavbar() {
         </Link>
 
         <nav className="flex items-center gap-0.5 sm:gap-1">
-          <a href="#features" className={`hidden md:inline-flex ${NAV_LINK}`}>
+          <a href="#features" onClick={(e) => scrollToSection(e, "features")} className={`hidden md:inline-flex ${NAV_LINK}`}>
             Features
           </a>
-          <a href="#themes" className={`hidden md:inline-flex ${NAV_LINK}`}>
+          <a href="#themes" onClick={(e) => scrollToSection(e, "themes")} className={`hidden md:inline-flex ${NAV_LINK}`}>
             Themes
           </a>
           <Link href="/login" className={NAV_LINK}>

@@ -1,4 +1,4 @@
-import { CheckSquare, CalendarDays, BookOpen, LayoutDashboard, Search, Plus } from "lucide-react";
+import { CheckSquare, CalendarDays, BookOpen, LayoutDashboard, Search } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { cn } from "@/utils/cn";
 
@@ -15,8 +15,6 @@ const TASKS = [
   { title: "Review pull request", priority: "medium" as const, done: true },
   { title: "Gym", priority: "low" as const, done: false },
 ];
-
-const JOURNAL_ENTRIES = ["Shipped the onboarding redesign.", "Updated weekly journal."];
 
 const CHECK_IDLE: Record<string, string> = {
   high: "border-red-500",
@@ -67,66 +65,48 @@ export function DashboardAppPreview() {
         <p className="text-[11px] text-[hsl(var(--muted-foreground))] mb-1">Good morning, Alex</p>
         <p className="text-base sm:text-xl font-semibold tracking-tight mb-3 sm:mb-4">Friday, March 14</p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="sm:col-span-2 flex flex-col gap-3">
-            <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <CheckSquare className="w-3.5 h-3.5 text-blue-500" />
-                <span className="text-xs sm:text-sm font-semibold">Today&apos;s tasks</span>
-              </div>
-              <div className="space-y-1.5">
-                {TASKS.map((t) => (
-                  <div
-                    key={t.title}
-                    className="flex items-center gap-2.5 rounded-lg border border-[hsl(var(--border))] px-2.5 py-2"
-                  >
-                    <span
-                      className={cn(
-                        "w-3.5 h-3.5 rounded-full border-2 shrink-0",
-                        t.done ? CHECK_DONE[t.priority] : CHECK_IDLE[t.priority]
-                      )}
-                    />
-                    <span
-                      className={cn(
-                        "text-[11px] font-medium truncate",
-                        t.done && "line-through text-[hsl(var(--muted-foreground))]"
-                      )}
-                    >
-                      {t.title}
-                    </span>
-                  </div>
-                ))}
-              </div>
+        <div className="flex flex-col gap-3">
+          <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <CheckSquare className="w-3.5 h-3.5 text-blue-500" />
+              <span className="text-xs sm:text-sm font-semibold">Today&apos;s tasks</span>
             </div>
-
-            <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <CalendarDays className="w-3.5 h-3.5 text-purple-500" />
-                <span className="text-xs sm:text-sm font-semibold">Today&apos;s events</span>
-              </div>
-              <div className="flex items-center gap-3 rounded-lg border border-[hsl(var(--border))] px-2.5 py-2">
-                <span className="text-[11px] font-medium text-[hsl(var(--muted-foreground))] w-14 shrink-0">
-                  10:00 AM
-                </span>
-                <span className="text-[11px] font-medium truncate">Team meeting</span>
-              </div>
+            <div className="space-y-1.5">
+              {TASKS.map((t) => (
+                <div
+                  key={t.title}
+                  className="flex items-center gap-2.5 rounded-lg border border-[hsl(var(--border))] px-2.5 py-2"
+                >
+                  <span
+                    className={cn(
+                      "w-3.5 h-3.5 rounded-full border-2 shrink-0",
+                      t.done ? CHECK_DONE[t.priority] : CHECK_IDLE[t.priority]
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "text-[11px] sm:text-xs font-medium truncate",
+                      t.done && "line-through text-[hsl(var(--muted-foreground))]"
+                    )}
+                  >
+                    {t.title}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
 
-          <div className="hidden sm:flex flex-col gap-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <BookOpen className="w-3.5 h-3.5 text-emerald-500" />
-              <span className="text-xs font-semibold">Journal</span>
+          <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <CalendarDays className="w-3.5 h-3.5 text-purple-500" />
+              <span className="text-xs sm:text-sm font-semibold">Today&apos;s events</span>
             </div>
-            <div className="flex items-center gap-1.5 rounded-lg border border-[hsl(var(--input))] px-2.5 py-2 text-[hsl(var(--muted-foreground))]">
-              <Plus className="w-3 h-3" />
-              <span className="text-[11px]">Add entry</span>
+            <div className="flex items-center gap-3 rounded-lg border border-[hsl(var(--border))] px-2.5 py-2">
+              <span className="text-[11px] font-medium text-[hsl(var(--muted-foreground))] w-14 shrink-0">
+                10:00 AM
+              </span>
+              <span className="text-[11px] sm:text-xs font-medium truncate">Team meeting</span>
             </div>
-            {JOURNAL_ENTRIES.map((entry) => (
-              <p key={entry} className="text-[11px] leading-relaxed px-2.5 py-1.5 rounded-lg">
-                {entry}
-              </p>
-            ))}
           </div>
         </div>
       </div>

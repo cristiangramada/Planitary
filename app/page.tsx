@@ -5,6 +5,7 @@ import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { CelestialDecor } from "@/components/marketing/CelestialDecor";
 import { AppWindowFrame } from "@/components/marketing/AppWindowFrame";
 import { TasksAppPreview } from "@/components/marketing/TasksAppPreview";
+import { CalendarAppPreview } from "@/components/marketing/CalendarAppPreview";
 import { DashboardAppPreview } from "@/components/marketing/DashboardAppPreview";
 import { JournalAppPreview } from "@/components/marketing/JournalAppPreview";
 import { StandupAppPreview } from "@/components/marketing/StandupAppPreview";
@@ -19,16 +20,21 @@ const PRIMARY_CTA =
 const SECONDARY_CTA =
   "px-5 py-2.5 text-sm font-semibold rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer";
 
-const STEPS = [
+/** The 01 — Plan it step covers two features, each with its own preview. */
+const PLAN_IT_FEATURES = [
   {
-    number: "01",
-    kicker: "PLAN IT",
-    title: "Tasks & Calendar",
-    description:
-      "Organize tasks into lists, schedule what matters, and see your work alongside your calendar.",
+    title: "Tasks",
+    description: "Organize tasks into lists with priorities and due dates.",
     preview: <TasksAppPreview />,
-    reverse: false,
   },
+  {
+    title: "Calendar",
+    description: "See events and due tasks together in month, week, or day views.",
+    preview: <CalendarAppPreview />,
+  },
+];
+
+const OTHER_STEPS = [
   {
     number: "02",
     kicker: "DO IT",
@@ -50,7 +56,7 @@ const STEPS = [
 
 export default function HomePage() {
   return (
-    <div className="h-full overflow-y-auto bg-[hsl(var(--background))] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="h-full overflow-y-auto scroll-smooth bg-[hsl(var(--background))] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <MarketingNavbar />
 
       {/* Hero */}
@@ -59,10 +65,10 @@ export default function HomePage() {
 
         <div className="relative mx-auto max-w-2xl text-center">
           <h1 className="text-5xl sm:text-7xl font-bold tracking-tight">Planitary</h1>
-          <p className="mt-3 text-lg sm:text-2xl font-medium text-[hsl(var(--muted-foreground))]">
+          <p className="mt-5 sm:mt-6 text-lg sm:text-2xl font-medium text-[hsl(var(--muted-foreground))]">
             Your productivity universe.
           </p>
-          <p className="mt-5 text-base sm:text-lg text-[hsl(var(--muted-foreground))] max-w-lg mx-auto">
+          <p className="mt-5 text-base sm:text-lg text-[hsl(var(--muted-foreground))] max-w-lg mx-auto text-pretty">
             Plan your work, track your days, and keep everything in one place.
           </p>
           <div className="mt-7 flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -84,7 +90,33 @@ export default function HomePage() {
           </h2>
 
           <div className="space-y-16 sm:space-y-24">
-            {STEPS.map((step) => (
+            {/* 01 — Plan it: Tasks, then Calendar */}
+            <div>
+              <p className="text-xs font-semibold tracking-widest text-[hsl(var(--primary))] mb-3">
+                01 — PLAN IT
+              </p>
+              <h3 className="text-xl sm:text-2xl font-semibold tracking-tight mb-8 sm:mb-10">
+                Tasks &amp; Calendar
+              </h3>
+
+              <div className="space-y-10 sm:space-y-14">
+                {PLAN_IT_FEATURES.map((feature) => (
+                  <div key={feature.title} className="grid items-center gap-8 sm:grid-cols-2 sm:gap-12">
+                    <div>
+                      <h4 className="text-base sm:text-lg font-semibold tracking-tight mb-2">
+                        {feature.title}
+                      </h4>
+                      <p className="text-[hsl(var(--muted-foreground))] leading-relaxed max-w-md">
+                        {feature.description}
+                      </p>
+                    </div>
+                    <AppWindowFrame glow={false}>{feature.preview}</AppWindowFrame>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {OTHER_STEPS.map((step) => (
               <div key={step.number} className="grid items-center gap-8 sm:grid-cols-2 sm:gap-12">
                 <div className={step.reverse ? "sm:order-2" : undefined}>
                   <p className="text-xs font-semibold tracking-widest text-[hsl(var(--primary))] mb-3">
@@ -136,7 +168,7 @@ export default function HomePage() {
 
           <ThemeShowcase />
 
-          <p className="text-center text-sm text-[hsl(var(--muted-foreground))] mt-8">
+          <p className="text-center text-sm text-[hsl(var(--muted-foreground))] mt-8 text-pretty sm:whitespace-nowrap">
             Complete tasks on different days to unlock new themes.
           </p>
         </div>
