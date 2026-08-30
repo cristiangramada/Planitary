@@ -161,7 +161,7 @@ export default function HomePage() {
       </section>
 
       {/* Search */}
-      <section className="px-4 sm:px-6 py-16 sm:py-20 border-t border-[hsl(var(--border))]">
+      <section className="px-4 sm:px-6 py-16 sm:py-20">
         <div className="mx-auto max-w-4xl grid items-center gap-8 sm:grid-cols-2 sm:gap-12">
           <div className="sm:order-2">
             <h2 className="text-xl sm:text-2xl font-semibold tracking-tight mb-3">
@@ -181,7 +181,7 @@ export default function HomePage() {
       </section>
 
       {/* Themes */}
-      <section id="themes" className="scroll-mt-20 px-4 sm:px-6 py-20 sm:py-28 border-t border-[hsl(var(--border))]">
+      <section id="themes" className="scroll-mt-20 px-4 sm:px-6 py-20 sm:py-28">
         <div className="mx-auto max-w-5xl">
           <div className="text-center max-w-lg mx-auto mb-10 sm:mb-12">
             <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-3">
@@ -201,7 +201,7 @@ export default function HomePage() {
       </section>
 
       {/* Final CTA */}
-      <section className="px-4 sm:px-6 py-20 sm:py-24 border-t border-[hsl(var(--border))]">
+      <section className="px-4 sm:px-6 py-20 sm:py-24">
         <div className="mx-auto max-w-xl text-center">
           <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-3">
             Build momentum, one day at a time.
