@@ -1,7 +1,9 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { Logo } from "@/components/ui/Logo";
 import { MarketingNavbar } from "@/components/marketing/MarketingNavbar";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
+import { ScrollDownArrow } from "@/components/marketing/ScrollDownArrow";
 import { CelestialDecor } from "@/components/marketing/CelestialDecor";
 import { AppWindowFrame } from "@/components/marketing/AppWindowFrame";
 import { TasksAppPreview } from "@/components/marketing/TasksAppPreview";
@@ -61,10 +63,11 @@ export default function HomePage() {
       <MarketingNavbar />
 
       {/* Hero */}
-      <section className="relative px-4 sm:px-6 pt-16 sm:pt-24 pb-16 sm:pb-20">
+      <section className="relative flex min-h-[calc(100vh-4rem)] flex-col justify-center px-4 sm:px-6 py-16 sm:py-20">
         <CelestialDecor />
 
         <div className="relative mx-auto max-w-2xl text-center">
+          <Logo size={64} priority className="mx-auto mb-4 sm:mb-5" />
           <h1 className="text-5xl sm:text-7xl font-bold tracking-tight">Planitary</h1>
           <p className="mt-5 sm:mt-6 text-lg sm:text-2xl font-medium text-[hsl(var(--muted-foreground))]">
             Your productivity universe.
@@ -81,6 +84,8 @@ export default function HomePage() {
             </Link>
           </div>
         </div>
+
+        <ScrollDownArrow />
       </section>
 
       {/* Product walkthrough */}
