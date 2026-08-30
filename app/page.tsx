@@ -1,101 +1,163 @@
 import Link from "next/link";
-import { CheckSquare, CalendarDays, BookOpen } from "lucide-react";
 import type { Metadata } from "next";
-import { Logo } from "@/components/ui/Logo";
+import { MarketingNavbar } from "@/components/marketing/MarketingNavbar";
+import { MarketingFooter } from "@/components/marketing/MarketingFooter";
+import { CelestialDecor } from "@/components/marketing/CelestialDecor";
+import { AppWindowFrame } from "@/components/marketing/AppWindowFrame";
+import { HeroAppPreview } from "@/components/marketing/HeroAppPreview";
+import { TasksAppPreview } from "@/components/marketing/TasksAppPreview";
+import { DashboardFocusPreview } from "@/components/marketing/DashboardFocusPreview";
+import { JournalAppPreview } from "@/components/marketing/JournalAppPreview";
+import { FeatureStrip } from "@/components/marketing/FeatureStrip";
+import { ThemeShowcase } from "@/components/marketing/ThemeShowcase";
 
 export const metadata: Metadata = {
   title: "Planitary",
 };
 
-const features = [
+const PRIMARY_CTA =
+  "px-5 py-2.5 text-sm font-semibold rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 transition-opacity cursor-pointer";
+const SECONDARY_CTA =
+  "px-5 py-2.5 text-sm font-semibold rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer";
+
+const STEPS = [
   {
-    icon: CheckSquare,
-    title: "Tasks",
-    description: "Organize work in lists with priorities, due dates, subtasks, and recurring tasks.",
+    number: "01",
+    kicker: "PLAN IT",
+    title: "Tasks & Calendar",
+    description:
+      "Organize tasks into lists, schedule what matters, and see your work alongside your calendar.",
+    preview: <TasksAppPreview />,
+    reverse: false,
   },
   {
-    icon: CalendarDays,
-    title: "Calendar",
-    description: "See events and due tasks together in month, week, or day views.",
+    number: "02",
+    kicker: "DO IT",
+    title: "Dashboard",
+    description: "Keep today's work in focus without losing sight of what's coming next.",
+    preview: <DashboardFocusPreview />,
+    reverse: true,
   },
   {
-    icon: BookOpen,
+    number: "03",
+    kicker: "REMEMBER IT",
     title: "Journal",
-    description: "Write daily entries, review completed tasks, and draft weekly standup summaries.",
+    description:
+      "Keep a lightweight record of what you worked on, then turn your entries into a standup when you need one.",
+    preview: <JournalAppPreview />,
+    reverse: false,
   },
 ];
 
 export default function HomePage() {
   return (
-    <div className="flex flex-col h-dvh sm:h-full overflow-y-auto sm:overflow-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden bg-[hsl(var(--background))]">
-      {/* Nav */}
-      <header className="flex items-center justify-between px-4 sm:px-8 py-3.5 sm:py-5 border-b border-[hsl(var(--border))] shrink-0">
-        <Logo size={40} className="sm:size-12" priority />
-        <div className="flex items-center gap-2 sm:gap-3">
-          <Link
-            href="/login"
-            className="text-sm font-medium text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/signup"
-            className="px-3.5 sm:px-4 py-2 text-sm font-medium rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 transition-opacity cursor-pointer"
-          >
-            Get started
-          </Link>
-        </div>
-      </header>
+    <div className="h-full overflow-y-auto bg-[hsl(var(--background))] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <MarketingNavbar />
 
-      {/*
-        Mobile: top-aligned content in a scroll container (iPhone-friendly).
-        sm+: centered, no scroll — same proportions as production on roomy screens.
-      */}
-      <main className="flex flex-1 min-h-0 flex-col items-center text-center px-4 sm:px-6 pt-8 pb-[max(2.5rem,env(safe-area-inset-bottom))] sm:justify-center sm:py-[clamp(1.5rem,6vh,6rem)]">
-        <Logo
-          size={120}
-          className="size-20 sm:size-[clamp(5rem,14vh,7.5rem)] mb-5 sm:mb-[clamp(1.25rem,2.5vh,2rem)]"
-          priority
-        />
-        <h1 className="text-3xl sm:text-5xl font-bold tracking-tight mb-3 sm:mb-4 max-w-2xl [@media(max-height:800px)]:sm:text-4xl">
-          Your productivity universe
-        </h1>
-        <p className="text-base sm:text-lg text-[hsl(var(--muted-foreground))] max-w-lg mb-8 sm:mb-10 [@media(max-height:800px)]:sm:mb-6 [@media(max-height:800px)]:sm:text-base">
-          Manage tasks, schedule events, journal your thoughts, and find anything — all in one
-          beautifully focused place.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs sm:max-w-none sm:w-auto">
-          <Link
-            href="/signup"
-            className="px-6 py-3 text-sm font-semibold rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 transition-opacity cursor-pointer"
-          >
-            Start for free
-          </Link>
-          <Link
-            href="/login"
-            className="px-6 py-3 text-sm font-semibold rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] transition-colors cursor-pointer"
-          >
-            Sign in
-          </Link>
+      {/* Hero */}
+      <section className="relative px-4 sm:px-6 pt-14 sm:pt-20 pb-6">
+        <CelestialDecor />
+
+        <div className="relative mx-auto max-w-2xl text-center">
+          <h1 className="text-4xl sm:text-6xl font-bold tracking-tight leading-[1.05]">
+            Your productivity universe.
+          </h1>
+          <p className="mt-5 text-base sm:text-lg text-[hsl(var(--muted-foreground))] max-w-lg mx-auto">
+            Plan your work, track your days, and keep everything in one place.
+          </p>
+          <div className="mt-7 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link href="/signup" className={PRIMARY_CTA}>
+              Get started
+            </Link>
+            <Link href="/login" className={SECONDARY_CTA}>
+              Sign in
+            </Link>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5 mt-10 sm:mt-[clamp(5.5rem,6vh,6rem)] max-w-3xl w-full">
-          {features.map(({ icon: Icon, title, description }) => (
-            <div
-              key={title}
-              className="flex flex-col items-center p-5 sm:p-6 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-center gap-3 [@media(max-height:800px)]:sm:p-5"
-            >
-              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-[hsl(var(--muted))]">
-                <Icon className="w-5 h-5 text-[hsl(var(--primary))]" />
+        <div className="relative mx-auto max-w-5xl mt-12 sm:mt-16">
+          <AppWindowFrame>
+            <HeroAppPreview />
+          </AppWindowFrame>
+        </div>
+      </section>
+
+      {/* Product walkthrough */}
+      <section id="features" className="px-4 sm:px-6 py-20 sm:py-28">
+        <div className="mx-auto max-w-5xl">
+          <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-center mb-14 sm:mb-20">
+            Plan it. Do it. Remember it.
+          </h2>
+
+          <div className="space-y-16 sm:space-y-24">
+            {STEPS.map((step) => (
+              <div key={step.number} className="grid items-center gap-8 sm:grid-cols-2 sm:gap-12">
+                <div className={step.reverse ? "sm:order-2" : undefined}>
+                  <p className="text-xs font-semibold tracking-widest text-[hsl(var(--primary))] mb-3">
+                    {step.number} — {step.kicker}
+                  </p>
+                  <h3 className="text-xl sm:text-2xl font-semibold tracking-tight mb-3">{step.title}</h3>
+                  <p className="text-[hsl(var(--muted-foreground))] leading-relaxed max-w-md">
+                    {step.description}
+                  </p>
+                </div>
+                <div className={step.reverse ? "sm:order-1" : undefined}>
+                  <AppWindowFrame glow={false}>{step.preview}</AppWindowFrame>
+                </div>
               </div>
-              <h3 className="font-semibold text-sm">{title}</h3>
-              <p className="text-xs text-[hsl(var(--muted-foreground))] leading-relaxed">
-                {description}
-              </p>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </main>
+      </section>
+
+      {/* Compact capability strip */}
+      <section className="px-4 sm:px-6 py-16 sm:py-20 border-t border-[hsl(var(--border))]">
+        <div className="mx-auto max-w-3xl">
+          <FeatureStrip />
+        </div>
+      </section>
+
+      {/* Planet themes */}
+      <section id="themes" className="px-4 sm:px-6 py-20 sm:py-28 border-t border-[hsl(var(--border))]">
+        <div className="mx-auto max-w-5xl">
+          <div className="text-center max-w-lg mx-auto mb-10 sm:mb-12">
+            <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-3">
+              Make Planitary yours.
+            </h2>
+            <p className="text-[hsl(var(--muted-foreground))]">
+              Unlock planetary themes as you build productive days.
+            </p>
+          </div>
+
+          <ThemeShowcase />
+
+          <p className="text-center text-sm text-[hsl(var(--muted-foreground))] mt-8">
+            Complete tasks on different days to unlock new planetary themes.
+          </p>
+        </div>
+      </section>
+
+      {/* Final CTA */}
+      <section className="px-4 sm:px-6 py-20 sm:py-24 border-t border-[hsl(var(--border))]">
+        <div className="mx-auto max-w-xl text-center">
+          <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-3">
+            Build momentum, one day at a time.
+          </h2>
+          <p className="text-[hsl(var(--muted-foreground))] mb-7">
+            Start planning your days with Planitary.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link href="/signup" className={PRIMARY_CTA}>
+              Get started
+            </Link>
+            <Link href="/login" className={SECONDARY_CTA}>
+              Sign in
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <MarketingFooter />
     </div>
   );
 }
