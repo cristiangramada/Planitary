@@ -14,7 +14,7 @@ export function ScrollDownArrow() {
       href="#features"
       onClick={handleClick}
       aria-label="Scroll to features"
-      className="relative mx-auto mt-10 sm:mt-12 flex h-10 w-10 items-center justify-center rounded-full text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer animate-bounce"
+      className="scroll-cue relative mx-auto mt-10 sm:mt-12 flex h-10 w-10 items-center justify-center rounded-full text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"

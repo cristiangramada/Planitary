@@ -67,7 +67,7 @@ export default function HomePage() {
         <CelestialDecor />
 
         <div className="relative mx-auto max-w-2xl text-center">
-          <Logo size={64} priority className="mx-auto mb-4 sm:mb-5" />
+          <Logo size={128} priority className="mx-auto mb-4 sm:mb-5" />
           <h1 className="text-5xl sm:text-7xl font-bold tracking-tight">Planitary</h1>
           <p className="mt-5 sm:mt-6 text-lg sm:text-2xl font-medium text-[hsl(var(--muted-foreground))]">
             Your productivity universe.
