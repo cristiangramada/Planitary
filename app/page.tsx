@@ -89,7 +89,7 @@ export default function HomePage() {
       </section>
 
       {/* Product walkthrough */}
-      <section id="features" className="px-4 sm:px-6 pt-10 sm:pt-14 pb-20 sm:pb-28">
+      <section id="features" className="scroll-mt-20 px-4 sm:px-6 pt-10 sm:pt-14 pb-20 sm:pb-28">
         <div className="mx-auto max-w-5xl">
           <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-center mb-14 sm:mb-20">
             Plan it. Do it. Remember it.
@@ -181,7 +181,7 @@ export default function HomePage() {
       </section>
 
       {/* Themes */}
-      <section id="themes" className="px-4 sm:px-6 py-20 sm:py-28 border-t border-[hsl(var(--border))]">
+      <section id="themes" className="scroll-mt-20 px-4 sm:px-6 py-20 sm:py-28 border-t border-[hsl(var(--border))]">
         <div className="mx-auto max-w-5xl">
           <div className="text-center max-w-lg mx-auto mb-10 sm:mb-12">
             <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-3">
