@@ -31,26 +31,26 @@ const CHECK_DONE: Record<string, string> = {
 
 /**
  * Static, non-interactive recreation of the real Planitary dashboard —
- * used as the hero's primary visual. Sample data is intentionally fictional.
+ * used for the "Do it" walkthrough step. Sample data is intentionally fictional.
  */
-export function HeroAppPreview() {
+export function DashboardAppPreview() {
   return (
     <div
       role="img"
       aria-label="Preview of the Planitary dashboard showing today's tasks, an event, and journal entries."
-      className="flex h-[380px] sm:h-[440px] lg:h-[500px] text-[hsl(var(--foreground))]"
+      className="flex h-[320px] sm:h-[380px] text-[hsl(var(--foreground))]"
     >
-      <div className="hidden sm:flex flex-col w-[168px] shrink-0 border-r border-[hsl(var(--sidebar-border))] bg-[hsl(var(--sidebar-bg))]">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-[hsl(var(--sidebar-border))]">
-          <Logo size={22} />
-          <span className="text-sm font-semibold tracking-tight">Planitary</span>
+      <div className="hidden sm:flex flex-col w-[152px] shrink-0 border-r border-[hsl(var(--sidebar-border))] bg-[hsl(var(--sidebar-bg))]">
+        <div className="flex items-center gap-2 px-4 py-4 border-b border-[hsl(var(--sidebar-border))]">
+          <Logo size={20} />
+          <span className="text-[13px] font-semibold tracking-tight">Planitary</span>
         </div>
         <div className="flex-1 px-3 py-3 space-y-0.5">
           {NAV.map(({ label, icon: Icon, active }) => (
             <div
               key={label}
               className={cn(
-                "flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium",
+                "flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[12px] font-medium",
                 active
                   ? "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]"
                   : "text-[hsl(var(--muted-foreground))]"
@@ -63,14 +63,14 @@ export function HeroAppPreview() {
         </div>
       </div>
 
-      <div className="flex-1 min-w-0 bg-[hsl(var(--background))] p-4 sm:p-6 overflow-hidden">
-        <p className="text-[11px] sm:text-xs text-[hsl(var(--muted-foreground))] mb-1">Good morning, Alex</p>
-        <p className="text-lg sm:text-2xl font-semibold tracking-tight mb-4 sm:mb-5">Friday, March 14</p>
+      <div className="flex-1 min-w-0 bg-[hsl(var(--background))] p-4 sm:p-5 overflow-hidden">
+        <p className="text-[11px] text-[hsl(var(--muted-foreground))] mb-1">Good morning, Alex</p>
+        <p className="text-base sm:text-xl font-semibold tracking-tight mb-3 sm:mb-4">Friday, March 14</p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="sm:col-span-2 flex flex-col gap-3">
-            <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3 sm:p-4">
-              <div className="flex items-center gap-2 mb-2.5">
+            <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3">
+              <div className="flex items-center gap-2 mb-2">
                 <CheckSquare className="w-3.5 h-3.5 text-blue-500" />
                 <span className="text-xs sm:text-sm font-semibold">Today&apos;s tasks</span>
               </div>
@@ -88,7 +88,7 @@ export function HeroAppPreview() {
                     />
                     <span
                       className={cn(
-                        "text-[11px] sm:text-xs font-medium truncate",
+                        "text-[11px] font-medium truncate",
                         t.done && "line-through text-[hsl(var(--muted-foreground))]"
                       )}
                     >
@@ -99,8 +99,8 @@ export function HeroAppPreview() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3 sm:p-4">
-              <div className="flex items-center gap-2 mb-2.5">
+            <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3">
+              <div className="flex items-center gap-2 mb-2">
                 <CalendarDays className="w-3.5 h-3.5 text-purple-500" />
                 <span className="text-xs sm:text-sm font-semibold">Today&apos;s events</span>
               </div>
@@ -108,15 +108,15 @@ export function HeroAppPreview() {
                 <span className="text-[11px] font-medium text-[hsl(var(--muted-foreground))] w-14 shrink-0">
                   10:00 AM
                 </span>
-                <span className="text-[11px] sm:text-xs font-medium truncate">Team meeting</span>
+                <span className="text-[11px] font-medium truncate">Team meeting</span>
               </div>
             </div>
           </div>
 
-          <div className="hidden sm:flex flex-col gap-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3 sm:p-4">
+          <div className="hidden sm:flex flex-col gap-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3">
             <div className="flex items-center gap-2 mb-1">
               <BookOpen className="w-3.5 h-3.5 text-emerald-500" />
-              <span className="text-sm font-semibold">Journal</span>
+              <span className="text-xs font-semibold">Journal</span>
             </div>
             <div className="flex items-center gap-1.5 rounded-lg border border-[hsl(var(--input))] px-2.5 py-2 text-[hsl(var(--muted-foreground))]">
               <Plus className="w-3 h-3" />

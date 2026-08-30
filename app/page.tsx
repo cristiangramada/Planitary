@@ -4,11 +4,10 @@ import { MarketingNavbar } from "@/components/marketing/MarketingNavbar";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { CelestialDecor } from "@/components/marketing/CelestialDecor";
 import { AppWindowFrame } from "@/components/marketing/AppWindowFrame";
-import { HeroAppPreview } from "@/components/marketing/HeroAppPreview";
 import { TasksAppPreview } from "@/components/marketing/TasksAppPreview";
-import { DashboardFocusPreview } from "@/components/marketing/DashboardFocusPreview";
+import { DashboardAppPreview } from "@/components/marketing/DashboardAppPreview";
 import { JournalAppPreview } from "@/components/marketing/JournalAppPreview";
-import { FeatureStrip } from "@/components/marketing/FeatureStrip";
+import { StandupAppPreview } from "@/components/marketing/StandupAppPreview";
 import { ThemeShowcase } from "@/components/marketing/ThemeShowcase";
 
 export const metadata: Metadata = {
@@ -35,7 +34,7 @@ const STEPS = [
     kicker: "DO IT",
     title: "Dashboard",
     description: "Keep today's work in focus without losing sight of what's coming next.",
-    preview: <DashboardFocusPreview />,
+    preview: <DashboardAppPreview />,
     reverse: true,
   },
   {
@@ -55,13 +54,14 @@ export default function HomePage() {
       <MarketingNavbar />
 
       {/* Hero */}
-      <section className="relative px-4 sm:px-6 pt-14 sm:pt-20 pb-6">
+      <section className="relative px-4 sm:px-6 pt-16 sm:pt-24 pb-16 sm:pb-20">
         <CelestialDecor />
 
         <div className="relative mx-auto max-w-2xl text-center">
-          <h1 className="text-4xl sm:text-6xl font-bold tracking-tight leading-[1.05]">
+          <h1 className="text-5xl sm:text-7xl font-bold tracking-tight">Planitary</h1>
+          <p className="mt-3 text-lg sm:text-2xl font-medium text-[hsl(var(--muted-foreground))]">
             Your productivity universe.
-          </h1>
+          </p>
           <p className="mt-5 text-base sm:text-lg text-[hsl(var(--muted-foreground))] max-w-lg mx-auto">
             Plan your work, track your days, and keep everything in one place.
           </p>
@@ -73,12 +73,6 @@ export default function HomePage() {
               Sign in
             </Link>
           </div>
-        </div>
-
-        <div className="relative mx-auto max-w-5xl mt-12 sm:mt-16">
-          <AppWindowFrame>
-            <HeroAppPreview />
-          </AppWindowFrame>
         </div>
       </section>
 
@@ -110,14 +104,25 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Compact capability strip */}
+      {/* Standup */}
       <section className="px-4 sm:px-6 py-16 sm:py-20 border-t border-[hsl(var(--border))]">
-        <div className="mx-auto max-w-3xl">
-          <FeatureStrip />
+        <div className="mx-auto max-w-4xl grid items-center gap-8 sm:grid-cols-2 sm:gap-12">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-semibold tracking-tight mb-3">
+              Turn entries into a standup.
+            </h2>
+            <p className="text-[hsl(var(--muted-foreground))] leading-relaxed max-w-md">
+              Pick a date range and Planitary drafts a copy-ready update from what you already
+              wrote in your journal.
+            </p>
+          </div>
+          <AppWindowFrame glow={false}>
+            <StandupAppPreview />
+          </AppWindowFrame>
         </div>
       </section>
 
-      {/* Planet themes */}
+      {/* Themes */}
       <section id="themes" className="px-4 sm:px-6 py-20 sm:py-28 border-t border-[hsl(var(--border))]">
         <div className="mx-auto max-w-5xl">
           <div className="text-center max-w-lg mx-auto mb-10 sm:mb-12">
@@ -125,14 +130,14 @@ export default function HomePage() {
               Make Planitary yours.
             </h2>
             <p className="text-[hsl(var(--muted-foreground))]">
-              Unlock planetary themes as you build productive days.
+              Unlock themes as you build productive days.
             </p>
           </div>
 
           <ThemeShowcase />
 
           <p className="text-center text-sm text-[hsl(var(--muted-foreground))] mt-8">
-            Complete tasks on different days to unlock new planetary themes.
+            Complete tasks on different days to unlock new themes.
           </p>
         </div>
       </section>

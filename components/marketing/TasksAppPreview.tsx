@@ -1,4 +1,4 @@
-import { Inbox, Flag } from "lucide-react";
+import { Inbox, Calendar } from "lucide-react";
 import { cn } from "@/utils/cn";
 
 const LISTS = [
@@ -8,18 +8,19 @@ const LISTS = [
 
 type Priority = "high" | "medium" | "low" | "none";
 
-const TASKS: { title: string; priority: Priority; due: string }[] = [
+const TASKS: { title: string; priority: Priority; due: string | null }[] = [
   { title: "Finish project proposal", priority: "high", due: "Today" },
   { title: "Review pull request", priority: "medium", due: "Today" },
-  { title: "Plan sprint retro", priority: "none", due: "Tomorrow" },
+  { title: "Plan sprint retro", priority: "none", due: null },
   { title: "Update weekly journal", priority: "low", due: "Fri" },
 ];
 
-const FLAG_CLASS: Record<Priority, string> = {
-  high: "text-red-500",
-  medium: "text-amber-500",
-  low: "text-green-500",
-  none: "text-[hsl(var(--muted-foreground))]",
+/** Matches the real TaskCard: priority is shown by the checkbox border color, not a flag. */
+const CHECK_CLASS: Record<Priority, string> = {
+  high: "border-red-500",
+  medium: "border-amber-500",
+  low: "border-green-600",
+  none: "border-[hsl(var(--muted-foreground))]",
 };
 
 /** Static recreation of the Tasks view — lists sidebar + a task list. */
@@ -52,14 +53,25 @@ export function TasksAppPreview() {
         {TASKS.map((t) => (
           <div
             key={t.title}
-            className="flex items-center gap-3 rounded-xl border border-[hsl(var(--border))] px-3 py-2.5"
+            className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-3.5 py-3"
           >
-            <span className="w-4 h-4 rounded-full border-2 border-[hsl(var(--muted-foreground))] shrink-0" />
-            <span className="flex-1 text-xs sm:text-sm font-medium truncate">{t.title}</span>
-            {t.priority !== "none" && (
-              <Flag className={cn("w-3 h-3 shrink-0", FLAG_CLASS[t.priority])} fill="currentColor" />
-            )}
-            <span className="text-[11px] text-[hsl(var(--muted-foreground))] shrink-0">{t.due}</span>
+            <div className="flex items-start gap-3">
+              <span
+                className={cn(
+                  "w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 shrink-0 mt-0.5",
+                  CHECK_CLASS[t.priority]
+                )}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs sm:text-sm font-medium truncate">{t.title}</p>
+                {t.due && (
+                  <div className="flex items-center gap-1 mt-1.5 text-[11px] text-[hsl(var(--muted-foreground))]">
+                    <Calendar className="w-3 h-3" />
+                    {t.due}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         ))}
       </div>
