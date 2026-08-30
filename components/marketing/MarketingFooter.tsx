@@ -8,7 +8,7 @@ export function MarketingFooter() {
           <Logo size={20} />
           <span className="text-sm font-medium">Planitary</span>
         </div>
-        <p className="text-xs text-[hsl(var(--muted-foreground))]">Your productivity universe.</p>
+        <p className="text-xs text-[hsl(var(--muted-foreground))]">© 2026 Planitary</p>
       </div>
     </footer>
   );
