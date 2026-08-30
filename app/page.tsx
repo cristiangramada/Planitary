@@ -9,6 +9,7 @@ import { CalendarAppPreview } from "@/components/marketing/CalendarAppPreview";
 import { DashboardAppPreview } from "@/components/marketing/DashboardAppPreview";
 import { JournalAppPreview } from "@/components/marketing/JournalAppPreview";
 import { StandupAppPreview } from "@/components/marketing/StandupAppPreview";
+import { SearchAppPreview } from "@/components/marketing/SearchAppPreview";
 import { ThemeShowcase } from "@/components/marketing/ThemeShowcase";
 
 export const metadata: Metadata = {
@@ -151,6 +152,26 @@ export default function HomePage() {
           <AppWindowFrame glow={false}>
             <StandupAppPreview />
           </AppWindowFrame>
+        </div>
+      </section>
+
+      {/* Search */}
+      <section className="px-4 sm:px-6 py-16 sm:py-20 border-t border-[hsl(var(--border))]">
+        <div className="mx-auto max-w-4xl grid items-center gap-8 sm:grid-cols-2 sm:gap-12">
+          <div className="sm:order-2">
+            <h2 className="text-xl sm:text-2xl font-semibold tracking-tight mb-3">
+              Find anything, instantly.
+            </h2>
+            <p className="text-[hsl(var(--muted-foreground))] leading-relaxed max-w-md">
+              Search across tasks, calendar events, and journal entries at once, then jump
+              straight to what you found.
+            </p>
+          </div>
+          <div className="sm:order-1">
+            <AppWindowFrame glow={false}>
+              <SearchAppPreview />
+            </AppWindowFrame>
+          </div>
         </div>
       </section>
 

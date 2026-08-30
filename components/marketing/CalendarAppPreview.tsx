@@ -6,12 +6,13 @@ const WEEK_DAYS = ["S", "M", "T", "W", "T", "F", "S"];
 /** [day, chip] — chip is a task (dot colored by priority) or an event (primary chip). */
 type Chip = { kind: "event"; label: string } | { kind: "task"; label: string; priority: string };
 
+/** March 2026 — the 1st falls on a Sunday. */
 const GRID: (number | null)[] = [
-  null, null, null, 1, 2, 3, 4,
-  5, 6, 7, 8, 9, 10, 11,
-  12, 13, 14, 15, 16, 17, 18,
-  19, 20, 21, 22, 23, 24, 25,
-  26, 27, 28, 29, 30, 31, null,
+  1, 2, 3, 4, 5, 6, 7,
+  8, 9, 10, 11, 12, 13, 14,
+  15, 16, 17, 18, 19, 20, 21,
+  22, 23, 24, 25, 26, 27, 28,
+  29, 30, 31, null, null, null, null,
 ];
 
 const CHIPS: Record<number, Chip[]> = {
@@ -48,6 +49,9 @@ export function CalendarAppPreview() {
           </span>
           <span className="px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--muted-foreground))]">
             Week
+          </span>
+          <span className="px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--muted-foreground))]">
+            Day
           </span>
         </div>
       </div>
