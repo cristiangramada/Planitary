@@ -172,7 +172,7 @@ export default function HomePage() {
               straight to what you found.
             </p>
           </div>
-          <div className="sm:order-1">
+          <div className="min-w-0 sm:order-1">
             <AppWindowFrame glow={false}>
               <SearchAppPreview />
             </AppWindowFrame>

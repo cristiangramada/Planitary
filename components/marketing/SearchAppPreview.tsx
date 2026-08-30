@@ -62,7 +62,7 @@ export function SearchAppPreview() {
     <div
       role="img"
       aria-label="Preview of Planitary Search showing results for 'proposal' across tasks, calendar, and journal."
-      className="bg-[hsl(var(--background))] p-4 sm:p-6"
+      className="min-w-0 bg-[hsl(var(--background))] p-4 sm:p-6"
     >
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--muted-foreground))]" />
@@ -71,12 +71,12 @@ export function SearchAppPreview() {
         </div>
       </div>
 
-      <div className="flex gap-1.5 mt-3">
+      <div className="flex flex-wrap gap-1.5 mt-3">
         {TABS.map(({ label, icon: Icon, active }) => (
           <div
             key={label}
             className={cn(
-              "flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-full",
+              "flex shrink-0 items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-full whitespace-nowrap",
               active
                 ? "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]"
                 : "border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"
@@ -104,9 +104,9 @@ export function SearchAppPreview() {
                   {r.excerpt}
                 </p>
               )}
-              <div className="flex items-center gap-2 mt-1">
-                {r.priority && <PriorityBadge priority={r.priority} />}
-                <span className="text-[11px] text-[hsl(var(--muted-foreground))]">{r.meta}</span>
+              <div className="flex items-center gap-2 mt-1 min-w-0">
+                {r.priority && <PriorityBadge priority={r.priority} className="shrink-0" />}
+                <span className="text-[11px] text-[hsl(var(--muted-foreground))] truncate">{r.meta}</span>
               </div>
             </div>
           </div>
