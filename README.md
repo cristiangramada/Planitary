@@ -52,24 +52,25 @@ OPENROUTER_FALLBACK_MODEL=google/gemma-4-31b-it:free
 - **Vercel**: add the same three variables under Project Settings → Environment Variables for every environment (Development/Preview/Production) that should support the Standup feature. Redeploy after saving.
 - **Server-only**: none of these variables use the `NEXT_PUBLIC_` prefix. They are only read inside `lib/ai/*`, `lib/standup.ts`, and `app/api/ai/standup/route.ts` — all server-side code.
 
-### Why a fixed model instead of `openrouter/free`
+### Why `openrouter/free` is not in env vars
 
-`openrouter/free` auto-routes each request to a different underlying free model, which produces inconsistent tone and formatting between generations. Planitary always uses the exact model IDs configured in `OPENROUTER_MODEL` / `OPENROUTER_FALLBACK_MODEL`. If either variable is unset, or is set to `openrouter/free`, the Standup feature returns a clear "not configured" error instead of silently choosing a different model.
+`openrouter/free` auto-routes each request to a different underlying free model, which produces inconsistent tone and formatting between generations. Planitary always tries your explicit `OPENROUTER_MODEL` / `OPENROUTER_FALLBACK_MODEL` first. Do not set `openrouter/free` in env vars — the app adds it automatically as a last-resort fallback when both configured models fail.
 
 ### Fallback behavior
 
-Each generation makes **at most one primary attempt and one fallback attempt**:
+Each generation tries up to **three models**, stopping at the first success:
 
 1. `OPENROUTER_MODEL` is tried first.
-2. If that request fails for a provider-level reason (model unavailable, rate limited, or a timeout), `OPENROUTER_FALLBACK_MODEL` is tried once.
-3. If the primary succeeds, the fallback is never called. If both fail, the request fails with a typed error.
+2. If that fails for a provider-level reason (model unavailable, rate limited, or timeout) or returns unacceptable output, `OPENROUTER_FALLBACK_MODEL` is tried once.
+3. If that also fails, `openrouter/free` is tried once as a last resort (OpenRouter picks any currently available free model).
+4. If all three fail, the request fails with a typed error.
 
-To change either model, just update the corresponding environment variable — no code changes are required.
+To change the first two models, update the corresponding environment variables — no code changes are required.
 
 ### Known limitations of free OpenRouter models
 
 - Free-tier models can change availability, rate limits, or be deprecated by OpenRouter without notice. If generation stops working, verify the configured model IDs are still listed at [openrouter.ai/models](https://openrouter.ai/models).
-- Free models may have lower/variable request-per-minute limits than paid models; the Standup feature applies a request timeout and a single fallback attempt, but does not implement retry-with-backoff or per-user quotas.
+- Free models may have lower/variable request-per-minute limits than paid models; the Standup feature applies a request timeout and up to three model attempts, but does not implement retry-with-backoff or per-user quotas.
 
 ### Where things live
 
