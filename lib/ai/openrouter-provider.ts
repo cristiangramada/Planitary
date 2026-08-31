@@ -36,7 +36,7 @@ export class OpenRouterProvider implements AIProvider {
           Authorization: `Bearer ${this.apiKey}`,
           "Content-Type": "application/json",
           // Attribution headers recommended by OpenRouter; carry no user data.
-          "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
+          "HTTP-Referer": process.env.SITE_URL ?? "http://localhost:3000",
           "X-Title": "Planitary",
         },
         body: JSON.stringify({

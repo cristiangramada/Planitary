@@ -350,6 +350,39 @@
     animation: toast-slide-up 0.35s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
+  /* Marketing page: barely-perceptible orbital drift on the decorative arc only. */
+  @keyframes orbit-spin {
+    from {
+      transform: translateX(-50%) rotate(0deg);
+    }
+    to {
+      transform: translateX(-50%) rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .orbit-arc {
+      animation: orbit-spin 240s linear infinite;
+    }
+  }
+
+  /* Marketing page: gentle scroll-cue drift on the hero's down arrow. */
+  @keyframes scroll-cue {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(0.375rem);
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .scroll-cue {
+      animation: scroll-cue 2.2s ease-in-out infinite;
+    }
+  }
+
   /* Subtle Jupiter band — opt-in decorative use only */
   .theme-band {
     background: linear-gradient(

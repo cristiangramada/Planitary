@@ -63,8 +63,17 @@ describe("getFeatureConfig / isAIConfigured", () => {
     assert.equal(isAIConfigured("standup"), false);
   });
 
-  test("never silently falls back to the auto-routed openrouter/free model", () => {
+  test('rejects "openrouter/free" in env vars (it is added automatically as last resort)', () => {
     process.env.OPENROUTER_MODEL = "openrouter/free";
+    assert.throws(() => getFeatureConfig("standup"), (err: unknown) => {
+      assert.ok(err instanceof AIError);
+      assert.equal(err.code, "NOT_CONFIGURED");
+      return true;
+    });
+  });
+
+  test('rejects "openrouter/free" as OPENROUTER_FALLBACK_MODEL', () => {
+    process.env.OPENROUTER_FALLBACK_MODEL = "openrouter/free";
     assert.throws(() => getFeatureConfig("standup"), (err: unknown) => {
       assert.ok(err instanceof AIError);
       assert.equal(err.code, "NOT_CONFIGURED");
@@ -170,18 +179,43 @@ describe("generateForFeature (primary/fallback policy)", () => {
     assert.equal(primaryCall.maxTokens, fallbackCall.maxTokens);
   });
 
-  test("propagates a single fallback failure without further retries", async () => {
+  test("propagates failure after all models in the chain are exhausted", async () => {
     const provider = new ScriptedProvider([
       () => {
         throw new AIError("PROVIDER_TIMEOUT", "primary timed out");
       },
       () => {
-        throw new AIError("MODEL_UNAVAILABLE", "fallback also down");
+        throw new AIError("MODEL_UNAVAILABLE", "configured fallback down");
+      },
+      () => {
+        throw new AIError("RATE_LIMITED", "free router also rate limited");
       },
     ]);
     await assert.rejects(
       generateForFeature(provider, { feature: "standup", systemPrompt: "s", userPrompt: "u" })
     );
-    assert.equal(provider.calls.length, 2);
+    assert.equal(provider.calls.length, 3);
+    assert.equal(provider.calls[2].model, "openrouter/free");
+  });
+
+  test("uses openrouter/free after both configured models fail", async () => {
+    const provider = new ScriptedProvider([
+      () => {
+        throw new AIError("RATE_LIMITED", "primary rate limited");
+      },
+      () => {
+        throw new AIError("RATE_LIMITED", "configured fallback rate limited");
+      },
+      () => ({ text: "free router ok", model: "some-free-model" }),
+    ]);
+    const result = await generateForFeature(provider, {
+      feature: "standup",
+      systemPrompt: "s",
+      userPrompt: "u",
+    });
+    assert.equal(result.usedFallback, true);
+    assert.equal(result.text, "free router ok");
+    assert.equal(provider.calls.length, 3);
+    assert.equal(provider.calls[2].model, "openrouter/free");
   });
 });

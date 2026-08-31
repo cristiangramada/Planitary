@@ -38,9 +38,12 @@ const AI_FEATURE_SETTINGS: Record<AIFeature, FeatureGenerationSettings> = {
   },
 };
 
-// `openrouter/free` auto-routes to a different underlying model on every
-// request, which defeats consistent formatting/tone. It is never allowed.
-const DISALLOWED_MODEL_IDS = new Set(["openrouter/free"]);
+// OpenRouter's free-model router — used only as an automatic last-resort
+// fallback after configured models fail. Not allowed in env vars because it
+// picks a different underlying model per request (inconsistent tone/format).
+export const OPENROUTER_FREE_ROUTER = "openrouter/free";
+
+const DISALLOWED_MODEL_IDS = new Set([OPENROUTER_FREE_ROUTER]);
 
 /**
  * Resolves the fully-configured provider settings for a feature from
@@ -62,7 +65,7 @@ export function getFeatureConfig(feature: AIFeature): AIProviderConfig {
   if (DISALLOWED_MODEL_IDS.has(primaryModel) || DISALLOWED_MODEL_IDS.has(fallbackModel)) {
     throw new AIError(
       "NOT_CONFIGURED",
-      'The auto-routed "openrouter/free" model is not allowed. Configure explicit OPENROUTER_MODEL / OPENROUTER_FALLBACK_MODEL values.'
+      'Set explicit OPENROUTER_MODEL / OPENROUTER_FALLBACK_MODEL values. "openrouter/free" is used automatically as a last-resort fallback — do not set it in env vars.'
     );
   }
 
