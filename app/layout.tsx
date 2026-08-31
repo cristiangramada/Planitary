@@ -13,12 +13,30 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const siteDescription =
+  "A modern productivity app for tasks, calendar, and journaling.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.SITE_URL ?? "http://localhost:3000"),
   title: {
     default: "Planitary",
     template: "%s | Planitary",
   },
-  description: "A modern productivity app for tasks, calendar, and journaling.",
+  description: siteDescription,
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    siteName: "Planitary",
+    title: "Planitary",
+    description: siteDescription,
+    images: [{ url: "/planitary-logo.png", alt: "Planitary" }],
+  },
+  twitter: {
+    card: "summary",
+    title: "Planitary",
+    description: siteDescription,
+    images: ["/planitary-logo.png"],
+  },
 };
 
 export default function RootLayout({
