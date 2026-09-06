@@ -42,7 +42,7 @@ export function ColumnResizeHandle({
       aria-label={ariaLabel}
       tabIndex={0}
       className={cn(
-        "group relative z-10 w-2 shrink-0 self-stretch cursor-col-resize touch-none",
+        "group relative z-10 w-2 shrink-0 self-stretch cursor-ew-resize touch-none",
         className
       )}
       onPointerDown={(e) => {
@@ -52,7 +52,7 @@ export function ColumnResizeHandle({
         startXRef.current = e.clientX;
         onDragStart?.();
         e.currentTarget.setPointerCapture(e.pointerId);
-        document.body.style.cursor = "col-resize";
+        document.body.style.cursor = "ew-resize";
         document.body.style.userSelect = "none";
       }}
       onPointerMove={(e) => {

@@ -61,6 +61,7 @@ import {
   clampTasksWidth,
   readTasksLayoutPreference,
   writeTasksLayoutPreference,
+  type TasksLayoutPreference,
 } from "@/lib/tasks-layout-preference";
 import {
   readTasksScopePreference,
@@ -121,16 +122,26 @@ interface TasksClientProps {
   initialTasks: TaskWithDetails[];
   initialLists: TaskList[];
   userId: string;
+  /** Cookie-backed widths from the server so first paint matches the saved layout. */
+  initialLayout?: TasksLayoutPreference | null;
+  /** Cookie-backed sort from the server so first paint matches the saved choice. */
+  initialSort?: TasksSortKey | null;
 }
 
-export function TasksClient({ initialTasks, initialLists, userId }: TasksClientProps) {
+export function TasksClient({
+  initialTasks,
+  initialLists,
+  userId,
+  initialLayout = null,
+  initialSort = null,
+}: TasksClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [tasks, setTasks] = useState<TaskWithDetails[]>(initialTasks);
   const [lists, setLists] = useState<TaskList[]>(initialLists);
-  // Default matches SSR; restored preference applied after mount to avoid hydration mismatch.
-  const [sortBy, setSortBy] = useState<SortKey>("priority");
-  const [sortReady, setSortReady] = useState(false);
+  const [sortBy, setSortBy] = useState<SortKey>(initialSort ?? "priority");
+  // Cookie seed means first paint is already correct; otherwise wait for localStorage.
+  const [sortReady, setSortReady] = useState(Boolean(initialSort));
   const [filterBy, setFilterBy] = useState<FilterKey>("active");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [scrollToTaskId, setScrollToTaskId] = useState<string | null>(null);
@@ -139,12 +150,17 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
   const [mobileListsOpen, setMobileListsOpen] = useState(false);
   const [deletedToast, setDeletedToast] = useState<{ taskId: string } | null>(null);
   const [unlockToast, setUnlockToast] = useState<string | null>(null);
-  const [listsWidth, setListsWidth] = useState<number>(TASKS_LAYOUT_DEFAULTS.listsWidth);
-  const [tasksWidth, setTasksWidth] = useState<number>(TASKS_LAYOUT_DEFAULTS.tasksWidth);
-  const [layoutReady, setLayoutReady] = useState(false);
+  const seedListsWidth =
+    initialLayout?.listsWidth ?? TASKS_LAYOUT_DEFAULTS.listsWidth;
+  const seedTasksWidth =
+    initialLayout?.tasksWidth ?? TASKS_LAYOUT_DEFAULTS.tasksWidth;
+  const [listsWidth, setListsWidth] = useState<number>(seedListsWidth);
+  const [tasksWidth, setTasksWidth] = useState<number>(seedTasksWidth);
+  // Cookie seed means first paint is already correct; otherwise wait for localStorage.
+  const [layoutReady, setLayoutReady] = useState(Boolean(initialLayout));
   const layoutRowRef = useRef<HTMLDivElement>(null);
-  const listsWidthDragStartRef = useRef<number>(TASKS_LAYOUT_DEFAULTS.listsWidth);
-  const tasksWidthDragStartRef = useRef<number>(TASKS_LAYOUT_DEFAULTS.tasksWidth);
+  const listsWidthDragStartRef = useRef<number>(seedListsWidth);
+  const tasksWidthDragStartRef = useRef<number>(seedTasksWidth);
   const filterTabsRef = useRef<HTMLDivElement>(null);
   const tasksColumnRef = useRef<HTMLDivElement>(null);
   const [filterTabsMinWidth, setFilterTabsMinWidth] = useState<number>(
@@ -210,7 +226,7 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
   );
 
   // ---------------------------------------------------------------------------
-  // Per-account sort preference (localStorage) — restore after mount, then persist.
+  // Per-account sort preference — cookie seeds SSR; localStorage syncs after mount.
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
@@ -227,7 +243,7 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
   }, [userId, sortBy, sortReady]);
 
   // ---------------------------------------------------------------------------
-  // Per-account column widths (localStorage) — restore after mount, then persist.
+  // Per-account column widths — cookie seeds SSR; localStorage syncs after mount.
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
@@ -823,14 +839,10 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
   };
 
   const FILTER_TABS: { key: FilterKey; label: string; count?: number }[] = [
-    {
-      key: "all",
-      label: "All",
-      count: scopedTasks.length,
-    },
+    { key: "all", label: "All" },
     { key: "active", label: "Active", count: activeTasks.length },
     { key: "overdue", label: "Overdue", count: overdueTasks.length },
-    { key: "completed", label: "Completed", count: completedTasks.length },
+    { key: "completed", label: "Completed" },
   ];
 
   return (
@@ -839,7 +851,8 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
         ref={layoutRowRef}
         className={cn(
           "h-full flex w-full pt-4 min-h-0",
-          !scopeReady && "invisible"
+          // Hide until scope + layout + sort are known so defaults don't flash.
+          (!scopeReady || !layoutReady || !sortReady) && "invisible"
         )}
       >
         {/* Desktop Lists panel — extends the Tasks page's own sub-navigation

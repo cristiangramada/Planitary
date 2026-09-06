@@ -1,6 +1,7 @@
 /**
- * Per-account Tasks page column widths. Stored in localStorage keyed by user id
- * so each signed-in account keeps its own layout on this device.
+ * Per-account Tasks page column widths. Stored in localStorage and a cookie
+ * keyed by user id so the server can paint the saved layout on first load —
+ * cookie avoids the default-width flash before localStorage hydrates.
  */
 
 export const TASKS_LAYOUT_DEFAULTS = {
@@ -26,6 +27,13 @@ function storageKey(userId: string): string {
   return `planitary:tasks-layout:${userId}`;
 }
 
+/** Cookie name (no colons — those are awkward in cookie headers). */
+export function tasksLayoutCookieName(userId: string): string {
+  return `planitary_tasks_layout_${userId}`;
+}
+
+const COOKIE_MAX_AGE_SEC = 60 * 60 * 24 * 400; // ~13 months
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -44,12 +52,12 @@ export function clampTasksWidth(width: number): number {
   );
 }
 
-export function readTasksLayoutPreference(
-  userId: string
+/** Parses a stored JSON layout value (cookie or localStorage). */
+export function parseTasksLayoutPreferenceRaw(
+  raw: string | null | undefined
 ): TasksLayoutPreference | null {
+  if (!raw) return null;
   try {
-    const raw = localStorage.getItem(storageKey(userId));
-    if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return null;
     const { listsWidth, tasksWidth } = parsed as Record<string, unknown>;
@@ -63,19 +71,43 @@ export function readTasksLayoutPreference(
   }
 }
 
-export function writeTasksLayoutPreference(
-  userId: string,
-  layout: TasksLayoutPreference
-): void {
+function writeLayoutCookie(userId: string, layout: TasksLayoutPreference): void {
   try {
-    localStorage.setItem(
-      storageKey(userId),
+    const name = tasksLayoutCookieName(userId);
+    const value = encodeURIComponent(
       JSON.stringify({
         listsWidth: clampListsWidth(layout.listsWidth),
         tasksWidth: clampTasksWidth(layout.tasksWidth),
       })
     );
+    document.cookie = `${name}=${value}; path=/; max-age=${COOKIE_MAX_AGE_SEC}; SameSite=Lax`;
   } catch {
-    // Quota / private mode — preference just won't persist.
+    // Private mode / disabled cookies — localStorage still works client-side.
   }
+}
+
+export function readTasksLayoutPreference(
+  userId: string
+): TasksLayoutPreference | null {
+  try {
+    return parseTasksLayoutPreferenceRaw(localStorage.getItem(storageKey(userId)));
+  } catch {
+    return null;
+  }
+}
+
+export function writeTasksLayoutPreference(
+  userId: string,
+  layout: TasksLayoutPreference
+): void {
+  const clamped = {
+    listsWidth: clampListsWidth(layout.listsWidth),
+    tasksWidth: clampTasksWidth(layout.tasksWidth),
+  };
+  try {
+    localStorage.setItem(storageKey(userId), JSON.stringify(clamped));
+  } catch {
+    // Quota / private mode — preference just won't persist in localStorage.
+  }
+  writeLayoutCookie(userId, clamped);
 }
