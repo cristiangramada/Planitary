@@ -63,6 +63,12 @@ function caretIndexFromPoint(x: number, y: number): number | null {
   return null;
 }
 
+function titleTextNode(container: HTMLElement): Text | null {
+  const label = container.querySelector("[data-task-title-text]");
+  const node = label?.firstChild;
+  return node instanceof Text ? node : null;
+}
+
 export function TaskCard({
   task,
   onDelete,
@@ -93,7 +99,7 @@ export function TaskCard({
   useEffect(() => {
     if (!editingTitle || !titleInputRef.current) return;
     const el = titleInputRef.current;
-    el.focus();
+    el.focus({ preventScroll: true });
     const sel = selectionRangeRef.current;
     selectionRangeRef.current = null;
     if (sel) {
@@ -105,7 +111,13 @@ export function TaskCard({
     caretIndexRef.current = null;
     if (idx != null && idx >= 0 && idx <= len) {
       el.setSelectionRange(idx, idx);
+      // Keep the clipped start visible when placing the caret in the title text.
+      el.scrollLeft = 0;
+      requestAnimationFrame(() => {
+        el.scrollLeft = 0;
+      });
     } else {
+      // Click in the empty space after the text (or keyboard): caret at end.
       el.setSelectionRange(len, len);
     }
   }, [editingTitle]);
@@ -147,8 +159,8 @@ export function TaskCard({
   function selectionOffsetsInTitle(container: HTMLElement): { start: number; end: number } | null {
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
-    const textNode = container.firstChild;
-    if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return null;
+    const textNode = titleTextNode(container);
+    if (!textNode) return null;
     if (sel.anchorNode !== textNode || sel.focusNode !== textNode) return null;
     const start = Math.min(sel.anchorOffset, sel.focusOffset);
     const end = Math.max(sel.anchorOffset, sel.focusOffset);
@@ -300,8 +312,8 @@ export function TaskCard({
                 startTitleEdit(pending.start, pending.end);
                 return;
               }
-              const textNode = e.currentTarget.firstChild;
-              if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+              const textNode = titleTextNode(e.currentTarget);
+              if (textNode) {
                 const range = document.createRange();
                 range.selectNodeContents(textNode);
                 const textRect = range.getBoundingClientRect();
@@ -327,54 +339,52 @@ export function TaskCard({
                 : undefined
             }
             className={cn(
-              "inline-block max-w-full text-sm font-medium leading-snug select-text pr-24",
+              "relative inline-block max-w-full overflow-x-clip overflow-y-visible whitespace-nowrap text-sm font-medium leading-snug select-text pr-24",
               onRenameTitle ? "cursor-text" : undefined,
               isCompleted && !editingTitle && "line-through text-[hsl(var(--muted-foreground))]"
             )}
           >
+            {/* The sizer fixes this title row's line box in both display and edit modes. */}
+            <span aria-hidden className="invisible whitespace-pre">
+              {editingTitle
+                ? `${titleValue || " "}\u2009`
+                : displayTitle || "\u00a0"}
+            </span>
             {editingTitle ? (
               <>
                 <label htmlFor={`task-title-edit-${task.id}`} className="sr-only">
                   Edit task title
                 </label>
-                <span className="relative inline-grid max-w-full align-baseline">
-                  <span
-                    aria-hidden
-                    className={cn(
-                      "invisible col-start-1 row-start-1 box-border block whitespace-pre text-sm font-medium leading-snug",
-                      isCompleted && "line-through"
-                    )}
-                  >
-                    {/* Trailing thin space reserves room for the caret after the last glyph. */}
-                    {`${titleValue || " "}\u2009`}
-                  </span>
-                  <input
-                    id={`task-title-edit-${task.id}`}
-                    ref={titleInputRef}
-                    type="text"
-                    name={`task-title-${task.id}`}
-                    size={1}
-                    value={titleValue}
-                    autoComplete="new-password"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    data-1p-ignore
-                    data-lpignore="true"
-                    data-form-type="other"
-                    onChange={(e) => setTitleValue(e.target.value)}
-                    onKeyDown={handleTitleKeyDown}
-                    onBlur={() => void commitTitleEdit()}
-                    onClick={(e) => e.stopPropagation()}
-                    className={cn(
-                      "col-start-1 row-start-1 box-border m-0 block h-[1.375em] w-full min-w-0 appearance-none border-0 bg-transparent p-0 text-sm font-medium leading-snug text-[hsl(var(--foreground))] shadow-none cursor-text focus:outline-none",
-                      isCompleted && "line-through text-[hsl(var(--muted-foreground))]"
-                    )}
-                  />
-                </span>
+                <input
+                  id={`task-title-edit-${task.id}`}
+                  ref={titleInputRef}
+                  type="text"
+                  name={`task-title-${task.id}`}
+                  value={titleValue}
+                  autoComplete="new-password"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-1p-ignore
+                  data-lpignore="true"
+                  data-form-type="other"
+                  onChange={(e) => setTitleValue(e.target.value)}
+                  onKeyDown={handleTitleKeyDown}
+                  onBlur={() => void commitTitleEdit()}
+                  onClick={(e) => e.stopPropagation()}
+                  className={cn(
+                    "absolute inset-y-0 left-0 box-border m-0 w-full min-w-0 appearance-none border-0 bg-transparent p-0 text-sm font-medium leading-snug text-[hsl(var(--foreground))] shadow-none cursor-text focus:outline-none",
+                    isCompleted && "line-through text-[hsl(var(--muted-foreground))]"
+                  )}
+                />
               </>
             ) : (
-              displayTitle
+              <span
+                data-task-title-text
+                className="absolute inset-y-0 left-0 flex w-full items-center overflow-hidden whitespace-nowrap"
+              >
+                {displayTitle}
+              </span>
             )}
           </span>
 

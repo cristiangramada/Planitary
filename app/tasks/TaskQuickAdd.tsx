@@ -131,7 +131,7 @@ export function TaskQuickAdd({ defaultListId, onCreate }: TaskQuickAddProps) {
             focused || dueOpen || !!priorityMenu
               ? "border-[hsl(var(--primary))]"
               : "border-[hsl(var(--input))]",
-            showActions ? "pr-[7.25rem]" : "pr-4"
+            showActions ? "pr-[5.125rem]" : "pr-4"
           )}
         />
         {title.length === 0 && !focused && (
