@@ -1,6 +1,10 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { parseTasksScope, buildTasksScopeParams } from "@/lib/tasks-url-state";
+import {
+  parseTasksScope,
+  buildTasksScopeParams,
+  isPersistableTasksScope,
+} from "@/lib/tasks-url-state";
 
 const OWNED_ID = "11111111-1111-1111-1111-111111111111";
 const FOREIGN_ID = "22222222-2222-2222-2222-222222222222";
@@ -66,5 +70,41 @@ describe("buildTasksScopeParams", () => {
     const params = buildTasksScopeParams(scope);
     const parsed = parseTasksScope(params, new Set([OWNED_ID]));
     assert.deepEqual(parsed, scope);
+  });
+});
+
+describe("isPersistableTasksScope", () => {
+  test("allows an explicit Inbox URL", () => {
+    assert.equal(
+      isPersistableTasksScope(new URLSearchParams("view=inbox"), new Set()),
+      true
+    );
+  });
+
+  test("allows an owned List URL", () => {
+    assert.equal(
+      isPersistableTasksScope(
+        new URLSearchParams(`list=${OWNED_ID}`),
+        new Set([OWNED_ID])
+      ),
+      true
+    );
+  });
+
+  test("rejects a foreign List URL so it cannot replace the saved preference", () => {
+    assert.equal(
+      isPersistableTasksScope(
+        new URLSearchParams(`list=${FOREIGN_ID}`),
+        new Set([OWNED_ID])
+      ),
+      false
+    );
+  });
+
+  test("rejects an unrecognized view", () => {
+    assert.equal(
+      isPersistableTasksScope(new URLSearchParams("view=today"), new Set()),
+      false
+    );
   });
 });

@@ -1,6 +1,14 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect, useRef, type CSSProperties } from "react";
+import {
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  type CSSProperties,
+} from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SortAsc, CheckSquare, PanelLeft, Undo2 } from "lucide-react";
@@ -14,6 +22,7 @@ import { cn } from "@/utils/cn";
 import { createClient } from "@/lib/supabase/client";
 import {
   createTask,
+  createSubtask,
   deleteTask,
   setTaskComplete,
   setSubtaskComplete,
@@ -33,7 +42,12 @@ import {
   computeListTaskCounts,
 } from "@/lib/task-lists";
 import type { MoveToListOption } from "@/app/calendar/AgendaItemContextMenu";
-import { parseTasksScope, buildTasksScopeParams, type TasksScope } from "@/lib/tasks-url-state";
+import {
+  parseTasksScope,
+  buildTasksScopeParams,
+  isPersistableTasksScope,
+  type TasksScope,
+} from "@/lib/tasks-url-state";
 import { localTodayStr } from "@/utils/date";
 import {
   readTasksSortPreference,
@@ -148,10 +162,28 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
   // ---------------------------------------------------------------------------
 
   const ownedListIds = useMemo(() => new Set(lists.map((l) => l.id)), [lists]);
-  const scope = useMemo<TasksScope>(
+  const urlScope = useMemo<TasksScope>(
     () => parseTasksScope(searchParams, ownedListIds),
     [searchParams, ownedListIds]
   );
+
+  // Bare /tasks (sidebar) has no scope in the URL yet. Hold the restored
+  // preference here so we can paint the correct list before router.replace
+  // updates searchParams — otherwise Inbox flashes for a frame.
+  const [bareScopeOverride, setBareScopeOverride] = useState<TasksScope | null>(
+    null
+  );
+  const urlHasExplicitScope =
+    searchParams.has("list") || searchParams.has("view");
+  const explicitScopeIsPersistable = useMemo(
+    () => isPersistableTasksScope(searchParams, ownedListIds),
+    [searchParams, ownedListIds]
+  );
+  const hasTaskDeepLink = Boolean(searchParams.get("task"));
+  const isBareTasksUrl = !urlHasExplicitScope && !hasTaskDeepLink;
+  const scope: TasksScope =
+    isBareTasksUrl && bareScopeOverride ? bareScopeOverride : urlScope;
+  const scopeReady = !isBareTasksUrl || bareScopeOverride !== null;
 
   const selectScope = useCallback(
     (next: TasksScope) => {
@@ -247,23 +279,37 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
   }, []);
 
   // Restore last Inbox/List on bare /tasks (sidebar link); remember scope from URL.
-  useEffect(() => {
-    if (searchParams.get("task")) return;
+  // useLayoutEffect so the override is committed before paint (useEffect flashed Inbox).
+  useLayoutEffect(() => {
+    if (hasTaskDeepLink) return;
 
-    const hasList = searchParams.has("list");
-    const hasView = searchParams.has("view");
-    if (hasList || hasView) {
-      writeTasksScopePreference(userId, scope);
+    if (urlHasExplicitScope) {
+      if (explicitScopeIsPersistable) {
+        writeTasksScopePreference(userId, urlScope);
+      }
+      /* eslint-disable react-hooks/set-state-in-effect -- clear bare-URL override once the URL carries scope */
+      setBareScopeOverride(null);
+      /* eslint-enable react-hooks/set-state-in-effect */
       return;
     }
 
-    const saved = readTasksScopePreference(userId, ownedListIds);
-    if (saved?.type === "list") {
-      router.replace(`/tasks?list=${saved.id}`, { scroll: false });
-      return;
-    }
-    router.replace("/tasks?view=inbox", { scroll: false });
-  }, [searchParams, userId, ownedListIds, router, scope]);
+    const saved =
+      readTasksScopePreference(userId, ownedListIds) ?? ({ type: "inbox" } as const);
+    // Sync cookie + last-href so the next visit (sidebar / server) skips bare /tasks.
+    writeTasksScopePreference(userId, saved);
+    setBareScopeOverride(saved);
+    router.replace(`/tasks?${buildTasksScopeParams(saved).toString()}`, {
+      scroll: false,
+    });
+  }, [
+    hasTaskDeepLink,
+    urlHasExplicitScope,
+    explicitScopeIsPersistable,
+    userId,
+    ownedListIds,
+    router,
+    urlScope,
+  ]);
 
   const handleListsResize = useCallback(
     (deltaFromStart: number) => {
@@ -610,6 +656,21 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
     [getUserId]
   );
 
+  const handleCreateSubtask = useCallback(
+    async (taskId: string, title: string): Promise<Subtask> => {
+      const supabase = createClient();
+      const uid = await getUserId();
+      const created = await createSubtask(supabase, taskId, uid, title);
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId ? { ...t, subtasks: [...t.subtasks, created] } : t
+        )
+      );
+      return created;
+    },
+    [getUserId]
+  );
+
   const handlePatchFields = useCallback(
     async (
       taskId: string,
@@ -773,8 +834,14 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
   ];
 
   return (
-    <AppShell flushTop>
-      <div ref={layoutRowRef} className="h-full flex w-full pt-4 min-h-0">
+    <AppShell flushTop userId={userId}>
+      <div
+        ref={layoutRowRef}
+        className={cn(
+          "h-full flex w-full pt-4 min-h-0",
+          !scopeReady && "invisible"
+        )}
+      >
         {/* Desktop Lists panel — extends the Tasks page's own sub-navigation
             rather than adding a second global sidebar. */}
         <aside
@@ -1063,6 +1130,7 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
               task={selectedTask}
               onSaveTitleNotes={handleSaveTitleNotes}
               onReplaceSubtasks={handleReplaceSubtasks}
+              onCreateSubtask={handleCreateSubtask}
               onToggleSubtask={handleToggleSubtask}
               onPatchFields={handlePatchFields}
             />
@@ -1083,6 +1151,7 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
               task={selectedTask}
               onSaveTitleNotes={handleSaveTitleNotes}
               onReplaceSubtasks={handleReplaceSubtasks}
+              onCreateSubtask={handleCreateSubtask}
               onToggleSubtask={handleToggleSubtask}
               onPatchFields={handlePatchFields}
               onClose={() => setSelectedTaskId(null)}

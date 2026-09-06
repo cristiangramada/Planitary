@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchJournalEntriesByDate } from "@/lib/journal";
 import { localTodayStr } from "@/utils/date";
+import { PageLoadingShell } from "@/components/layout/PageLoadingShell";
 import { JournalClient } from "./JournalClient";
 import type { Task } from "@/types";
 
@@ -35,7 +36,7 @@ export default async function JournalPage() {
   return (
     // Suspense required because JournalClient uses useSearchParams (for the
     // /journal?date=<date>&entry=<id> deep-link opened from Search results).
-    <Suspense fallback={null}>
+    <Suspense fallback={<PageLoadingShell variant="journal" />}>
       <JournalClient
         initialDate={initialDate}
         initialEntries={entries}
