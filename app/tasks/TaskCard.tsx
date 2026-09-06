@@ -339,13 +339,12 @@ export function TaskCard({
                 : undefined
             }
             className={cn(
-              "relative inline-block max-w-full overflow-hidden whitespace-nowrap text-sm font-medium leading-snug select-text pr-24",
+              "relative inline-block max-w-full overflow-x-clip overflow-y-visible whitespace-nowrap text-sm font-medium leading-snug select-text pr-24",
               onRenameTitle ? "cursor-text" : undefined,
               isCompleted && !editingTitle && "line-through text-[hsl(var(--muted-foreground))]"
             )}
           >
-            {/* In-flow sizer keeps height identical in view and edit modes.
-                whitespace-pre so consecutive spaces match the input width. */}
+            {/* The sizer fixes this title row's line box in both display and edit modes. */}
             <span aria-hidden className="invisible whitespace-pre">
               {editingTitle
                 ? `${titleValue || " "}\u2009`
