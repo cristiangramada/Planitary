@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 const siteDescription =
-  "A modern productivity app for tasks, calendar, and journaling.";
+  "Your productivity universe for tasks, calendar, journaling, and standups.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
