@@ -22,6 +22,7 @@ import { cn } from "@/utils/cn";
 import { createClient } from "@/lib/supabase/client";
 import {
   createTask,
+  createSubtask,
   deleteTask,
   setTaskComplete,
   setSubtaskComplete,
@@ -655,6 +656,21 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
     [getUserId]
   );
 
+  const handleCreateSubtask = useCallback(
+    async (taskId: string, title: string): Promise<Subtask> => {
+      const supabase = createClient();
+      const uid = await getUserId();
+      const created = await createSubtask(supabase, taskId, uid, title);
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId ? { ...t, subtasks: [...t.subtasks, created] } : t
+        )
+      );
+      return created;
+    },
+    [getUserId]
+  );
+
   const handlePatchFields = useCallback(
     async (
       taskId: string,
@@ -1114,6 +1130,7 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
               task={selectedTask}
               onSaveTitleNotes={handleSaveTitleNotes}
               onReplaceSubtasks={handleReplaceSubtasks}
+              onCreateSubtask={handleCreateSubtask}
               onToggleSubtask={handleToggleSubtask}
               onPatchFields={handlePatchFields}
             />
@@ -1134,6 +1151,7 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
               task={selectedTask}
               onSaveTitleNotes={handleSaveTitleNotes}
               onReplaceSubtasks={handleReplaceSubtasks}
+              onCreateSubtask={handleCreateSubtask}
               onToggleSubtask={handleToggleSubtask}
               onPatchFields={handlePatchFields}
               onClose={() => setSelectedTaskId(null)}

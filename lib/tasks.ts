@@ -292,6 +292,27 @@ export async function replaceTaskSubtasks(
   return (data as Subtask[]) ?? [];
 }
 
+/** Adds one subtask without replacing the task's existing checklist. */
+export async function createSubtask(
+  supabase: SupabaseClient,
+  taskId: string,
+  userId: string,
+  title: string
+): Promise<Subtask> {
+  const { data, error } = await supabase
+    .from("subtasks")
+    .insert({
+      task_id: taskId,
+      user_id: userId,
+      title,
+      is_completed: false,
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as Subtask;
+}
+
 /** Deletes a task (cascades subtasks via DB constraints). */
 export async function deleteTask(
   supabase: SupabaseClient,

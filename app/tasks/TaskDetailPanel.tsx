@@ -18,6 +18,7 @@ interface TaskDetailPanelProps {
   task: TaskWithDetails;
   onSaveTitleNotes: (taskId: string, title: string, notes: string | null) => Promise<void>;
   onReplaceSubtasks: (taskId: string, subtasks: SubtaskFormItem[]) => Promise<Subtask[]>;
+  onCreateSubtask: (taskId: string, title: string) => Promise<Subtask>;
   onToggleSubtask: (taskId: string, subtaskId: string, completed: boolean) => void;
   onPatchFields: (
     taskId: string,
@@ -73,6 +74,7 @@ export function TaskDetailPanel({
   task,
   onSaveTitleNotes,
   onReplaceSubtasks,
+  onCreateSubtask,
   onToggleSubtask,
   onPatchFields,
   onClose,
@@ -168,21 +170,15 @@ export function TaskDetailPanel({
     else await switchToDescription();
   }
 
-  async function addChecklistItem(raw: string) {
+  async function addChecklistItem(raw: string): Promise<void> {
     const value = raw.trim();
     if (!value) return;
     setError(null);
     try {
-      await onReplaceSubtasks(task.id, [
-        ...task.subtasks.map((s) => ({
-          id: s.id,
-          title: s.title,
-          is_completed: s.is_completed,
-        })),
-        { title: value, is_completed: false },
-      ]);
+      await onCreateSubtask(task.id, value);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't add item.");
+      throw err;
     }
   }
 
@@ -367,7 +363,7 @@ export function TaskDetailPanel({
           <ChecklistBody
             subtasks={task.subtasks}
             onToggle={(subtaskId, completed) => onToggleSubtask(task.id, subtaskId, completed)}
-            onAdd={(text) => void addChecklistItem(text)}
+            onAdd={addChecklistItem}
             onRename={(id, next) => void updateChecklistTitle(id, next)}
             onRemove={(id) => void removeChecklistItem(id)}
           />
@@ -412,11 +408,13 @@ function ChecklistBody({
 }: {
   subtasks: Subtask[];
   onToggle: (subtaskId: string, completed: boolean) => void;
-  onAdd: (text: string) => void;
+  onAdd: (text: string) => Promise<void>;
   onRename: (subtaskId: string, title: string) => void;
   onRemove: (subtaskId: string) => void;
 }) {
   const [draft, setDraft] = useState("");
+  const [pendingItems, setPendingItems] = useState<Array<{ id: number; title: string }>>([]);
+  const nextPendingId = useRef(0);
 
   return (
     <div className="flex-1 min-h-0 flex flex-col overflow-y-auto px-3 py-2">
@@ -479,13 +477,37 @@ function ChecklistBody({
             </button>
           </li>
         ))}
+        {pendingItems.map((item) => (
+          <li
+            key={`pending-${item.id}`}
+            className="flex items-start gap-2 rounded-lg px-1 py-1.5 text-sm text-[hsl(var(--muted-foreground))]"
+          >
+            <span
+              aria-hidden="true"
+              className="mt-0.5 h-4 w-4 shrink-0 animate-pulse rounded border border-[hsl(var(--muted-foreground))]"
+            />
+            <span>{item.title}</span>
+          </li>
+        ))}
       </ul>
       <form
         className="mt-0.5 px-1"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          onAdd(draft);
+          const title = draft.trim();
+          if (!title) return;
+          const id = ++nextPendingId.current;
+          setPendingItems((items) => [...items, { id, title }]);
           setDraft("");
+          try {
+            await onAdd(title);
+          } catch {
+            // TaskDetailPanel displays the save error. Restore the failed text
+            // only when the user has not started composing another item.
+            setDraft((current) => current || title);
+          } finally {
+            setPendingItems((items) => items.filter((item) => item.id !== id));
+          }
         }}
       >
         <div className="flex items-start gap-2 py-1.5">
