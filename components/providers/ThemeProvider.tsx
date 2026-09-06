@@ -4,6 +4,7 @@ import { ThemeProvider as NextThemesProvider, useTheme } from "next-themes";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, type ReactNode } from "react";
 import { DisableNativeContextMenu } from "./DisableNativeContextMenu";
+import { ClientTimeZone } from "./ClientTimeZone";
 import { createClient } from "@/lib/supabase/client";
 import { countProductiveDays } from "@/lib/productive-days";
 import {
@@ -124,6 +125,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     >
       <ThemeUnlockGuard>
         <DisableNativeContextMenu />
+        <ClientTimeZone />
         {children}
       </ThemeUnlockGuard>
     </NextThemesProvider>
