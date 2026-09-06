@@ -78,11 +78,11 @@ export function DashboardClient({
   const [unlockToast, setUnlockToast] = useState<string | null>(null);
   const journalInputRef = useRef<HTMLInputElement>(null);
 
-  const isFirstRun = useRef(true);
-
   // ---------------------------------------------------------------------------
-  // Refresh — same "trust SSR, refetch if the local date disagrees" pattern
-  // used by the Journal page (server clock is UTC on Vercel).
+  // Refresh only when the client calendar date differs from server-rendered
+  // data (for example after midnight). This must not refetch matching SSR data:
+  // React development Strict Mode re-runs effects and otherwise flickers every
+  // Dashboard section through its loading state.
   // ---------------------------------------------------------------------------
 
   const refetchAll = useCallback(async () => {
@@ -97,11 +97,16 @@ export function DashboardClient({
   }, [clientToday]);
 
   useEffect(() => {
-    if (isFirstRun.current) {
-      isFirstRun.current = false;
-      if (clientToday === initialDate) return; // SSR data already matches
-    }
-    refetchAll();
+    if (clientToday === initialDate) return;
+    // Deferring also lets Strict Mode clean up its first development-only
+    // effect pass before the request starts.
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (!cancelled) void refetchAll();
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [clientToday, initialDate, refetchAll]);
 
   const getUserId = useCallback(async () => {
