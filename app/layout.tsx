@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { siteUrl } from "@/lib/site-url";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -17,12 +18,16 @@ const siteDescription =
   "A modern productivity app for tasks, calendar, and journaling.";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.SITE_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(siteUrl),
   title: {
     default: "Planitary",
     template: "%s | Planitary",
   },
   description: siteDescription,
+  robots: {
+    index: true,
+    follow: true,
+  },
   openGraph: {
     type: "website",
     locale: "en_US",

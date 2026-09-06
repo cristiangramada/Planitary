@@ -16,6 +16,9 @@ import { ThemeShowcase } from "@/components/marketing/ThemeShowcase";
 
 export const metadata: Metadata = {
   title: "Planitary",
+  alternates: {
+    canonical: "/",
+  },
 };
 
 const PRIMARY_CTA =

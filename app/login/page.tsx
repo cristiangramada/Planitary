@@ -4,7 +4,10 @@ import { Suspense } from "react";
 import { Logo } from "@/components/ui/Logo";
 import { LoginForm } from "./LoginForm";
 
-export const metadata: Metadata = { title: "Sign in" };
+export const metadata: Metadata = {
+  title: "Sign in",
+  robots: { index: false, follow: true },
+};
 
 export default function LoginPage() {
   return (

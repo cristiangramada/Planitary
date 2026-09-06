@@ -4,7 +4,14 @@ import { NextResponse, type NextRequest } from "next/server";
 /**
  * Route prefixes that never require authentication.
  */
-const PUBLIC_PREFIXES = ["/", "/login", "/signup", "/auth"];
+const PUBLIC_PREFIXES = [
+  "/",
+  "/login",
+  "/signup",
+  "/auth",
+  "/robots.txt",
+  "/sitemap.xml",
+];
 
 /**
  * Routes that authenticated users should be redirected away from.
