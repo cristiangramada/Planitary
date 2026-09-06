@@ -10,6 +10,7 @@ import {
   tasksScopeCookieName,
   tasksScopeToHref,
 } from "@/lib/tasks-scope-preference";
+import { PageLoadingShell } from "@/components/layout/PageLoadingShell";
 import { TasksClient } from "./TasksClient";
 
 export const metadata: Metadata = { title: "Tasks" };
@@ -68,7 +69,7 @@ export default async function TasksPage({
     // Suspense required because TasksClient uses useSearchParams (for the
     // /tasks?task=<id> deep-link opened from Search results, and for the
     // Lists ?list=/?view= scope).
-    <Suspense fallback={null}>
+    <Suspense fallback={<PageLoadingShell variant="tasks" />}>
       <TasksClient
         initialTasks={tasks}
         initialLists={lists}
