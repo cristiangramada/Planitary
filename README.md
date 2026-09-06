@@ -1,39 +1,109 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Planitary
+
+A personal productivity app for tasks, calendar, journaling, and search — with an AI-assisted Journal Standup and unlockable planet appearance themes.
+
+**Stack:** Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, Supabase (Auth + Postgres + RLS), OpenRouter (Standup AI).
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 20+
+- A [Supabase](https://supabase.com) project
+- An [OpenRouter](https://openrouter.ai) API key (only required for Journal Standup)
+
+### Setup
+
+1. Clone the repo and install dependencies:
+
+```bash
+npm install
+```
+
+2. Copy the example env file and fill in values (see [Environment variables](#environment-variables)):
+
+```bash
+cp .env.example .env.local
+```
+
+3. Apply Supabase migrations in order (`0001` … `0011`) via the SQL editor or `supabase db push`. See feature sections below for what each migration adds.
+
+4. In Supabase → Authentication → URL Configuration, set Site URL and add `/auth/callback` to Redirect URLs (details in `.env.example`).
+
+5. Start the dev server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Development server |
+| `npm run build` / `npm start` | Production build and serve |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | TypeScript (`tsc --noEmit`) |
+| `npm test` | Unit tests (`tsx --test`) |
+| `npm run validate` | lint + typecheck + test + build |
 
-## Learn More
+## Environment variables
 
-To learn more about Next.js, take a look at the following resources:
+Copy `.env.example` → `.env.local`. Never commit real secrets.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anon/public key |
+| `OPENROUTER_API_KEY` | For Standup | Server-only |
+| `OPENROUTER_MODEL` | For Standup | Primary model ID (not `openrouter/free`) |
+| `OPENROUTER_FALLBACK_MODEL` | For Standup | Second model ID (not `openrouter/free`) |
+| `SITE_URL` | Production | Canonical origin (e.g. `https://planitary.com`). Defaults to `http://localhost:3000`. Used for `metadataBase`, Open Graph, `sitemap.xml`, `robots.txt`, and OpenRouter `HTTP-Referer`. |
+| `SUPABASE_SERVICE_ROLE_KEY` | No | Unused by the app today; leave commented unless you add service-role code |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`NEXT_PUBLIC_*` values are exposed to the browser. Everything else is server-only.
 
-## Deploy on Vercel
+## Deploy
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Deploy on [Vercel](https://vercel.com) (or any Next.js host):
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Set all required env vars for Production (and Preview if needed), including `SITE_URL` to your public domain.
+2. Configure the same Auth Site URL / Redirect URLs in Supabase for production.
+3. Apply migrations to the production Supabase project if they are not already applied.
+4. Redeploy after changing env vars.
+
+## Database migrations
+
+Apply in order under `supabase/migrations/` (SQL editor or `supabase db push`). Do not edit applied migration files — add a new numbered file instead.
+
+| Migration | Purpose |
+| --- | --- |
+| `0001_initial_schema.sql` | Core schema, RLS, auth profile trigger |
+| `0002` / `0003` | Journal date uniqueness → multiple entries per day |
+| `0004_search.sql` | Full-text + trigram search RPC |
+| `0005_profiles_self_service.sql` | Account page profile insert + display name length |
+| `0006` / `0007` | Task Lists + search list support |
+| `0008_priority_none.sql` | Priority `'none'` |
+| `0009_remove_tags.sql` | Removes Tags; recreates `search_planitary()` |
+| `0010_task_repeat.sql` | Task recurrence |
+| `0011_user_productive_days.sql` | Appearance unlock progress |
+
+## SEO / site URL
+
+`SITE_URL` drives canonical metadata and crawl hints:
+
+| Concern | Location |
+| --- | --- |
+| Canonical origin helper | `lib/site-url.ts` |
+| `metadataBase`, Open Graph, Twitter | `app/layout.tsx` |
+| Public sitemap (marketing home only) | `app/sitemap.ts` |
+| `robots.txt` (disallows authenticated app routes) | `app/robots.ts` |
+
+Authenticated routes (`/dashboard`, `/tasks`, `/calendar`, `/journal`, `/search`, `/account`, `/api/`, `/auth/`) are disallowed in `robots.txt`. The sitemap lists only the public home page.
+
+After deploy, confirm `/robots.txt` and `/sitemap.xml` load publicly (not redirected to sign-in). `robots.txt` is crawl guidance, not access control — authenticated routes stay protected by `proxy.ts` and out of the sitemap.
 
 ## AI — Journal Standup (OpenRouter)
 
@@ -45,12 +115,13 @@ The Journal page's **Standup** section generates a copy-ready weekly update from
 OPENROUTER_API_KEY=
 OPENROUTER_MODEL=google/gemma-4-26b-a4b-it:free
 OPENROUTER_FALLBACK_MODEL=google/gemma-4-31b-it:free
+SITE_URL=http://localhost:3000
 ```
 
 - **Getting an API key**: sign up at [openrouter.ai](https://openrouter.ai), then create a key at [openrouter.ai/keys](https://openrouter.ai/keys).
-- **Local development**: add the three variables above to `.env.local` (never commit real values).
-- **Vercel**: add the same three variables under Project Settings → Environment Variables for every environment (Development/Preview/Production) that should support the Standup feature. Redeploy after saving.
-- **Server-only**: none of these variables use the `NEXT_PUBLIC_` prefix. They are only read inside `lib/ai/*`, `lib/standup.ts`, and `app/api/ai/standup/route.ts` — all server-side code.
+- **Local development**: add the variables above to `.env.local` (never commit real values). `SITE_URL` may stay at the localhost default.
+- **Vercel**: add the same variables under Project Settings → Environment Variables for every environment (Development/Preview/Production) that should support Standup. Set production `SITE_URL` to your public domain. Redeploy after saving.
+- **Server-only**: none of these use the `NEXT_PUBLIC_` prefix. They are only read inside `lib/ai/*`, `lib/standup.ts`, `lib/site-url.ts`, and `app/api/ai/standup/route.ts` — all server-side code.
 
 ### Why `openrouter/free` is not in env vars
 
@@ -79,7 +150,7 @@ To change the first two models, update the corresponding environment variables �
 | Feature-agnostic AI types/errors | `lib/ai/types.ts`, `lib/ai/errors.ts` |
 | Model + generation-parameter config | `lib/ai/config.ts` |
 | Generic provider interface + fallback policy | `lib/ai/provider.ts` |
-| OpenRouter implementation | `lib/ai/openrouter-provider.ts` |
+| OpenRouter implementation (uses `SITE_URL` for `HTTP-Referer`) | `lib/ai/openrouter-provider.ts` |
 | Standup prompt builder (Journal-specific) | `lib/ai/prompts/standup-prompt.ts` |
 | Standup data rules (date validation, retrieval, truncation) | `lib/standup.ts` |
 | Standup API route | `app/api/ai/standup/route.ts` |
@@ -252,7 +323,7 @@ Desktop (`lg+`): two columns — **Today's tasks** and **Today's events** stacke
 
 ### Database
 
-- **Migrations:** `supabase/migrations/0006_task_lists.sql` and `0007_search_list_support.sql` (run in order; do not modify `0001`–`0005`). `0008_priority_none.sql` widens the tasks priority check to allow `'none'`. `0009_remove_tags.sql` later recreates `search_planitary()` again to drop the tag join. `0010_task_repeat.sql` adds task recurrence (see [Task Repeat](#task-repeat) below).
+- **Migrations:** `supabase/migrations/0006_task_lists.sql` and `0007_search_list_support.sql` (run in order; do not modify `0001`–`0005`). `0008_priority_none.sql` widens the tasks priority check to allow `'none'`. `0009_remove_tags.sql` later recreates `search_planitary()` again to drop the tag join. `0010_task_repeat.sql` adds task recurrence (see [Task Repeat](#task-repeat)). `0011_user_productive_days.sql` adds appearance unlock progress (see [Appearance / themes](#appearance--themes)).
 - **Schema:** `public.task_lists (id, user_id, name, color, icon, position, created_at, updated_at)`; `public.tasks` gains a nullable `list_id uuid references public.task_lists(id) on delete set null`.
 - **Inbox is not a database row.** A task with `list_id = null` is the "Inbox" system view — same convention as the existing smart views (All/Active/Overdue/Completed), which also aren't stored rows.
 - **Deleting a List never deletes its Tasks.** `on delete set null` moves them to Inbox automatically; the app also mirrors this locally so the UI doesn't need a refetch.
@@ -305,6 +376,7 @@ The Lists panel is a persistent ~240px column on desktop (`lg+`), and a left sli
 - [ ] Apply `supabase/migrations/0006_task_lists.sql`, then `0007_search_list_support.sql`, then `0008_priority_none.sql` (SQL editor or `supabase db push`), in that order.
 - [ ] Apply `supabase/migrations/0009_remove_tags.sql`. **This permanently deletes the `tags` and `task_tags` tables and all existing tag data/associations** — Tags were removed from V1; Tasks themselves (and their subtasks, priorities, due dates, and List assignments) are unaffected. Confirm `tags`/`task_tags` no longer appear under Database → Tables afterward.
 - [ ] Apply `supabase/migrations/0010_task_repeat.sql` (see [Task Repeat](#task-repeat)).
+- [ ] Apply `supabase/migrations/0011_user_productive_days.sql` (see [Appearance / themes](#appearance--themes)).
 - [ ] Confirm `task_lists` has RLS enabled with 4 policies (Database → Tables → task_lists → RLS).
 - [ ] Confirm the unique index `task_lists_user_id_name_lower_idx` exists (Database → Indexes).
 - [ ] As User A, create a List, then as User B confirm `select * from task_lists` (via the app, not the SQL editor's superuser context) never returns User A's List.
@@ -384,4 +456,78 @@ Tasks can repeat daily, weekly, monthly, or yearly. V1 uses an **on-completion**
 - [ ] Dashboard: complete a recurring task due today whose next date is not today; confirm it leaves Today's list and the next occurrence only appears when due today.
 - [ ] Subtasks on a recurring task reset to incomplete on the next occurrence.
 - [ ] Dark/light mode and mobile: date picker Repeat control remains usable without overflow.
+
+## Account
+
+`/account` lets a signed-in user manage profile basics (display name) and links to Appearance. Profile rows are created by the `on_auth_user_created` trigger from the initial schema; `0005_profiles_self_service.sql` adds an insert policy and a 50-character `display_name` length check so the Account page can upsert safely under RLS.
+
+### Manual Supabase steps
+
+- [ ] Apply `supabase/migrations/0005_profiles_self_service.sql` if not already applied.
+- [ ] Confirm `profiles` has an insert-own policy and the `profiles_display_name_length` check.
+
+## Appearance / themes
+
+`/account/appearance` picks the workspace theme. Dark and Light are always available. Planet themes unlock from **productive days** — unique local calendar dates on which the user completed at least one task.
+
+### Unlock thresholds
+
+Defined only in `lib/themes.ts` (`PLANET_UNLOCK_THRESHOLDS`):
+
+| Theme | Productive days |
+| --- | --- |
+| Mercury | 3 |
+| Venus | 7 |
+| Earth | 14 |
+| Mars | 21 |
+| Jupiter | 35 |
+| Saturn | 50 |
+| Uranus | 75 |
+| Neptune | 100 |
+
+### Database
+
+- **Migration:** `supabase/migrations/0011_user_productive_days.sql`.
+- **Table:** `public.user_productive_days (id, user_id, productive_date, created_at)` with unique `(user_id, productive_date)`.
+- **RLS:** select-own and insert-own only — no update/delete policies, so progress cannot be rewritten or removed from the client.
+- **Durability:** completing a task upserts today's local date; reopening or deleting tasks never removes productive-day rows.
+
+### Application layer
+
+| Concern | File |
+| --- | --- |
+| Theme IDs, free vs planet, unlock thresholds | `lib/themes.ts` |
+| Record / count productive days | `lib/productive-days.ts` |
+| Unlock toast copy | `lib/theme-unlock-message.ts` |
+| Theme provider + locked-theme fallback | `components/providers/ThemeProvider.tsx` |
+| Appearance UI | `app/account/AppearanceSection.tsx`, `app/account/appearance/page.tsx` |
+| Record on complete (Tasks + Dashboard) | `lib/tasks.ts` → `setTaskComplete` |
+
+### Behavior
+
+- The client passes the user's **local** `YYYY-MM-DD` at completion time; Planitary does not store timezones.
+- First completion on a calendar day inserts a row and may unlock one or more planet themes at that exact count.
+- Theme preference is stored in the browser (`next-themes`). Locked or invalid planet themes fall back to Dark without clearing a signed-in user's preference permanently when they unlock later.
+- Marketing/auth pages can force a visual default theme without writing the persisted preference.
+
+### Known limitations
+
+- Productive days are not reduced if tasks are reopened or deleted — progress is cumulative by design.
+- Theme preference is per-browser (not synced via Supabase profiles).
+
+### Manual Supabase steps
+
+- [ ] Apply `supabase/migrations/0011_user_productive_days.sql`.
+- [ ] Confirm `user_productive_days` has RLS with select-own + insert-own only (no update/delete).
+- [ ] Confirm the unique index/constraint on `(user_id, productive_date)`.
+
+### Manual testing checklist
+
+- [ ] With zero productive days, only Dark and Light are selectable; planet themes show progress toward unlock.
+- [ ] Completing a task on a new local calendar day increments the count on `/account/appearance`.
+- [ ] Completing a second task the same day does not increment again.
+- [ ] Reopening or deleting a completed task does not reduce the productive-day count.
+- [ ] Crossing a threshold (e.g. 3 days → Mercury) shows an unlock message and unlocks that theme.
+- [ ] Selecting a planet theme applies across the app; refresh preserves it while unlocked.
+- [ ] Dark and light (and unlocked planet) themes render correctly on mobile.
 
