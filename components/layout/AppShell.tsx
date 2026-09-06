@@ -8,6 +8,8 @@ import { cn } from "@/utils/cn";
 
 interface AppShellProps {
   children: React.ReactNode;
+  /** Authenticated user, used to scope sidebar browser preferences. */
+  userId?: string;
   /** Renders in the top bar, vertically aligned with the sidebar logo. */
   topBar?: ReactNode;
   /** Skip the desktop top spacer so page content sits higher. */
@@ -18,6 +20,7 @@ interface AppShellProps {
 
 export function AppShell({
   children,
+  userId,
   topBar,
   flushTop = false,
   mainClassName,
@@ -42,7 +45,7 @@ export function AppShell({
         )}
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <Sidebar />
+        <Sidebar userId={userId} />
       </div>
 
       {/* Main content */}

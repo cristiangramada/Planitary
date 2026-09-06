@@ -31,6 +31,18 @@ export function parseTasksScope(
   return { type: "inbox" };
 }
 
+/** Whether an explicit Tasks URL may update the user's saved preference.
+ * Invalid, foreign, and deleted list ids deliberately render as Inbox, but
+ * must not overwrite the user's previously saved scope. */
+export function isPersistableTasksScope(
+  params: URLSearchParams,
+  ownedListIds: ReadonlySet<string>
+): boolean {
+  if (params.get("view") === "inbox") return true;
+  const listId = params.get("list");
+  return Boolean(listId && ownedListIds.has(listId));
+}
+
 /** Serializes a TasksScope back into URL query params. */
 export function buildTasksScopeParams(scope: TasksScope): URLSearchParams {
   const params = new URLSearchParams();
