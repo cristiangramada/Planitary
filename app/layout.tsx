@@ -34,13 +34,20 @@ export const metadata: Metadata = {
     siteName: "Planitary",
     title: "Planitary",
     description: siteDescription,
-    images: [{ url: "/planitary-logo.png", alt: "Planitary" }],
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Planitary — Your productivity universe.",
+      },
+    ],
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "Planitary",
     description: siteDescription,
-    images: ["/planitary-logo.png"],
+    images: ["/og-image.png"],
   },
 };
 
