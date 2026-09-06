@@ -14,6 +14,10 @@ import {
   parseTasksLayoutPreferenceRaw,
   tasksLayoutCookieName,
 } from "@/lib/tasks-layout-preference";
+import {
+  parseTasksSortPreferenceRaw,
+  tasksSortCookieName,
+} from "@/lib/tasks-sort-preference";
 import { PageLoadingShell } from "@/components/layout/PageLoadingShell";
 import { TasksClient } from "./TasksClient";
 
@@ -77,6 +81,12 @@ export default async function TasksPage({
     layoutRaw ? decodeURIComponent(layoutRaw) : null
   );
 
+  // Same for sort — avoids flashing "Priority" before the saved choice restores.
+  const sortRaw = cookieStore.get(tasksSortCookieName(user.id))?.value;
+  const initialSort = parseTasksSortPreferenceRaw(
+    sortRaw ? decodeURIComponent(sortRaw) : null
+  );
+
   return (
     // Suspense required because TasksClient uses useSearchParams (for the
     // /tasks?task=<id> deep-link opened from Search results, and for the
@@ -87,6 +97,7 @@ export default async function TasksPage({
         initialLists={lists}
         userId={user.id}
         initialLayout={initialLayout}
+        initialSort={initialSort}
       />
     </Suspense>
   );

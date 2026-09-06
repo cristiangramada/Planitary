@@ -124,6 +124,8 @@ interface TasksClientProps {
   userId: string;
   /** Cookie-backed widths from the server so first paint matches the saved layout. */
   initialLayout?: TasksLayoutPreference | null;
+  /** Cookie-backed sort from the server so first paint matches the saved choice. */
+  initialSort?: TasksSortKey | null;
 }
 
 export function TasksClient({
@@ -131,14 +133,15 @@ export function TasksClient({
   initialLists,
   userId,
   initialLayout = null,
+  initialSort = null,
 }: TasksClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [tasks, setTasks] = useState<TaskWithDetails[]>(initialTasks);
   const [lists, setLists] = useState<TaskList[]>(initialLists);
-  // Default matches SSR; restored preference applied after mount to avoid hydration mismatch.
-  const [sortBy, setSortBy] = useState<SortKey>("priority");
-  const [sortReady, setSortReady] = useState(false);
+  const [sortBy, setSortBy] = useState<SortKey>(initialSort ?? "priority");
+  // Cookie seed means first paint is already correct; otherwise wait for localStorage.
+  const [sortReady, setSortReady] = useState(Boolean(initialSort));
   const [filterBy, setFilterBy] = useState<FilterKey>("active");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [scrollToTaskId, setScrollToTaskId] = useState<string | null>(null);
@@ -223,7 +226,7 @@ export function TasksClient({
   );
 
   // ---------------------------------------------------------------------------
-  // Per-account sort preference (localStorage) — restore after mount, then persist.
+  // Per-account sort preference — cookie seeds SSR; localStorage syncs after mount.
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
@@ -848,8 +851,8 @@ export function TasksClient({
         ref={layoutRowRef}
         className={cn(
           "h-full flex w-full pt-4 min-h-0",
-          // Hide until scope + layout are known so defaults don't flash.
-          (!scopeReady || !layoutReady) && "invisible"
+          // Hide until scope + layout + sort are known so defaults don't flash.
+          (!scopeReady || !layoutReady || !sortReady) && "invisible"
         )}
       >
         {/* Desktop Lists panel — extends the Tasks page's own sub-navigation

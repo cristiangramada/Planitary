@@ -14,6 +14,7 @@ const USER_ID = "user-abc";
 
 describe("tasks layout preference", () => {
   const originalLocalStorage = globalThis.localStorage;
+  const originalDocument = globalThis.document;
   const store = new Map<string, string>();
 
   beforeEach(() => {
@@ -45,6 +46,10 @@ describe("tasks layout preference", () => {
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
       value: originalLocalStorage,
+    });
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: originalDocument,
     });
   });
 
