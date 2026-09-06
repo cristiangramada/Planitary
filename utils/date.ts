@@ -53,10 +53,52 @@ export function formatTime(dateString: string): string {
   });
 }
 
-/** Today's date as YYYY-MM-DD in local time. */
-export function localTodayStr(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/**
+ * Returns "today" as YYYY-MM-DD in the supplied IANA time zone. When no
+ * zone is supplied, this uses the runtime's local zone (the browser on the
+ * client and UTC on Vercel).
+ */
+export function localTodayStr(timeZone?: string): string {
+  if (!timeZone) {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts();
+    const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value;
+    const year = part("year");
+    const month = part("month");
+    const day = part("day");
+    if (year && month && day) return `${year}-${month}-${day}`;
+  } catch {
+    // An invalid client-provided time zone must not break a server render.
+  }
+
+  return localTodayStr();
+}
+
+/** Current hour (0–23) in an optional IANA time zone. */
+export function localHour(timeZone?: string): number {
+  if (!timeZone) return new Date().getHours();
+
+  try {
+    const hour = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour: "numeric",
+      hourCycle: "h23",
+    }).formatToParts().find((part) => part.type === "hour")?.value;
+    if (hour !== undefined) return Number(hour);
+  } catch {
+    // Fall back to the server's local hour for an invalid time zone.
+  }
+
+  return localHour();
 }
 
 /** Converts an ISO timestamp (with timezone) to a YYYY-MM-DD local calendar date. */

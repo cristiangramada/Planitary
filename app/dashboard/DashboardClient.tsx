@@ -32,7 +32,7 @@ import { useClientLocalToday, useClientLocalHour } from "@/hooks/useClientLocalT
 import { toLocalDate as eventLocalDate } from "@/app/calendar/calendarUtils";
 import { parseDateOnly, localTodayStr } from "@/utils/date";
 import { formatThemeUnlockMessage } from "@/lib/theme-unlock-message";
-import { DashboardSection, DashboardSkeletonRows, DashboardEmptyState } from "./DashboardSection";
+import { DashboardSection, DashboardEmptyState } from "./DashboardSection";
 import { JournalPreview } from "./JournalPreview";
 import { EventsPreview } from "./EventsPreview";
 import type { TaskWithDetails, CalendarEvent, Priority, RepeatOption } from "@/types";
@@ -437,9 +437,7 @@ export function DashboardClient({
               onRetry={refetchAll}
               loading={refreshing}
             >
-              {refreshing && data.todayTasks.data.length === 0 ? (
-                <DashboardSkeletonRows />
-              ) : data.todayTasks.data.length === 0 ? (
+              {data.todayTasks.data.length === 0 ? (
                 <DashboardEmptyState message="No tasks due today." />
               ) : (
                 <div className="space-y-2">

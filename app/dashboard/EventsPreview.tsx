@@ -4,7 +4,7 @@ import { useState } from "react";
 import { CalendarDays, Plus } from "lucide-react";
 import type { CalendarEvent } from "@/types";
 import { AgendaItemContextMenu } from "@/app/calendar/AgendaItemContextMenu";
-import { DashboardSection, DashboardSkeletonRows, DashboardEmptyState } from "./DashboardSection";
+import { DashboardSection, DashboardEmptyState } from "./DashboardSection";
 
 interface EventsPreviewProps {
   events: CalendarEvent[];
@@ -76,9 +76,7 @@ export function EventsPreview({
       onRetry={onRetry}
       loading={loading}
     >
-      {loading ? (
-        <DashboardSkeletonRows count={3} />
-      ) : visible.length === 0 ? (
+      {visible.length === 0 ? (
         <DashboardEmptyState message="No events scheduled today." />
       ) : (
         <div className="space-y-1.5">

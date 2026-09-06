@@ -5,7 +5,7 @@ import { BookOpen, Plus } from "lucide-react";
 import type { JournalEntry } from "@/types";
 import { JournalEntryContextMenu } from "@/app/journal/JournalEntryContextMenu";
 import { JournalEntryRow } from "@/app/journal/JournalEntryRow";
-import { DashboardSection, DashboardSkeletonRows } from "./DashboardSection";
+import { DashboardSection } from "./DashboardSection";
 
 interface JournalPreviewProps {
   entries: JournalEntry[];
@@ -92,9 +92,7 @@ export function JournalPreview({
         </div>
       </form>
 
-      {loading ? (
-        <DashboardSkeletonRows count={3} />
-      ) : visible.length === 0 ? (
+      {visible.length === 0 ? (
         <p className="flex-1 flex items-center justify-center py-6 text-sm text-[hsl(var(--muted-foreground))] text-center">
           No journal entries today.
         </p>

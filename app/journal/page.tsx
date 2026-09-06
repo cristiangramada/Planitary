@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { fetchJournalEntriesByDate } from "@/lib/journal";
 import { localTodayStr } from "@/utils/date";
+import { CLIENT_TIME_ZONE_COOKIE, parseClientTimeZone } from "@/lib/time-zone";
 import { PageLoadingShell } from "@/components/layout/PageLoadingShell";
 import { JournalClient } from "./JournalClient";
 import type { Task } from "@/types";
@@ -10,13 +12,15 @@ import type { Task } from "@/types";
 export const metadata: Metadata = { title: "Journal" };
 
 /**
- * Server Component — fetches a best-effort "today" using the server clock
- * (UTC on Vercel). JournalClient uses the client's local date and refetches
- * when that differs, or when SSR returned no rows.
+ * Server Component — fetches the visitor's local "today" when their browser
+ * has supplied its time zone cookie. JournalClient retains a client-side
+ * fallback for a visitor's first render before that cookie exists.
  */
 export default async function JournalPage() {
   const supabase = await createClient();
-  const initialDate = localTodayStr();
+  const cookieStore = await cookies();
+  const timeZone = parseClientTimeZone(cookieStore.get(CLIENT_TIME_ZONE_COOKIE)?.value);
+  const initialDate = localTodayStr(timeZone);
 
   const [entries, completedTasksResult] = await Promise.all([
     fetchJournalEntriesByDate(supabase, initialDate).catch(() => []),
