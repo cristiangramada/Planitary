@@ -104,23 +104,22 @@ export function TaskCard({
     selectionRangeRef.current = null;
     if (sel) {
       el.setSelectionRange(sel.start, sel.end);
-    } else {
-      const len = el.value.length;
-      const idx = caretIndexRef.current;
-      caretIndexRef.current = null;
-      if (idx != null && idx >= 0 && idx <= len) {
-        el.setSelectionRange(idx, idx);
-      } else {
-        // Match truncated display (start of title), don't jump to the end.
-        el.setSelectionRange(0, 0);
-      }
+      return;
     }
-    // Keep the same visible slice as the truncated title (start), even if the
-    // caret/selection would otherwise scroll the input.
-    el.scrollLeft = 0;
-    requestAnimationFrame(() => {
+    const len = el.value.length;
+    const idx = caretIndexRef.current;
+    caretIndexRef.current = null;
+    if (idx != null && idx >= 0 && idx <= len) {
+      el.setSelectionRange(idx, idx);
+      // Keep the clipped start visible when placing the caret in the title text.
       el.scrollLeft = 0;
-    });
+      requestAnimationFrame(() => {
+        el.scrollLeft = 0;
+      });
+    } else {
+      // Click in the empty space after the text (or keyboard): caret at end.
+      el.setSelectionRange(len, len);
+    }
   }, [editingTitle]);
 
   // Clear optimistic title once the prop catches up (adjust state during render).
@@ -340,7 +339,7 @@ export function TaskCard({
                 : undefined
             }
             className={cn(
-              "relative block w-full min-w-0 overflow-hidden whitespace-nowrap text-sm font-medium leading-snug select-text pr-24",
+              "relative inline-block max-w-full overflow-hidden whitespace-nowrap text-sm font-medium leading-snug select-text pr-24",
               onRenameTitle ? "cursor-text" : undefined,
               isCompleted && !editingTitle && "line-through text-[hsl(var(--muted-foreground))]"
             )}
@@ -372,7 +371,7 @@ export function TaskCard({
                   onBlur={() => void commitTitleEdit()}
                   onClick={(e) => e.stopPropagation()}
                   className={cn(
-                    "absolute inset-y-0 left-0 right-24 box-border m-0 w-auto min-w-0 appearance-none border-0 bg-transparent p-0 text-sm font-medium leading-snug text-[hsl(var(--foreground))] shadow-none cursor-text focus:outline-none",
+                    "absolute inset-y-0 left-0 box-border m-0 w-full min-w-0 appearance-none border-0 bg-transparent p-0 text-sm font-medium leading-snug text-[hsl(var(--foreground))] shadow-none cursor-text focus:outline-none",
                     isCompleted && "line-through text-[hsl(var(--muted-foreground))]"
                   )}
                 />
@@ -380,7 +379,7 @@ export function TaskCard({
             ) : (
               <span
                 data-task-title-text
-                className="absolute inset-y-0 left-0 right-24 flex items-center overflow-hidden whitespace-nowrap"
+                className="absolute inset-y-0 left-0 flex w-full items-center overflow-hidden whitespace-nowrap"
               >
                 {displayTitle}
               </span>
