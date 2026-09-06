@@ -823,14 +823,10 @@ export function TasksClient({ initialTasks, initialLists, userId }: TasksClientP
   };
 
   const FILTER_TABS: { key: FilterKey; label: string; count?: number }[] = [
-    {
-      key: "all",
-      label: "All",
-      count: scopedTasks.length,
-    },
+    { key: "all", label: "All" },
     { key: "active", label: "Active", count: activeTasks.length },
     { key: "overdue", label: "Overdue", count: overdueTasks.length },
-    { key: "completed", label: "Completed", count: completedTasks.length },
+    { key: "completed", label: "Completed" },
   ];
 
   return (
