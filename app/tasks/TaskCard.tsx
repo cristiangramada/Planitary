@@ -344,9 +344,12 @@ export function TaskCard({
               isCompleted && !editingTitle && "line-through text-[hsl(var(--muted-foreground))]"
             )}
           >
-            {/* In-flow sizer keeps height identical in view and edit modes. */}
-            <span aria-hidden className="invisible whitespace-nowrap">
-              {(editingTitle ? titleValue : displayTitle) || "\u00a0"}
+            {/* In-flow sizer keeps height identical in view and edit modes.
+                whitespace-pre so consecutive spaces match the input width. */}
+            <span aria-hidden className="invisible whitespace-pre">
+              {editingTitle
+                ? `${titleValue || " "}\u2009`
+                : displayTitle || "\u00a0"}
             </span>
             {editingTitle ? (
               <>
