@@ -23,7 +23,7 @@ function scrollToTop(e: React.MouseEvent<HTMLAnchorElement>) {
 
 export function MarketingNavbar() {
   return (
-    <header className="sticky top-0 z-40 border-b border-[hsl(var(--border))] bg-[hsl(var(--background))]">
+    <header className="sticky top-0 z-40 border-b border-white/10 bg-[#050718]/65 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-[90rem] items-center justify-between px-4 sm:px-6 py-3">
         <Link href="/" onClick={scrollToTop} aria-label="Planitary home" className="flex items-center">
           <Logo size={44} priority />

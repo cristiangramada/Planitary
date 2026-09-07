@@ -1,30 +1,43 @@
+import type { CSSProperties } from "react";
+
+const STAR_COUNT = 72;
+
+type StarStyle = CSSProperties & {
+  "--star-low": number;
+  "--star-high": number;
+  "--star-glow": string;
+};
+
 /**
- * Faint, decorative celestial motif for the hero — one dashed orbital arc,
- * a soft radial glow, and a couple of star-like points. Purely decorative:
- * hidden from the accessibility tree and, when animated, respects
- * prefers-reduced-motion (see the `.orbit-arc` rule in globals.css).
+ * A fixed, decorative night sky for the marketing page. Star positions are
+ * deterministic so the server output is stable; only their brightness changes.
  */
 export function CelestialDecor() {
   return (
-    <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-      <div className="absolute left-1/2 top-0 h-[420px] w-[900px] -translate-x-1/2 rounded-full bg-[hsl(var(--primary)/0.10)] blur-[110px]" />
-      <svg
-        className="orbit-arc absolute left-1/2 top-[-160px] h-[520px] w-[520px] -translate-x-1/2 opacity-40 sm:h-[680px] sm:w-[680px]"
-        viewBox="0 0 680 680"
-        fill="none"
-      >
-        <circle
-          cx="340"
-          cy="340"
-          r="280"
-          stroke="hsl(var(--primary) / 0.3)"
-          strokeWidth="1"
-          strokeDasharray="2 12"
-        />
-      </svg>
-      <span className="absolute left-[16%] top-[20%] h-1 w-1 rounded-full bg-[hsl(var(--foreground)/0.45)]" />
-      <span className="absolute right-[22%] top-[10%] h-[3px] w-[3px] rounded-full bg-[hsl(var(--foreground)/0.55)]" />
-      <span className="absolute right-[10%] top-[34%] h-1 w-1 rounded-full bg-[hsl(var(--foreground)/0.35)]" />
+    <div aria-hidden="true" className="marketing-sky pointer-events-none fixed inset-0 overflow-hidden">
+      <div className="marketing-nebula marketing-nebula--violet" />
+      <div className="marketing-nebula marketing-nebula--blue" />
+      <div className="marketing-nebula marketing-nebula--horizon" />
+
+      <div className="absolute inset-0">
+        {Array.from({ length: STAR_COUNT }, (_, index) => {
+          const size = index % 17 === 0 ? 3 : index % 5 === 0 ? 2 : 1;
+          const highOpacity = 0.58 + ((index * 13) % 38) / 100;
+          const style: StarStyle = {
+            left: `${(index * 47 + index * index * 3 + 11) % 101}%`,
+            top: `${(index * 29 + index * index * 7 + 5) % 101}%`,
+            width: `${size}px`,
+            height: `${size}px`,
+            animationDelay: `${-((index * 0.73) % 6.5)}s`,
+            animationDuration: `${3.8 + ((index * 11) % 36) / 10}s`,
+            "--star-low": Number((highOpacity * 0.38).toFixed(2)),
+            "--star-high": Number(highOpacity.toFixed(2)),
+            "--star-glow": `${size * 3 + 2}px`,
+          };
+
+          return <span key={index} className="marketing-star" style={style} />;
+        })}
+      </div>
     </div>
   );
 }
