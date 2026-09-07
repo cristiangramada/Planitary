@@ -73,11 +73,8 @@ export default function HomePage() {
           <div className="relative mx-auto max-w-2xl text-center">
             <Logo size={192} priority className="mx-auto mb-4 sm:mb-5" />
             <h1 className="text-5xl sm:text-7xl font-bold tracking-tight">Planitary</h1>
-            <p className="mt-8 sm:mt-10 text-lg sm:text-2xl font-medium text-[hsl(var(--muted-foreground))]">
-              Your productivity universe.
-            </p>
-            <p className="mt-5 text-base sm:text-lg text-[hsl(var(--muted-foreground))] mx-auto text-pretty sm:whitespace-nowrap">
-              Plan your work, track your days, and keep everything in one place.
+            <p className="mt-8 sm:mt-10 text-base sm:text-lg text-[hsl(var(--muted-foreground))] mx-auto text-pretty sm:whitespace-nowrap">
+              Your productivity universe for tasks, calendar, journaling, and standups.
             </p>
             <div className="mt-10 sm:mt-12 flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link href="/signup" className={PRIMARY_CTA}>
