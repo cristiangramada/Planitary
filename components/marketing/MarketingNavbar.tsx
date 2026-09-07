@@ -40,8 +40,10 @@ export function MarketingNavbar() {
   return (
     <header
       ref={headerRef}
-      className={`sticky top-0 z-40 border-b bg-[#050718]/65 backdrop-blur-xl transition-colors duration-200 ${
-        isScrolled ? "border-white/10" : "border-transparent"
+      className={`sticky top-0 z-40 border-b transition-[background-color,border-color,backdrop-filter] duration-200 ${
+        isScrolled
+          ? "border-white/10 bg-[#050718]/55 backdrop-blur-xl"
+          : "border-transparent bg-transparent backdrop-blur-none"
       }`}
     >
       <div className="mx-auto flex w-full max-w-[90rem] items-center justify-between px-4 sm:px-6 py-3">
