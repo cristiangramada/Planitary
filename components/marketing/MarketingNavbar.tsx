@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/ui/Logo";
 
 const NAV_LINK = "px-3 py-2 text-sm font-medium text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors cursor-pointer";
@@ -22,8 +23,27 @@ function scrollToTop(e: React.MouseEvent<HTMLAnchorElement>) {
 }
 
 export function MarketingNavbar() {
+  const headerRef = useRef<HTMLElement>(null);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const scrollContainer = headerRef.current?.closest<HTMLElement>(".overflow-y-auto");
+    if (!scrollContainer) return;
+
+    const updateDivider = () => setIsScrolled(scrollContainer.scrollTop > 0);
+    updateDivider();
+    scrollContainer.addEventListener("scroll", updateDivider, { passive: true });
+
+    return () => scrollContainer.removeEventListener("scroll", updateDivider);
+  }, []);
+
   return (
-    <header className="sticky top-0 z-40 border-b border-white/10 bg-[#050718]/65 backdrop-blur-xl">
+    <header
+      ref={headerRef}
+      className={`sticky top-0 z-40 border-b bg-[#050718]/65 backdrop-blur-xl transition-colors duration-200 ${
+        isScrolled ? "border-white/10" : "border-transparent"
+      }`}
+    >
       <div className="mx-auto flex w-full max-w-[90rem] items-center justify-between px-4 sm:px-6 py-3">
         <Link href="/" onClick={scrollToTop} aria-label="Planitary home" className="flex items-center">
           <Logo size={44} priority />
