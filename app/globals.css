@@ -350,19 +350,80 @@
     animation: toast-slide-up 0.35s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  /* Marketing page: barely-perceptible orbital drift on the decorative arc only. */
-  @keyframes orbit-spin {
-    from {
-      transform: translateX(-50%) rotate(0deg);
+  /* Marketing page: a fixed deep-space wash with stationary, softly pulsing stars. */
+  .marketing-space-page {
+    background: #010208;
+  }
+
+  .marketing-sky {
+    z-index: 0;
+    background:
+      radial-gradient(circle at 50% -8%, rgb(82 59 155 / 0.12), transparent 38%),
+      radial-gradient(circle at 5% 48%, rgb(28 58 116 / 0.09), transparent 34%),
+      radial-gradient(circle at 96% 76%, rgb(58 38 116 / 0.08), transparent 38%),
+      linear-gradient(180deg, #030512 0%, #050718 44%, #010208 100%);
+  }
+
+  .marketing-nebula {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(90px);
+    opacity: 0.12;
+  }
+
+  .marketing-nebula--violet {
+    left: 20%;
+    top: 8%;
+    width: 34rem;
+    height: 22rem;
+    background: rgb(112 78 190 / 0.35);
+  }
+
+  .marketing-nebula--blue {
+    right: -8rem;
+    top: 42%;
+    width: 30rem;
+    height: 30rem;
+    background: rgb(41 86 163 / 0.3);
+  }
+
+  .marketing-nebula--horizon {
+    bottom: -10rem;
+    left: 10%;
+    width: 46rem;
+    height: 20rem;
+    background: rgb(77 56 149 / 0.28);
+  }
+
+  .marketing-star {
+    position: absolute;
+    border-radius: 9999px;
+    background: #fff;
+    box-shadow: 0 0 var(--star-glow) rgb(255 255 255 / 0.75);
+    opacity: var(--star-high);
+  }
+
+  @keyframes star-pulse {
+    0%,
+    100% {
+      opacity: var(--star-low);
     }
-    to {
-      transform: translateX(-50%) rotate(360deg);
+    50% {
+      opacity: var(--star-high);
     }
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    .orbit-arc {
-      animation: orbit-spin 240s linear infinite;
+    .marketing-star {
+      animation-name: star-pulse;
+      animation-timing-function: ease-in-out;
+      animation-iteration-count: infinite;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .marketing-star {
+      opacity: 0.65;
     }
   }
 
