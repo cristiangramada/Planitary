@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -85,6 +85,7 @@ export function MiniCalendarPicker({
     top: number;
     left: number;
     width: number;
+    maxHeight: number;
   } | null>(null);
 
   // Calendar navigation state — initialized when popover opens
@@ -99,6 +100,45 @@ export function MiniCalendarPicker({
 
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+
+  const positionPopover = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+
+    const popover = popoverRef.current;
+    const triggerRect = trigger.getBoundingClientRect();
+    const visualViewport = window.visualViewport;
+    const viewportTop = visualViewport?.offsetTop ?? 0;
+    const viewportLeft = visualViewport?.offsetLeft ?? 0;
+    const viewportWidth = visualViewport?.width ?? window.innerWidth;
+    const viewportHeight = visualViewport?.height ?? window.innerHeight;
+    const viewportRight = viewportLeft + viewportWidth;
+    const viewportBottom = viewportTop + viewportHeight;
+    const margin = 8;
+    const gap = 4;
+    const width = Math.min(
+      Math.max(triggerRect.width, 260),
+      Math.max(0, viewportWidth - margin * 2)
+    );
+    const maxHeight = Math.max(0, viewportHeight - margin * 2);
+    const popoverHeight = Math.min(popover?.scrollHeight ?? 0, maxHeight);
+    const roomBelow = viewportBottom - triggerRect.bottom - gap - margin;
+    const roomAbove = triggerRect.top - viewportTop - gap - margin;
+    const openAbove = popoverHeight > roomBelow && roomAbove > roomBelow;
+    const preferredTop = openAbove
+      ? triggerRect.top - gap - popoverHeight
+      : triggerRect.bottom + gap;
+    const top = Math.min(
+      Math.max(preferredTop, viewportTop + margin),
+      viewportBottom - margin - popoverHeight
+    );
+    const left = Math.min(
+      Math.max(triggerRect.left, viewportLeft + margin),
+      viewportRight - margin - width
+    );
+
+    setPopoverPos({ top, left, width, maxHeight });
+  }, []);
 
   function openPicker() {
     if (disabled) return;
@@ -117,9 +157,35 @@ export function MiniCalendarPicker({
     }
 
     const r = triggerRef.current.getBoundingClientRect();
-    setPopoverPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 260) });
+    setPopoverPos({
+      top: r.bottom + 4,
+      left: r.left,
+      width: Math.max(r.width, 260),
+      maxHeight: window.innerHeight - 16,
+    });
     setOpen(true);
   }
+
+  // Measure the rendered calendar before paint so it can flip above a trigger
+  // near the bottom of the screen. visualViewport keeps this correct on iOS
+  // when the browser chrome or software keyboard changes the visible area.
+  useLayoutEffect(() => {
+    if (!open) return;
+    positionPopover();
+  }, [open, calYear, calMonth, value, nullable, positionPopover]);
+
+  useEffect(() => {
+    if (!open) return;
+    const visualViewport = window.visualViewport;
+    window.addEventListener("resize", positionPopover);
+    visualViewport?.addEventListener("resize", positionPopover);
+    visualViewport?.addEventListener("scroll", positionPopover);
+    return () => {
+      window.removeEventListener("resize", positionPopover);
+      visualViewport?.removeEventListener("resize", positionPopover);
+      visualViewport?.removeEventListener("scroll", positionPopover);
+    };
+  }, [open, positionPopover]);
 
   useEffect(() => {
     if (!open) return;
@@ -209,9 +275,10 @@ export function MiniCalendarPicker({
               top: popoverPos.top,
               left: popoverPos.left,
               width: popoverPos.width,
+              maxHeight: popoverPos.maxHeight,
               zIndex: 9999,
             }}
-            className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-2xl overflow-hidden"
+            className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-2xl overflow-y-auto"
           >
             {/* Month navigation header */}
             <div className="flex items-center justify-between px-3 py-2.5 border-b border-[hsl(var(--border))]">
