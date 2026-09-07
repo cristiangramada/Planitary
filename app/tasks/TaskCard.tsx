@@ -7,6 +7,7 @@ import type { MoveToListOption } from "@/app/calendar/AgendaItemContextMenu";
 import { relativeDate, formatDate, parseDateOnly } from "@/utils/date";
 import { formatTimeValue } from "@/components/ui/TimeDropdown";
 import type { Priority, RepeatOption, TaskWithDetails } from "@/types";
+import type { PointerReorder } from "@/hooks/usePointerReorder";
 import { TaskContextMenu } from "./TaskContextMenu";
 
 interface TaskCardProps {
@@ -27,6 +28,9 @@ interface TaskCardProps {
   selected?: boolean;
   lists?: MoveToListOption[];
   onMoveToList?: (taskId: string, listId: string | null) => void;
+  /** Makes the whole card a drag handle for manual reordering. Omitted for
+   *  every sort other than "Custom", which leaves the card exactly as before. */
+  reorder?: PointerReorder;
 }
 
 const CHECK_IDLE: Record<Priority, string> = {
@@ -80,6 +84,7 @@ export function TaskCard({
   selected = false,
   lists,
   onMoveToList,
+  reorder,
 }: TaskCardProps) {
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -236,12 +241,23 @@ export function TaskCard({
     hasDue ||
     (isCompleted && !!task.completed_at);
 
+  /** A drag ends with a click on whatever was under the pointer — swallow it
+   *  so a reorder doesn't also open the detail panel or the title editor. */
+  function afterDrag(): boolean {
+    return reorder?.wasDragged() ?? false;
+  }
+
   return (
     <div
       id={`task-card-${task.id}`}
+      ref={reorder ? (el) => reorder.registerRow(task.id, el) : undefined}
+      onPointerDown={reorder ? (e) => reorder.handlePointerDown(e, task.id) : undefined}
       role={onSelect ? "button" : undefined}
       tabIndex={onSelect ? 0 : undefined}
-      onClick={() => onSelect?.(task)}
+      onClick={() => {
+        if (afterDrag()) return;
+        onSelect?.(task);
+      }}
       onKeyDown={(e) => {
         if (!onSelect || editingTitle) return;
         if (e.key === "Enter" || e.key === " ") {
@@ -251,16 +267,19 @@ export function TaskCard({
       }}
       onContextMenu={handleContextMenu}
       className={cn(
-        "group rounded-xl border bg-[hsl(var(--card))] transition-colors cursor-default",
+        "group rounded-xl border bg-[hsl(var(--card))] transition-colors",
+        reorder?.dragging ? "cursor-move" : "cursor-default",
         isCompleted
           ? "border-[hsl(var(--border))] opacity-70"
           : "border-[hsl(var(--border))] hover:border-[hsl(var(--primary)/0.4)]",
-        selected && "border-[hsl(var(--primary)/0.55)] ring-1 ring-[hsl(var(--primary)/0.25)]"
+        selected && "border-[hsl(var(--primary)/0.55)] ring-1 ring-[hsl(var(--primary)/0.25)]",
+        reorder?.draggingId === task.id && "opacity-40"
       )}
     >
       <div className={cn("flex gap-3 p-4", hasMeta ? "items-start" : "items-center")}>
         <button
           type="button"
+          data-no-drag
           onClick={(e) => {
             e.stopPropagation();
             onToggleComplete(task.id, !isCompleted);
@@ -295,7 +314,7 @@ export function TaskCard({
             role={onRenameTitle && !editingTitle ? "button" : undefined}
             tabIndex={onRenameTitle && !editingTitle ? 0 : undefined}
             onMouseUp={(e) => {
-              if (editingTitle || !onRenameTitle) return;
+              if (editingTitle || !onRenameTitle || afterDrag()) return;
               pendingSelectionRef.current = selectionOffsetsInTitle(e.currentTarget);
             }}
             onClick={(e) => {
@@ -304,6 +323,7 @@ export function TaskCard({
                 return;
               }
               e.stopPropagation();
+              if (afterDrag()) return;
               onSelect?.(task);
               if (!onRenameTitle) return;
               const pending = pendingSelectionRef.current;
@@ -358,6 +378,7 @@ export function TaskCard({
                 <input
                   id={`task-title-edit-${task.id}`}
                   ref={titleInputRef}
+                  data-no-drag
                   type="text"
                   name={`task-title-${task.id}`}
                   value={titleValue}
@@ -420,6 +441,7 @@ export function TaskCard({
         {canOpenMenu && (
           <button
             type="button"
+            data-no-drag
             title="Task actions"
             aria-label="Task actions"
             aria-haspopup="menu"

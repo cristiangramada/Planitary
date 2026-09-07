@@ -230,8 +230,16 @@ export async function updateTaskListColor(
 }
 
 /** Deletes a List. Its Tasks are preserved and moved to Inbox automatically
- *  via the `tasks.list_id` foreign key's `on delete set null`. */
+ *  via the `tasks.list_id` foreign key's `on delete set null`. Their manual
+ *  Custom positions are cleared first so they land at the bottom of Inbox
+ *  instead of interleaving by a position that meant something in the old List. */
 export async function deleteTaskList(supabase: SupabaseClient, listId: string): Promise<void> {
+  const { error: clearErr } = await supabase
+    .from("tasks")
+    .update({ custom_position: null })
+    .eq("list_id", listId);
+  if (clearErr) throw new Error("Couldn't delete the list.");
+
   const { error } = await supabase.from("task_lists").delete().eq("id", listId);
   if (error) throw new Error("Couldn't delete the list.");
 }
@@ -256,12 +264,17 @@ export async function reorderTaskLists(
 
 /** Moves a task to a List (or to Inbox, when `listId` is null). Ownership of
  *  the target List is enforced by RLS plus a database trigger — an attempt
- *  to move a task to a List the user doesn't own is rejected server-side. */
+ *  to move a task to a List the user doesn't own is rejected server-side.
+ *  The manual Custom position is cleared so the task lands at the bottom of
+ *  its destination rather than in the middle of it. */
 export async function moveTaskToList(
   supabase: SupabaseClient,
   taskId: string,
   listId: string | null
 ): Promise<void> {
-  const { error } = await supabase.from("tasks").update({ list_id: listId }).eq("id", taskId);
+  const { error } = await supabase
+    .from("tasks")
+    .update({ list_id: listId, custom_position: null })
+    .eq("id", taskId);
   if (error) throw new Error("Couldn't move the task.");
 }

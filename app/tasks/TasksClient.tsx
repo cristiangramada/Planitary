@@ -18,6 +18,11 @@ import { TaskCard } from "./TaskCard";
 import { TaskQuickAdd } from "./TaskQuickAdd";
 import { TaskDetailPanel } from "./TaskDetailPanel";
 import { ListsPanel } from "./ListsPanel";
+import { ReorderDropLine } from "@/components/ui/ReorderDropLine";
+import {
+  usePointerReorder,
+  type PointerReorderDrop,
+} from "@/hooks/usePointerReorder";
 import { cn } from "@/utils/cn";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -41,6 +46,12 @@ import {
   reorderTaskLists,
   computeListTaskCounts,
 } from "@/lib/task-lists";
+import {
+  buildCustomPositionUpdates,
+  persistCustomOrder,
+  reorderWithinContainer,
+  sortByCustomOrder,
+} from "@/lib/tasks-custom-order";
 import type { MoveToListOption } from "@/app/calendar/AgendaItemContextMenu";
 import {
   parseTasksScope,
@@ -93,6 +104,10 @@ function compareDueDateTime(a: TaskWithDetails, b: TaskWithDetails): number {
 }
 
 function sortTasks(tasks: TaskWithDetails[], sortBy: SortKey): TaskWithDetails[] {
+  // Custom is the user's manual per-container order, so it bypasses the
+  // field-comparison sorts entirely.
+  if (sortBy === "custom") return sortByCustomOrder(tasks);
+
   return [...tasks].sort((a, b) => {
     if (sortBy === "created_oldest") {
       return a.created_at.localeCompare(b.created_at);
@@ -434,7 +449,7 @@ export function TasksClient({
     return tasks.filter((t) => t.list_id === null);
   }, [tasks, scope]);
 
-  const { activeTasks, overdueTasks, completedTasks } = useMemo(() => {
+  const { activeTasks, overdueTasks, completedTasks, containerOrderIds } = useMemo(() => {
     const today = localTodayStr();
     const sorted = sortTasks(scopedTasks, sortBy);
     const active = sorted.filter((t) => t.status === "active");
@@ -442,6 +457,9 @@ export function TasksClient({
       activeTasks: active,
       overdueTasks: active.filter((t) => !!t.due_date && t.due_date < today),
       completedTasks: sorted.filter((t) => t.status === "completed"),
+      // Under Custom, `sorted` is the container's full manual order — the
+      // reference a drop inside a filtered tab is mapped back onto.
+      containerOrderIds: sorted.map((t) => t.id),
     };
   }, [scopedTasks, sortBy]);
 
@@ -453,14 +471,89 @@ export function TasksClient({
     ? tasks.find((t) => t.id === selectedTaskId) ?? null
     : null;
 
-  const visibleActive =
-    filterBy === "completed"
-      ? []
-      : filterBy === "overdue"
-        ? overdueTasks
-        : activeTasks;
-  const visibleCompleted =
-    filterBy === "active" || filterBy === "overdue" ? [] : completedTasks;
+  const visibleActive = useMemo(
+    () =>
+      filterBy === "completed"
+        ? []
+        : filterBy === "overdue"
+          ? overdueTasks
+          : activeTasks,
+    [filterBy, overdueTasks, activeTasks]
+  );
+  const visibleCompleted = useMemo(
+    () => (filterBy === "active" || filterBy === "overdue" ? [] : completedTasks),
+    [filterBy, completedTasks]
+  );
+
+  // ---------------------------------------------------------------------------
+  // Manual reordering — only under the Custom sort. Active and completed are
+  // dragged separately so the existing grouping holds, but both write into the
+  // container's single manual order.
+  // ---------------------------------------------------------------------------
+
+  const customSortActive = sortBy === "custom";
+
+  const visibleActiveIds = useMemo(
+    () => visibleActive.map((t) => t.id),
+    [visibleActive]
+  );
+  const visibleCompletedIds = useMemo(
+    () => visibleCompleted.map((t) => t.id),
+    [visibleCompleted]
+  );
+
+  const reorderTasks = useCallback(
+    async (visibleIds: string[], { draggedId, insertAt }: PointerReorderDrop) => {
+      const nextOrder = reorderWithinContainer(
+        containerOrderIds,
+        visibleIds,
+        draggedId,
+        insertAt
+      );
+      if (!nextOrder) return;
+
+      const updates = buildCustomPositionUpdates(
+        nextOrder,
+        new Map(scopedTasks.map((t) => [t.id, t.custom_position]))
+      );
+      if (updates.length === 0) return;
+
+      const previous = tasks;
+      const applied = new Map(updates.map((u) => [u.id, u.custom_position]));
+      setTasks((prev) =>
+        prev.map((t) =>
+          applied.has(t.id) ? { ...t, custom_position: applied.get(t.id)! } : t
+        )
+      );
+      try {
+        await persistCustomOrder(createClient(), updates);
+      } catch (err) {
+        setTasks(previous);
+        setError(err instanceof Error ? err.message : "Couldn't save the task order.");
+      }
+    },
+    [containerOrderIds, scopedTasks, tasks]
+  );
+
+  const handleActiveDrop = useCallback(
+    (drop: PointerReorderDrop) => reorderTasks(visibleActiveIds, drop),
+    [reorderTasks, visibleActiveIds]
+  );
+  const handleCompletedDrop = useCallback(
+    (drop: PointerReorderDrop) => reorderTasks(visibleCompletedIds, drop),
+    [reorderTasks, visibleCompletedIds]
+  );
+
+  const activeReorder = usePointerReorder(
+    visibleActiveIds,
+    handleActiveDrop,
+    customSortActive
+  );
+  const completedReorder = usePointerReorder(
+    visibleCompletedIds,
+    handleCompletedDrop,
+    customSortActive
+  );
 
   // ---------------------------------------------------------------------------
   // Mutations
@@ -762,7 +855,11 @@ export function TasksClient({
         // The DB's `on delete set null` already unassigned these tasks server-side;
         // mirror that locally so the UI doesn't need a refetch.
         setTasks((prev) =>
-          prev.map((t) => (t.list_id === listId ? { ...t, list_id: null, list: null } : t))
+          prev.map((t) =>
+            t.list_id === listId
+              ? { ...t, list_id: null, list: null, custom_position: null }
+              : t
+          )
         );
         if (scope.type === "list" && scope.id === listId) {
           selectScope({ type: "inbox" });
@@ -811,6 +908,8 @@ export function TasksClient({
                 list: nextList
                   ? { id: nextList.id, name: nextList.name, color: nextList.color, icon: nextList.icon }
                   : null,
+                // Lands at the bottom of the destination's manual order.
+                custom_position: null,
               }
             : t
         )
@@ -836,6 +935,7 @@ export function TasksClient({
     due_date: "Due date",
     created_at: "Newest first",
     created_oldest: "Oldest first",
+    custom: "Custom",
   };
 
   const FILTER_TABS: { key: FilterKey; label: string; count?: number }[] = [
@@ -1029,7 +1129,14 @@ export function TasksClient({
 
         {/* Active tasks */}
         {filterBy !== "completed" && (
-          <div className="space-y-2 mb-4">
+          <div
+            className={cn(
+              "space-y-2 mb-4",
+              // `!select-none` also overrides the card title's own `select-text`.
+              activeReorder.dragging &&
+                "select-none cursor-move [&_*]:!cursor-move [&_*]:!select-none"
+            )}
+          >
             {scopedTasks.length > 0 &&
               visibleActive.length === 0 &&
               filterBy === "active" && (
@@ -1069,39 +1176,10 @@ export function TasksClient({
               </div>
             )}
 
-            {visibleActive.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                onDelete={handleDelete}
-                onToggleComplete={handleToggleComplete}
-                onRenameTitle={async (taskId, title) => {
-                  const current = tasks.find((t) => t.id === taskId);
-                  await handleSaveTitleNotes(taskId, title, current?.notes ?? null);
-                }}
-                onSetPriority={handleSetPriority}
-                onSetDue={handleSetDue}
-                onSelect={openDetail}
-                selected={selectedTaskId === task.id}
-                lists={moveToListOptions}
-                onMoveToList={handleMoveTask}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Completed section */}
-        {filterBy !== "active" && filterBy !== "overdue" && visibleCompleted.length > 0 && (
-          <div>
-            {filterBy === "all" && (
-              <h3 className="text-sm font-medium text-[hsl(var(--muted-foreground))] mb-3">
-                Completed ({visibleCompleted.length})
-              </h3>
-            )}
-            <div className="space-y-2">
-              {visibleCompleted.map((task) => (
+            {visibleActive.map((task, index) => (
+              <div key={task.id}>
+                {activeReorder.showDropLineAt(index) && <ReorderDropLine />}
                 <TaskCard
-                  key={task.id}
                   task={task}
                   onDelete={handleDelete}
                   onToggleComplete={handleToggleComplete}
@@ -1115,8 +1193,55 @@ export function TasksClient({
                   selected={selectedTaskId === task.id}
                   lists={moveToListOptions}
                   onMoveToList={handleMoveTask}
+                  reorder={customSortActive ? activeReorder : undefined}
                 />
+              </div>
+            ))}
+
+            {activeReorder.showDropLineAt(visibleActive.length) && <ReorderDropLine />}
+          </div>
+        )}
+
+        {/* Completed section */}
+        {filterBy !== "active" && filterBy !== "overdue" && visibleCompleted.length > 0 && (
+          <div>
+            {filterBy === "all" && (
+              <h3 className="text-sm font-medium text-[hsl(var(--muted-foreground))] mb-3">
+                Completed ({visibleCompleted.length})
+              </h3>
+            )}
+            <div
+              className={cn(
+                "space-y-2",
+                completedReorder.dragging &&
+                  "select-none cursor-move [&_*]:!cursor-move [&_*]:!select-none"
+              )}
+            >
+              {visibleCompleted.map((task, index) => (
+                <div key={task.id}>
+                  {completedReorder.showDropLineAt(index) && <ReorderDropLine />}
+                  <TaskCard
+                    task={task}
+                    onDelete={handleDelete}
+                    onToggleComplete={handleToggleComplete}
+                    onRenameTitle={async (taskId, title) => {
+                      const current = tasks.find((t) => t.id === taskId);
+                      await handleSaveTitleNotes(taskId, title, current?.notes ?? null);
+                    }}
+                    onSetPriority={handleSetPriority}
+                    onSetDue={handleSetDue}
+                    onSelect={openDetail}
+                    selected={selectedTaskId === task.id}
+                    lists={moveToListOptions}
+                    onMoveToList={handleMoveTask}
+                    reorder={customSortActive ? completedReorder : undefined}
+                  />
+                </div>
               ))}
+
+              {completedReorder.showDropLineAt(visibleCompleted.length) && (
+                <ReorderDropLine />
+              )}
             </div>
           </div>
         )}

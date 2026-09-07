@@ -29,6 +29,9 @@ export interface Task {
   recurrence_id: string | null;
   /** Day-of-month (1-31) the series anchors to for monthly/yearly clamping; null when `repeat` is "never". */
   recurrence_anchor_day: number | null;
+  /** Manual slot inside this task's List (or Inbox); null until the user
+   *  reorders under the "Custom" sort, which reads null as "last, by age". */
+  custom_position: number | null;
   created_at: string;
   updated_at: string;
 }

@@ -89,6 +89,7 @@ Apply in order under `supabase/migrations/` (SQL editor or `supabase db push`). 
 | `0009_remove_tags.sql` | Removes Tags; recreates `search_planitary()` |
 | `0010_task_repeat.sql` | Task recurrence |
 | `0011_user_productive_days.sql` | Appearance unlock progress |
+| `0012_task_custom_order.sql` | Manual ("Custom") task order |
 
 ## SEO / site URL
 
@@ -297,7 +298,7 @@ Desktop (`lg+`): two columns — **Today's tasks** and **Today's events** stacke
 ### Related Tasks page changes (same branch)
 
 - Filter tabs: All / Active / Overdue / Completed (Overdue = active tasks with `due_date` before today).
-- Sort options include Newest first / Oldest first; choice is persisted per account in localStorage (`lib/tasks-sort-preference.ts`).
+- Sort options include Newest first / Oldest first / Custom; choice is persisted per account in localStorage (`lib/tasks-sort-preference.ts`). See [Custom task order](#custom-task-order) for the manual sort.
 - Completed list is always expanded (no fold control). Completed cards no longer show a Reopen button (checkbox still reopens).
 
 ### Known limitations
@@ -377,6 +378,7 @@ The Lists panel is a persistent ~240px column on desktop (`lg+`), and a left sli
 - [ ] Apply `supabase/migrations/0009_remove_tags.sql`. **This permanently deletes the `tags` and `task_tags` tables and all existing tag data/associations** — Tags were removed from V1; Tasks themselves (and their subtasks, priorities, due dates, and List assignments) are unaffected. Confirm `tags`/`task_tags` no longer appear under Database → Tables afterward.
 - [ ] Apply `supabase/migrations/0010_task_repeat.sql` (see [Task Repeat](#task-repeat)).
 - [ ] Apply `supabase/migrations/0011_user_productive_days.sql` (see [Appearance / themes](#appearance--themes)).
+- [ ] Apply `supabase/migrations/0012_task_custom_order.sql` (see [Custom task order](#custom-task-order)).
 - [ ] Confirm `task_lists` has RLS enabled with 4 policies (Database → Tables → task_lists → RLS).
 - [ ] Confirm the unique index `task_lists_user_id_name_lower_idx` exists (Database → Indexes).
 - [ ] As User A, create a List, then as User B confirm `select * from task_lists` (via the app, not the SQL editor's superuser context) never returns User A's List.
@@ -401,6 +403,49 @@ The Lists panel is a persistent ~240px column on desktop (`lg+`), and a left sli
 - [ ] Confirm the Dashboard's Today's tasks section is unaffected (still shows tasks due today regardless of List).
 - [ ] Mobile: open the Lists drawer from the Tasks header, select/create/rename/delete a List, and confirm no horizontal overflow.
 - [ ] Dark mode and light mode both render the Lists panel, color swatches, and context menus correctly.
+
+## Custom task order
+
+The Tasks sort selector adds **Custom** alongside Priority / Due date / Newest first / Oldest first. Under Custom, task cards become draggable and the manual order is stored server-side. Every other sort behaves exactly as before, and dragging is inert unless Custom is selected.
+
+### Database
+
+- **Migration:** `supabase/migrations/0012_task_custom_order.sql` (additive; do not modify earlier migrations).
+- **Schema:** `public.tasks` gains a nullable `custom_position integer`, plus a partial index `tasks_user_id_list_id_custom_position_idx on (user_id, list_id, custom_position) where custom_position is not null`.
+- **RLS is unchanged** — the existing `tasks: select own` / `tasks: update own` policies already scope the new column.
+
+### Ordering model
+
+A task belongs to exactly one container — a List, or Inbox when `list_id` is null — so one position per task describes the manual order everywhere that task can appear. Ordering is resolved with `(custom_position, created_at, id)` in `lib/tasks-custom-order.ts`, which is total and never depends on physical row order.
+
+`custom_position` is null by default and **is never backfilled**. Unpositioned tasks sort after every positioned task, in creation order, which gives three behaviours for free:
+
+- a container nobody has reordered reads oldest-first, identical to the **Oldest first** sort;
+- a newly created task (quick add, task form, Dashboard, Calendar, or a recurring next occurrence) lands at the bottom of its container, whatever sort is on screen;
+- a task moved to another List — or back to Inbox, including via List deletion — has its position cleared and lands at the bottom of its destination.
+
+A drop writes contiguous `0..n-1` positions for the affected container, but only for the rows whose value actually changes, so a short drag rewrites a handful of rows rather than the whole container. Deleting a task leaves a gap, which costs nothing; the next drag renumbers around it.
+
+The status tabs render a subset of the container, so a drop inside a filtered tab is mapped back onto the container's full order before positions are written — tasks hidden by the current tab keep their relative places. Active and completed are dragged separately, preserving the existing grouping.
+
+### Drag interaction
+
+Reuses the Lists reorder implementation rather than a drag-and-drop library: `hooks/usePointerReorder.ts` (extracted from `ListsPanel`, now shared by both) and `components/ui/ReorderDropLine.tsx` for the insertion line, so the indicator, the forced `move` cursor, the 5px threshold, and the dragged-row opacity are identical in both places. The whole card is the handle; sub-controls opt out with `data-no-drag` (completion circle, actions menu, inline title input).
+
+### Manual Supabase steps
+
+- [ ] Apply `supabase/migrations/0012_task_custom_order.sql` (SQL editor or `supabase db push`).
+- [ ] Confirm `tasks` has a nullable `custom_position` column and the partial index exists (Database → Indexes).
+
+### Manual testing checklist
+
+- [ ] Select **Custom**; existing tasks match **Oldest first** before any manual move.
+- [ ] Drag a task from the middle to the top, and from the top to the bottom; the insertion line matches the Lists indicator and the cursor matches Lists dragging.
+- [ ] Dragging works from the task text and from empty space on the row; clicking the completion circle completes the task and never starts a drag.
+- [ ] Add a task and confirm it appears at the bottom; refresh and confirm the order holds.
+- [ ] Switch to **Newest first** and back to **Custom**; the manual order returns and rows aren't draggable under the other sort.
+- [ ] Switch Lists and confirm each List keeps its own order; move a task between Lists and confirm it lands at the bottom of the destination.
+- [ ] Resize to laptop and mobile widths; confirm no regressions and no horizontal overflow.
 
 ## Task Repeat
 
