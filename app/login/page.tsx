@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { CelestialDecor } from "@/components/marketing/CelestialDecor";
 import { Logo } from "@/components/ui/Logo";
 import { LoginForm } from "./LoginForm";
 
@@ -11,8 +12,10 @@ export const metadata: Metadata = {
 
 export default function LoginPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center px-4 bg-[hsl(var(--background))]">
-      <div className="w-full max-w-sm">
+    <div className="marketing-space-page relative isolate flex min-h-screen items-center justify-center overflow-hidden px-4">
+      <CelestialDecor />
+
+      <div className="relative z-10 w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <Logo size={72} className="mb-4" priority />
