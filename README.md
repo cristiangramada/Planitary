@@ -89,6 +89,7 @@ Apply in order under `supabase/migrations/` (SQL editor or `supabase db push`). 
 | `0009_remove_tags.sql` | Removes Tags; recreates `search_planitary()` |
 | `0010_task_repeat.sql` | Task recurrence |
 | `0011_user_productive_days.sql` | Appearance unlock progress |
+| `0012_task_custom_order.sql` | Manual ("Custom") task order |
 
 ## SEO / site URL
 
@@ -297,7 +298,7 @@ Desktop (`lg+`): two columns — **Today's tasks** and **Today's events** stacke
 ### Related Tasks page changes (same branch)
 
 - Filter tabs: All / Active / Overdue / Completed (Overdue = active tasks with `due_date` before today).
-- Sort options include Newest first / Oldest first; choice is persisted per account in localStorage (`lib/tasks-sort-preference.ts`).
+- Sort options include Newest first / Oldest first / Custom; choice is persisted per account in localStorage (`lib/tasks-sort-preference.ts`). See [Custom task order](#custom-task-order) for the manual sort.
 - Completed list is always expanded (no fold control). Completed cards no longer show a Reopen button (checkbox still reopens).
 
 ### Known limitations
@@ -377,6 +378,7 @@ The Lists panel is a persistent ~240px column on desktop (`lg+`), and a left sli
 - [ ] Apply `supabase/migrations/0009_remove_tags.sql`. **This permanently deletes the `tags` and `task_tags` tables and all existing tag data/associations** — Tags were removed from V1; Tasks themselves (and their subtasks, priorities, due dates, and List assignments) are unaffected. Confirm `tags`/`task_tags` no longer appear under Database → Tables afterward.
 - [ ] Apply `supabase/migrations/0010_task_repeat.sql` (see [Task Repeat](#task-repeat)).
 - [ ] Apply `supabase/migrations/0011_user_productive_days.sql` (see [Appearance / themes](#appearance--themes)).
+- [ ] Apply `supabase/migrations/0012_task_custom_order.sql` (see [Custom task order](#custom-task-order)).
 - [ ] Confirm `task_lists` has RLS enabled with 4 policies (Database → Tables → task_lists → RLS).
 - [ ] Confirm the unique index `task_lists_user_id_name_lower_idx` exists (Database → Indexes).
 - [ ] As User A, create a List, then as User B confirm `select * from task_lists` (via the app, not the SQL editor's superuser context) never returns User A's List.
@@ -401,6 +403,79 @@ The Lists panel is a persistent ~240px column on desktop (`lg+`), and a left sli
 - [ ] Confirm the Dashboard's Today's tasks section is unaffected (still shows tasks due today regardless of List).
 - [ ] Mobile: open the Lists drawer from the Tasks header, select/create/rename/delete a List, and confirm no horizontal overflow.
 - [ ] Dark mode and light mode both render the Lists panel, color swatches, and context menus correctly.
+
+## Custom task order
+
+The Tasks sort selector adds **Custom** alongside Priority / Due date / Newest first / Oldest first. Under Custom, task cards become draggable and the manual order is stored server-side. Every other sort behaves exactly as before, and dragging is inert unless Custom is selected.
+
+### Database
+
+- **Migration:** `supabase/migrations/0012_task_custom_order.sql` (additive; do not modify earlier migrations).
+- **Schema:** `public.tasks` gains a nullable `custom_position integer`. No index — the Tasks page loads a user's tasks in one query and orders them in the client, so an ordering index would cost write amplification on every task insert and update for no read benefit.
+- **`set_task_custom_positions(p_task_ids uuid[], p_positions integer[], p_list_id uuid)`** applies a whole reorder in one `update ... from unnest(...)`, so a mid-batch failure can't leave a container with half-applied positions. Arguments are validated before anything is written — matching lengths, no nulls, no duplicate ids (which would make the update's winning row unspecified), no negative positions. The app can't produce a bad plan, but the function is granted to `authenticated`. `p_list_id` names the container the plan was computed for (null for Inbox) and rows that have since left it are skipped — see [Write ordering and recovery](#write-ordering-and-recovery).
+- **`delete_task_list_with_order(p_list_id uuid, p_task_ids uuid[], p_positions integer[])`** deletes a List and re-orders the tasks it leaves behind in Inbox as one transaction — see [Ordering model](#ordering-model-1). It locks the List row (`for update`) and confirms it belongs to the caller *before* writing anything, so a stale id can't report success having only applied the ordering plan. The lock is what makes that hold against a concurrent caller: a bare existence check would still pass for both sessions deleting the same List, leaving the loser to reorder tasks and delete nothing. Positions are applied *after* the delete, once the cascade has dropped the List's tasks into Inbox, so the write can be scoped to Inbox.
+- Both are `security invoker`, so the caller's RLS stays in force, and both carry an explicit `auth.uid()` predicate so a caller can't reach another user's rows even if the tasks policies are ever loosened.
+- **RLS is otherwise unchanged** — the existing `tasks: select own` / `tasks: update own` policies already scope the new column.
+
+### Ordering model
+
+A task belongs to exactly one container — a List, or Inbox when `list_id` is null — so one position per task describes the manual order everywhere that task can appear. Ordering is resolved with `(custom_position, created_at, id)` in `lib/tasks-custom-order.ts`, which is total and never depends on physical row order.
+
+`custom_position` is null by default and **is not backfilled on migration**. Unpositioned tasks sort after every positioned task, in creation order, which gives two behaviours for free:
+
+- a container nobody has reordered reads oldest-first, identical to the **Oldest first** sort;
+- a newly created task (quick add, task form, Dashboard, Calendar, or a recurring next occurrence) lands at the bottom of its container, whatever sort is on screen.
+
+**Arrivals are the exception.** "Unpositioned sorts last" only places new tasks correctly, because a new task is always the newest row. A task moved in from another List keeps its original `created_at`, so clearing its position would drop it into the *middle* of a destination whose tasks are still ordered by age — which is every container nobody has reordered yet. Moves therefore assign a real position at the end and materialise the destination's nulls in the same pass (`buildAppendToContainerUpdates`), writing `list_id` and `custom_position` together. Deleting a List does the same for the tasks it leaves behind in Inbox, keeping their relative order from the deleted List, in one transaction with the delete (`delete_task_list_with_order`) — split across two round trips, a delete that commits before the ordering write fails leaves Inbox holding two independently numbered groups that interleave, and a reload can't repair it because that *is* the stored state.
+
+A drop writes contiguous `0..n-1` positions for the affected container, but only for the rows whose value actually changes, so a short drag rewrites a handful of rows rather than the whole container. Deleting a task leaves a gap, which costs nothing; the next drag renumbers around it.
+
+### Write ordering and recovery
+
+Order writes are serialized per container by `lib/tasks-order-queue.ts`, and a failure is recovered by re-reading the container rather than by rolling back in place. Both matter because positions are written as a diff:
+
+- a second drop's plan is computed from the optimistic state the first produced, so the writes only compose if they land in the order they were issued;
+- a later drop omits rows that already hold their target value locally, so if an earlier write failed those rows were never persisted by *either* write — no local rollback can repair that, and the later write succeeding means no error is even surfaced.
+
+So a failure anywhere in a burst is remembered, and once the container's queue drains the client re-reads that container's stored order and applies it (`fetchContainerOrder`). Reconciling after the burst rather than inside the failing write is also what stops a stale rollback from clobbering a newer drop.
+
+A write that spans containers names all of them, and waits on all of their chains at once rather than acquiring them one at a time, so two writes with overlapping — but not identical — containers can't each hold half of what the other needs.
+
+**Moving a task** queues its destination backfill *and* the task's own `list_id`/position update as one unit, under both the source and the destination. The destination key keeps a drag there from slipping between the two writes; the source key is what serializes repeated moves of one task, since a second move's source is always the first move's destination. Whichever positions actually landed are settled by reconciliation — including keeping a backfill that succeeded, since that only made explicit the order those tasks already had. Reconciliation reads containers, not membership, so it can't tell whether a move that errored on the way back had already committed; the error handler re-reads that one task's `list_id` and falls back to the local revert only if that read fails too.
+
+**Every order write names the container its plan was computed for**, and the RPC skips rows that have since left it. Positions are otherwise container-agnostic, so without that check a plan could write a task a position belonging to a container it is no longer in — and re-reading a container can never correct a row that isn't in it, so the wrong value would stick. Two cases need it: a drag in a destination the user was optimistically shown, where the move then fails and the task snaps back to its source; and a List deletion whose plan was read before the List was locked, where another session moved a task out in between. Rows are dropped quietly rather than raising, because a stale plan is something the app legitimately produces from a view another session has moved on from.
+
+**Deleting a List** is queued under Inbox and the List, and — unlike a drag — builds its append plan *inside* the write, from stored order. Deleting a second List while the first is in flight would otherwise compute both plans from the same Inbox and number two sets of orphans onto the same slots; the local state a drag reads back is not available synchronously to a queued write, so the plan is read from the database at the point it is needed.
+
+The status tabs render a subset of the container, so a drop inside a filtered tab is mapped back onto the container's full order before positions are written — tasks hidden by the current tab keep their relative places. Active and completed are dragged separately, preserving the existing grouping.
+
+### Drag interaction
+
+Reuses the Lists reorder implementation rather than a drag-and-drop library: `hooks/usePointerReorder.ts` (extracted from `ListsPanel`, now shared by both) and `components/ui/ReorderDropLine.tsx` for the insertion line, so the indicator, the forced `move` cursor, the 5px threshold, and the dragged-row opacity are identical in both places. The whole card is the handle; sub-controls opt out with `data-no-drag` (completion circle, actions menu, inline title input).
+
+### Manual Supabase steps
+
+- [ ] Apply `supabase/migrations/0012_task_custom_order.sql` (SQL editor or `supabase db push`).
+- [ ] Confirm `tasks` has a nullable `custom_position` column, and that `set_task_custom_positions` and `delete_task_list_with_order` exist under Database → Functions with execute granted to `authenticated` only.
+- [ ] As User A, call `set_task_custom_positions` with a User B task id and confirm the row is untouched (the `auth.uid()` predicate skips it rather than raising).
+- [ ] Call `set_task_custom_positions` with mismatched array lengths, a duplicate id, and a negative position; confirm each raises and writes nothing.
+- [ ] Call `set_task_custom_positions` with a task id and a `p_list_id` that isn't its container; confirm the row is untouched and the call still succeeds.
+- [ ] Force `delete_task_list_with_order` to fail its ordering step (e.g. pass a negative position) and confirm the List still exists afterwards.
+- [ ] Call `delete_task_list_with_order` with a random uuid and confirm it raises `List ... not found` and leaves the supplied task positions unchanged.
+
+### Manual testing checklist
+
+- [ ] Select **Custom**; existing tasks match **Oldest first** before any manual move.
+- [ ] Drag a task from the middle to the top, and from the top to the bottom; the insertion line matches the Lists indicator and the cursor matches Lists dragging.
+- [ ] Dragging works from the task text and from empty space on the row; clicking the completion circle completes the task and never starts a drag.
+- [ ] Add a task and confirm it appears at the bottom; refresh and confirm the order holds.
+- [ ] Switch to **Newest first** and back to **Custom**; the manual order returns and rows aren't draggable under the other sort.
+- [ ] Switch Lists and confirm each List keeps its own order.
+- [ ] Move an **old** task into a List you have never reordered, and confirm it lands at the bottom rather than sorting in by age; repeat back to Inbox.
+- [ ] Delete a List holding tasks older than your Inbox tasks; confirm they land at the bottom of Inbox in the order they had in the deleted List.
+- [ ] Delete two populated Lists in quick succession; confirm Inbox ends up with both sets appended in turn, with no interleaving, after a refresh.
+- [ ] Move one task to a List and immediately to another; confirm a refresh agrees with where the screen said it landed.
+- [ ] Resize to laptop and mobile widths; confirm no regressions and no horizontal overflow.
 
 ## Task Repeat
 

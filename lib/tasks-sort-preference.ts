@@ -9,6 +9,7 @@ export const TASKS_SORT_KEYS = [
   "due_date",
   "created_at",
   "created_oldest",
+  "custom",
 ] as const;
 
 export type TasksSortKey = (typeof TASKS_SORT_KEYS)[number];

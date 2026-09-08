@@ -1,16 +1,19 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Inbox as InboxIcon, X, Menu, MoreHorizontal } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { ListContextMenu } from "./ListContextMenu";
+import { ReorderDropLine } from "@/components/ui/ReorderDropLine";
+import { usePointerReorder } from "@/hooks/usePointerReorder";
 import { INBOX_COUNT_KEY, type ListTaskCounts } from "@/lib/task-lists";
 import type { TaskList } from "@/types";
 import type { TasksScope } from "@/lib/tasks-url-state";
@@ -32,28 +35,7 @@ function scopeKey(scope: TasksScope): string {
   return scope.type === "list" ? `list:${scope.id}` : scope.type;
 }
 
-/** Moves `fromId` so it lands at insertion index `insertAt` (0..n) in the
- *  original array, then returns the new id order. */
-function reorderIds(ids: string[], fromId: string, insertAt: number): string[] | null {
-  const from = ids.indexOf(fromId);
-  if (from < 0) return null;
-  const next = [...ids];
-  next.splice(from, 1);
-  const adjusted = insertAt > from ? insertAt - 1 : insertAt;
-  if (adjusted === from) return null;
-  next.splice(adjusted, 0, fromId);
-  return next;
-}
-
 const ADD_POPOVER_WIDTH = 220;
-const DRAG_THRESHOLD_PX = 5;
-
-interface PendingDrag {
-  listId: string;
-  pointerId: number;
-  startY: number;
-  active: boolean;
-}
 
 export function ListsPanel({
   scope,
@@ -82,23 +64,15 @@ export function ListsPanel({
   const addFormRef = useRef<HTMLDivElement>(null);
   const addButtonRef = useRef<HTMLButtonElement>(null);
 
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  /** Insertion index among current lists (0 = before first, n = after last). */
-  const [dropIndex, setDropIndex] = useState<number | null>(null);
-
-  const pendingDragRef = useRef<PendingDrag | null>(null);
-  const didDragRef = useRef(false);
-  const rowElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
-  const listsRef = useRef(lists);
-  const dropIndexRef = useRef(dropIndex);
-
-  useEffect(() => {
-    listsRef.current = lists;
-  }, [lists]);
-
-  useEffect(() => {
-    dropIndexRef.current = dropIndex;
-  }, [dropIndex]);
+  const listIds = useMemo(() => lists.map((l) => l.id), [lists]);
+  const handleListDrop = useCallback(
+    async ({ orderedIds }: { orderedIds: string[] }) => {
+      await onReorderLists(orderedIds);
+    },
+    [onReorderLists]
+  );
+  // Pointer-based drag (avoids HTML5 DnD ghost + not-allowed cursor glitches).
+  const reorder = usePointerReorder(listIds, handleListDrop);
 
   useEffect(() => {
     if (renamingId) renameInputRef.current?.focus();
@@ -127,93 +101,6 @@ export function ListsPanel({
       window.removeEventListener("keydown", onKey);
     };
   }, [addOpen]);
-
-  // Pointer-based drag (avoids HTML5 DnD ghost + not-allowed cursor glitches).
-  useEffect(() => {
-    function dropIndexFromY(clientY: number): number {
-      const current = listsRef.current;
-      for (let i = 0; i < current.length; i++) {
-        const el = rowElsRef.current.get(current[i].id);
-        if (!el) continue;
-        const rect = el.getBoundingClientRect();
-        if (clientY < rect.top + rect.height / 2) return i;
-      }
-      return current.length;
-    }
-
-    function onPointerMove(e: PointerEvent) {
-      const pending = pendingDragRef.current;
-      if (!pending || e.pointerId !== pending.pointerId) return;
-
-      if (!pending.active) {
-        if (Math.abs(e.clientY - pending.startY) < DRAG_THRESHOLD_PX) return;
-        pending.active = true;
-        didDragRef.current = true;
-        setDraggingId(pending.listId);
-        document.documentElement.style.setProperty("cursor", "move", "important");
-        document.body.style.setProperty("cursor", "move", "important");
-      }
-
-      e.preventDefault();
-      setDropIndex(dropIndexFromY(e.clientY));
-    }
-
-    async function finishDrag(e: PointerEvent) {
-      const pending = pendingDragRef.current;
-      if (!pending || e.pointerId !== pending.pointerId) return;
-
-      const wasActive = pending.active;
-      const listId = pending.listId;
-      const insertAt = dropIndexRef.current;
-      pendingDragRef.current = null;
-      document.documentElement.style.removeProperty("cursor");
-      document.body.style.removeProperty("cursor");
-
-      setDraggingId(null);
-      setDropIndex(null);
-
-      if (!wasActive || insertAt === null) {
-        window.setTimeout(() => {
-          didDragRef.current = false;
-        }, 0);
-        return;
-      }
-
-      const ordered = reorderIds(
-        listsRef.current.map((l) => l.id),
-        listId,
-        insertAt
-      );
-      window.setTimeout(() => {
-        didDragRef.current = false;
-      }, 0);
-      if (!ordered) return;
-      try {
-        await onReorderLists(ordered);
-      } catch {
-        // Parent surfaces errors; local order reverts via its handler.
-      }
-    }
-
-    function onPointerUp(e: PointerEvent) {
-      void finishDrag(e);
-    }
-
-    function onPointerCancel(e: PointerEvent) {
-      void finishDrag(e);
-    }
-
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-    window.addEventListener("pointercancel", onPointerCancel);
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointercancel", onPointerCancel);
-      document.documentElement.style.removeProperty("cursor");
-      document.body.style.removeProperty("cursor");
-    };
-  }, [onReorderLists]);
 
   function openAddPopover(e: ReactMouseEvent<HTMLButtonElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -264,35 +151,7 @@ export function ListsPanel({
     }
   }
 
-  function handleRowPointerDown(e: ReactPointerEvent, listId: string) {
-    if (e.button !== 0) return;
-    if ((e.target as HTMLElement).closest("[data-no-drag]")) return;
-    didDragRef.current = false;
-    pendingDragRef.current = {
-      listId,
-      pointerId: e.pointerId,
-      startY: e.clientY,
-      active: false,
-    };
-  }
-
   const activeScopeKey = scopeKey(scope);
-  const draggingFromIndex = draggingId
-    ? lists.findIndex((l) => l.id === draggingId)
-    : -1;
-
-  /** Hide the indicator when it would mean "leave this list where it already is". */
-  function showDropLineAt(at: number): boolean {
-    if (dropIndex !== at || draggingFromIndex < 0) return false;
-    return at !== draggingFromIndex && at !== draggingFromIndex + 1;
-  }
-
-  const dropLine = (
-    <div
-      className="mx-2 h-0.5 rounded-full bg-[hsl(var(--primary))] shrink-0"
-      aria-hidden
-    />
-  );
 
   const addPopover =
     addOpen &&
@@ -431,7 +290,7 @@ export function ListsPanel({
           <div
             className={cn(
               "space-y-0.5",
-              draggingId && "select-none cursor-move [&_*]:!cursor-move"
+              reorder.dragging && "select-none cursor-move [&_*]:!cursor-move"
             )}
           >
             {lists.length === 0 && !addOpen && (
@@ -444,7 +303,7 @@ export function ListsPanel({
               const isActive = activeScopeKey === `list:${list.id}`;
               const count = counts[list.id] ?? 0;
               const isRenaming = renamingId === list.id;
-              const isDragging = draggingId === list.id;
+              const isDragging = reorder.draggingId === list.id;
 
               if (isRenaming) {
                 return (
@@ -478,15 +337,12 @@ export function ListsPanel({
 
               return (
                 <div key={list.id}>
-                  {showDropLineAt(index) && dropLine}
+                  {reorder.showDropLineAt(index) && <ReorderDropLine />}
                   <div
-                    ref={(el) => {
-                      if (el) rowElsRef.current.set(list.id, el);
-                      else rowElsRef.current.delete(list.id);
-                    }}
-                    onPointerDown={(e) => handleRowPointerDown(e, list.id)}
+                    ref={(el) => reorder.registerRow(list.id, el)}
+                    onPointerDown={(e) => reorder.handlePointerDown(e, list.id)}
                     onClick={() => {
-                      if (didDragRef.current) return;
+                      if (reorder.wasDragged()) return;
                       onSelectScope({ type: "list", id: list.id });
                     }}
                     onContextMenu={(e) => {
@@ -495,7 +351,7 @@ export function ListsPanel({
                     }}
                     className={cn(
                       "group flex items-center rounded-lg transition-colors text-[hsl(var(--foreground))]",
-                      draggingId ? "cursor-move" : "cursor-default",
+                      reorder.dragging ? "cursor-move" : "cursor-default",
                       isActive
                         ? "bg-[hsl(var(--muted))]"
                         : "hover:bg-[hsl(var(--muted)/0.6)]",
@@ -552,7 +408,7 @@ export function ListsPanel({
               );
             })}
 
-            {showDropLineAt(lists.length) && dropLine}
+            {reorder.showDropLineAt(lists.length) && <ReorderDropLine />}
           </div>
         </div>
       </div>

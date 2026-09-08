@@ -18,6 +18,7 @@ function task(overrides: Partial<TaskWithDetails>): TaskWithDetails {
     repeat: "never",
     recurrence_id: null,
     recurrence_anchor_day: null,
+    custom_position: null,
     created_at: "2026-01-01T00:00:00.000Z",
     updated_at: "2026-01-01T00:00:00.000Z",
     subtasks: [],

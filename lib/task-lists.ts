@@ -229,12 +229,10 @@ export async function updateTaskListColor(
   return data as TaskList;
 }
 
-/** Deletes a List. Its Tasks are preserved and moved to Inbox automatically
- *  via the `tasks.list_id` foreign key's `on delete set null`. */
-export async function deleteTaskList(supabase: SupabaseClient, listId: string): Promise<void> {
-  const { error } = await supabase.from("task_lists").delete().eq("id", listId);
-  if (error) throw new Error("Couldn't delete the list.");
-}
+// Deleting a List lives in lib/tasks-custom-order.ts (`deleteTaskListWithOrder`):
+// the `tasks.list_id` foreign key's `on delete set null` drops its Tasks into
+// Inbox, so the delete has to share a transaction with the re-ordering of
+// those Tasks.
 
 /** Persists a new List order by writing contiguous `position` values (0..n-1). */
 export async function reorderTaskLists(
@@ -256,12 +254,22 @@ export async function reorderTaskLists(
 
 /** Moves a task to a List (or to Inbox, when `listId` is null). Ownership of
  *  the target List is enforced by RLS plus a database trigger — an attempt
- *  to move a task to a List the user doesn't own is rejected server-side. */
+ *  to move a task to a List the user doesn't own is rejected server-side.
+ *
+ *  `customPosition` is the task's slot at the bottom of the destination's
+ *  manual order, written in the same update so the task is never briefly
+ *  visible in its new container at a position that meant something in the
+ *  old one. Clearing the position instead would not work: the task keeps its
+ *  original created_at, which is what orders unpositioned tasks. */
 export async function moveTaskToList(
   supabase: SupabaseClient,
   taskId: string,
-  listId: string | null
+  listId: string | null,
+  customPosition: number
 ): Promise<void> {
-  const { error } = await supabase.from("tasks").update({ list_id: listId }).eq("id", taskId);
+  const { error } = await supabase
+    .from("tasks")
+    .update({ list_id: listId, custom_position: customPosition })
+    .eq("id", taskId);
   if (error) throw new Error("Couldn't move the task.");
 }
