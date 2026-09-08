@@ -41,17 +41,22 @@ import type { TaskFormData, SubtaskFormItem } from "@/lib/tasks";
 import {
   createTaskList,
   renameTaskList,
-  deleteTaskList,
   moveTaskToList,
   reorderTaskLists,
   computeListTaskCounts,
 } from "@/lib/task-lists";
 import {
+  buildAppendToContainerUpdates,
   buildCustomPositionUpdates,
+  deleteTaskListWithOrder,
+  fetchContainerOrder,
+  fetchTaskPlacement,
   persistCustomOrder,
   reorderWithinContainer,
   sortByCustomOrder,
 } from "@/lib/tasks-custom-order";
+import type { TaskPlacement } from "@/lib/tasks-custom-order";
+import { createOrderWriteQueue } from "@/lib/tasks-order-queue";
 import type { MoveToListOption } from "@/app/calendar/AgendaItemContextMenu";
 import {
   parseTasksScope,
@@ -87,6 +92,12 @@ import { ColumnResizeHandle } from "./ColumnResizeHandle";
 
 type SortKey = TasksSortKey;
 type FilterKey = "all" | "active" | "overdue" | "completed";
+
+/** Queue key for a task's container. List ids are uuids, so they can't
+ *  collide with the Inbox sentinel. */
+function containerKeyFor(listId: string | null): string {
+  return listId ?? "inbox";
+}
 
 const PRIORITY_ORDER = TASK_PRIORITY_ORDER;
 
@@ -502,8 +513,26 @@ export function TasksClient({
     [visibleCompleted]
   );
 
+  /** Applies a container's stored order to local state. The queue calls this
+   *  once a burst of writes drains, if any of them failed. */
+  const reconcileContainerOrder = useCallback(async (containerKey: string) => {
+    const listId = containerKey === containerKeyFor(null) ? null : containerKey;
+    const rows = await fetchContainerOrder(createClient(), listId);
+    const positions = new Map(rows.map((row) => [row.id, row.custom_position]));
+    setTasks((prev) =>
+      prev.map((t) =>
+        positions.has(t.id) ? { ...t, custom_position: positions.get(t.id) ?? null } : t
+      )
+    );
+  }, []);
+
+  const orderQueue = useMemo(
+    () => createOrderWriteQueue(reconcileContainerOrder),
+    [reconcileContainerOrder]
+  );
+
   const reorderTasks = useCallback(
-    async (visibleIds: string[], { draggedId, insertAt }: PointerReorderDrop) => {
+    (visibleIds: string[], { draggedId, insertAt }: PointerReorderDrop) => {
       const nextOrder = reorderWithinContainer(
         containerOrderIds,
         visibleIds,
@@ -518,21 +547,25 @@ export function TasksClient({
       );
       if (updates.length === 0) return;
 
-      const previous = tasks;
       const applied = new Map(updates.map((u) => [u.id, u.custom_position]));
       setTasks((prev) =>
         prev.map((t) =>
           applied.has(t.id) ? { ...t, custom_position: applied.get(t.id)! } : t
         )
       );
-      try {
-        await persistCustomOrder(createClient(), updates);
-      } catch (err) {
-        setTasks(previous);
-        setError(err instanceof Error ? err.message : "Couldn't save the task order.");
-      }
+
+      // No local rollback here: a failure reconciles the whole container
+      // against stored order once the queue drains, which is both more
+      // accurate than replaying a captured snapshot and safe against a
+      // newer drop having already landed.
+      const containerId = scope.type === "list" ? scope.id : null;
+      return orderQueue.enqueue(
+        containerKeyFor(containerId),
+        () => persistCustomOrder(createClient(), updates, containerId),
+        () => setError("Couldn't save the task order.")
+      );
     },
-    [containerOrderIds, scopedTasks, tasks]
+    [containerOrderIds, scopedTasks, scope, orderQueue]
   );
 
   const handleActiveDrop = useCallback(
@@ -848,27 +881,53 @@ export function TasksClient({
 
   const handleDeleteList = useCallback(
     async (listId: string) => {
-      try {
-        const supabase = createClient();
-        await deleteTaskList(supabase, listId);
-        setLists((prev) => prev.filter((l) => l.id !== listId));
-        // The DB's `on delete set null` already unassigned these tasks server-side;
-        // mirror that locally so the UI doesn't need a refetch.
-        setTasks((prev) =>
-          prev.map((t) =>
-            t.list_id === listId
-              ? { ...t, list_id: null, list: null, custom_position: null }
-              : t
-          )
-        );
-        if (scope.type === "list" && scope.id === listId) {
-          selectScope({ type: "inbox" });
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Couldn't delete the list.");
+      let deleted = false;
+
+      // Queued against both containers it touches, and — unlike a drag — the
+      // plan is built inside the write rather than out here. Deleting a
+      // second List while the first is still in flight would otherwise
+      // compute both append plans from the same Inbox, numbering two sets of
+      // orphans onto the same slots; reading stored order at write time means
+      // the second plan sees the first one's tasks already in Inbox.
+      await orderQueue.enqueue(
+        [containerKeyFor(null), containerKeyFor(listId)],
+        async () => {
+          const supabase = createClient();
+          // The DB's `on delete set null` moves these tasks to Inbox, where
+          // their old List positions would collide with Inbox's own — so they
+          // are appended to the bottom of Inbox in the same transaction as
+          // the delete. Nothing is applied locally until that transaction
+          // lands, which is why this path isn't optimistic.
+          const [inbox, orphans] = await Promise.all([
+            fetchContainerOrder(supabase, null),
+            fetchContainerOrder(supabase, listId),
+          ]);
+          const updates = buildAppendToContainerUpdates(inbox, orphans);
+          await deleteTaskListWithOrder(supabase, listId, updates);
+
+          const applied = new Map(updates.map((u) => [u.id, u.custom_position]));
+          setLists((prev) => prev.filter((l) => l.id !== listId));
+          setTasks((prev) =>
+            prev.map((t) => {
+              const custom_position = applied.has(t.id)
+                ? applied.get(t.id)!
+                : t.custom_position;
+              if (t.list_id === listId) {
+                return { ...t, list_id: null, list: null, custom_position };
+              }
+              return applied.has(t.id) ? { ...t, custom_position } : t;
+            })
+          );
+          deleted = true;
+        },
+        (err) => setError(err instanceof Error ? err.message : "Couldn't delete the list.")
+      );
+
+      if (deleted && scope.type === "list" && scope.id === listId) {
+        selectScope({ type: "inbox" });
       }
     },
-    [scope, selectScope]
+    [orderQueue, scope, selectScope]
   );
 
   const handleReorderLists = useCallback(
@@ -897,33 +956,93 @@ export function TasksClient({
     async (taskId: string, listId: string | null) => {
       const previous = tasks.find((t) => t.id === taskId);
       if (!previous) return;
+      if (previous.list_id === listId) return;
       const nextList = listId ? lists.find((l) => l.id === listId) ?? null : null;
+
+      // The task lands at the bottom of its destination's manual order, which
+      // means materialising any unpositioned tasks already sitting there.
+      const destinationTasks = tasks.filter(
+        (t) => t.id !== taskId && t.list_id === listId
+      );
+      const movedPosition = destinationTasks.length;
+      const backfill = buildAppendToContainerUpdates(destinationTasks, [previous]).filter(
+        (u) => u.id !== taskId
+      );
+      const applied = new Map(backfill.map((u) => [u.id, u.custom_position]));
+
       // Optimistic update
       setTasks((prev) =>
-        prev.map((t) =>
-          t.id === taskId
-            ? {
-                ...t,
-                list_id: listId,
-                list: nextList
-                  ? { id: nextList.id, name: nextList.name, color: nextList.color, icon: nextList.icon }
-                  : null,
-                // Lands at the bottom of the destination's manual order.
-                custom_position: null,
-              }
-            : t
-        )
+        prev.map((t) => {
+          if (t.id === taskId) {
+            return {
+              ...t,
+              list_id: listId,
+              list: nextList
+                ? { id: nextList.id, name: nextList.name, color: nextList.color, icon: nextList.icon }
+                : null,
+              custom_position: movedPosition,
+            };
+          }
+          return applied.has(t.id) ? { ...t, custom_position: applied.get(t.id)! } : t;
+        })
       );
-      try {
-        const supabase = createClient();
-        await moveTaskToList(supabase, taskId, listId);
-      } catch (err) {
-        // Revert
-        setTasks((prev) => prev.map((t) => (t.id === taskId ? previous : t)));
-        setError(err instanceof Error ? err.message : "Couldn't move the task.");
-      }
+      // Both writes are queued together, under both containers: under the
+      // destination so a drag there can't slip between the backfill and the
+      // task's final position, and under the source so a second move of this
+      // same task — whose source is this move's destination — chains behind
+      // it instead of racing it to a different answer.
+      await orderQueue.enqueue(
+        [containerKeyFor(previous.list_id), containerKeyFor(listId)],
+        async () => {
+          const supabase = createClient();
+          // The backfill only ever names the destination's existing tasks —
+          // the moved task is filtered out of it, and only joins the
+          // destination on the next line.
+          await persistCustomOrder(supabase, backfill, listId);
+          await moveTaskToList(supabase, taskId, listId, movedPosition);
+        },
+        async () => {
+          setError("Couldn't move the task.");
+
+          // Reconciliation covers the destination's positions — including
+          // keeping a backfill that did land, since it only made the order
+          // those tasks already had explicit — but it reads containers, not
+          // membership, so it can't tell whether the move itself committed
+          // before the error. Ask the row directly, and only assume it didn't
+          // if that read fails too.
+          let fetched: TaskPlacement | null;
+          try {
+            fetched = await fetchTaskPlacement(createClient(), taskId);
+          } catch {
+            fetched = {
+              list_id: previous.list_id,
+              custom_position: previous.custom_position,
+            };
+          }
+          if (fetched === null) return; // Deleted elsewhere; leave it alone.
+
+          const placement = fetched;
+          const actual = placement.list_id
+            ? lists.find((l) => l.id === placement.list_id) ?? null
+            : null;
+          setTasks((prev) =>
+            prev.map((t) =>
+              t.id === taskId
+                ? {
+                    ...t,
+                    list_id: placement.list_id,
+                    list: actual
+                      ? { id: actual.id, name: actual.name, color: actual.color, icon: actual.icon }
+                      : null,
+                    custom_position: placement.custom_position,
+                  }
+                : t
+            )
+          );
+        }
+      );
     },
-    [tasks, lists]
+    [tasks, lists, orderQueue]
   );
 
   // ---------------------------------------------------------------------------

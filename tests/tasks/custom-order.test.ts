@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildAppendToContainerUpdates,
   buildCustomPositionUpdates,
   compareCustomOrder,
   reorderWithinContainer,
@@ -265,29 +266,90 @@ describe("new tasks", () => {
 });
 
 describe("moving between containers", () => {
-  it("puts a task moved into another List at the bottom of that List", () => {
+  /** Applies the destination backfill and the moved task's own new slot,
+   *  the way handleMoveTask does. */
+  function moveInto(
+    destination: CustomOrderable[],
+    arriving: CustomOrderable[]
+  ): CustomOrderable[] {
+    const updates = buildAppendToContainerUpdates(destination, arriving);
+    return applyUpdates([...destination, ...arriving], updates);
+  }
+
+  it("puts a task moved into a reordered List at the bottom of that List", () => {
     const destination = [task("x", 0), task("y", 1)];
     const moved = task("moved", 0); // position 0 in the List it came from
 
-    // moveTaskToList clears custom_position as part of the same update.
-    const arrived = { ...moved, custom_position: null };
-
-    assert.deepEqual(ids(sortByCustomOrder([arrived, ...destination])), [
+    assert.deepEqual(ids(sortByCustomOrder(moveInto(destination, [moved]))), [
       "x",
       "y",
       "moved",
     ]);
   });
 
-  it("puts a task moved back to Inbox at the bottom of Inbox", () => {
-    const inbox = [task("i1", 0), task("i2", 1)];
-    const returned = { ...task("returned", 5), custom_position: null };
+  it("puts an older task at the bottom of a destination nobody has reordered", () => {
+    // The destination's tasks are all unpositioned, so they are ordered by
+    // age — and the arriving task is older than every one of them.
+    const moved = task("moved");
+    const destination = [task("x"), task("y"), task("z")];
 
-    assert.deepEqual(ids(sortByCustomOrder([...inbox, returned])), [
+    assert.deepEqual(ids(sortByCustomOrder(moveInto(destination, [moved]))), [
+      "x",
+      "y",
+      "z",
+      "moved",
+    ]);
+  });
+
+  it("materialises the destination's nulls so the arrival can sit last", () => {
+    const moved = task("moved", 4);
+    const destination = [task("x"), task("y")];
+
+    assert.deepEqual(buildAppendToContainerUpdates(destination, [moved]), [
+      { id: "x", custom_position: 0 },
+      { id: "y", custom_position: 1 },
+      { id: "moved", custom_position: 2 },
+    ]);
+  });
+
+  it("writes only the arrival when the destination is already numbered", () => {
+    const moved = task("moved");
+    const destination = [task("x", 0), task("y", 1)];
+
+    assert.deepEqual(buildAppendToContainerUpdates(destination, [moved]), [
+      { id: "moved", custom_position: 2 },
+    ]);
+  });
+
+  it("puts an older task moved back to Inbox at the bottom of Inbox", () => {
+    const returned = task("returned", 5);
+    const inbox = [task("i1"), task("i2")];
+
+    assert.deepEqual(ids(sortByCustomOrder(moveInto(inbox, [returned]))), [
       "i1",
       "i2",
       "returned",
     ]);
+  });
+
+  it("appends a deleted List's tasks to Inbox, keeping their relative order", () => {
+    // Deliberately older than Inbox's tasks, and manually ordered c → a → b.
+    const orphaned = [task("a", 1), task("b", 2), task("c", 0)];
+    const inbox = [task("i1"), task("i2")];
+
+    assert.deepEqual(ids(sortByCustomOrder(moveInto(inbox, orphaned))), [
+      "i1",
+      "i2",
+      "c",
+      "a",
+      "b",
+    ]);
+  });
+
+  it("appends into an empty destination without disturbing the arrival order", () => {
+    const orphaned = [task("a", 1), task("b", 0)];
+
+    assert.deepEqual(ids(sortByCustomOrder(moveInto([], orphaned))), ["b", "a"]);
   });
 });
 
@@ -313,6 +375,59 @@ describe("deletion", () => {
 
     const afterDelete = container.filter((t) => t.id !== deleted.id);
     assert.deepEqual(ids(sortByCustomOrder([...afterDelete, deleted])), ["a", "b", "c"]);
+  });
+});
+
+describe("persistence failure", () => {
+  /** The rollback TasksClient runs when the reorder RPC rejects: restore the
+   *  prior position of every row the drop touched, and nothing else. */
+  function rollback(
+    tasks: CustomOrderable[],
+    updates: { id: string; custom_position: number }[],
+    prior: ReadonlyMap<string, number | null>
+  ): CustomOrderable[] {
+    const applied = new Set(updates.map((u) => u.id));
+    return tasks.map((t) =>
+      applied.has(t.id) ? { ...t, custom_position: prior.get(t.id) ?? null } : t
+    );
+  }
+
+  it("restores the pre-drag order, including rows that had no position", () => {
+    const container = [task("a"), task("b"), task("c")];
+    const prior = new Map(container.map((t) => [t.id, t.custom_position]));
+
+    const { tasks, updates } = drag(container, ["a", "b", "c"], "c", 0);
+    assert.deepEqual(ids(sortByCustomOrder(tasks)), ["c", "a", "b"]);
+
+    const reverted = rollback(tasks, updates, prior);
+    assert.deepEqual(ids(sortByCustomOrder(reverted)), ["a", "b", "c"]);
+    assert.deepEqual(
+      reverted.map((t) => t.custom_position),
+      [null, null, null]
+    );
+  });
+
+  it("leaves rows the drop never touched alone", () => {
+    const container = [task("a", 0), task("b", 1), task("c", 2), task("d", 3)];
+    const prior = new Map(container.map((t) => [t.id, t.custom_position]));
+
+    const { tasks, updates } = drag(container, ["a", "b", "c", "d"], "a", 2);
+    assert.deepEqual(
+      updates.map((u) => u.id),
+      ["b", "a"]
+    );
+
+    // A completion toggle lands on an untouched row while the write is in flight.
+    const withConcurrentEdit = tasks.map((t) =>
+      t.id === "d" ? { ...t, id: "d", custom_position: 3 } : t
+    );
+
+    const reverted = rollback(withConcurrentEdit, updates, prior);
+    assert.deepEqual(ids(sortByCustomOrder(reverted)), ["a", "b", "c", "d"]);
+    assert.deepEqual(
+      reverted.map((t) => t.custom_position),
+      [0, 1, 2, 3]
+    );
   });
 });
 
