@@ -1,9 +1,10 @@
 {
   "name": "planitary",
   "version": "0.1.0",
+  "description": "Personal productivity app for tasks, calendar, journaling, search, and AI standup — with unlockable planet themes.",
   "private": true,
   "allowScripts": {
-    "esbuild@0.28.1": true,
+    "esbuild@0.28.2": true,
     "sharp@0.34.5": true,
     "unrs-resolver@1.12.2": true
   },
